@@ -21,7 +21,7 @@ import { composerChips, resolveComposerFields } from '@/lib/composer-fields'
 import { formatDateChip } from '@/lib/date-utils'
 import type { DateFormat } from '@/lib/date-display'
 import { useDateFormat } from '@/hooks/use-date-format'
-import { buildCreateExtras } from '@/lib/composer-queue'
+import { buildCreateExtras, withLabels } from '@/lib/composer-queue'
 import { isTempTaskId } from '@/lib/pending-cache'
 import { useTaskParser } from '@/hooks/use-task-parser'
 import { useLabels } from '@/hooks/use-labels'
@@ -375,17 +375,25 @@ export function NewTaskComposer({
       }
       createdTask = task
       const failedLabels: PartialFailure['labels'] = []
+      // The create answers before the labels are added; the task handed to onCreated carries the
+      // ones that were, so a list filtered by label (a custom list, a tag) judges the real task.
+      const addedLabels: Label[] = []
       for (const label of explicitLabels) {
-        try { await addLabel.mutateAsync({ taskId: task.id, labelId: label.id }) }
-        catch { failedLabels.push({ id: label.id, name: label.title }) }
+        try {
+          await addLabel.mutateAsync({ taskId: task.id, labelId: label.id })
+          addedLabels.push(label)
+        } catch { failedLabels.push({ id: label.id, name: label.title }) }
       }
       for (const name of labelNames.filter((entry) => !explicitLabels.some((label) => label.title.toLowerCase() === entry.toLowerCase()))) {
         let resolvedLabel: Label | undefined
         try {
           resolvedLabel = (await resolveLabels([name]))[0]
           await addLabel.mutateAsync({ taskId: task.id, labelId: resolvedLabel.id })
+          addedLabels.push(resolvedLabel)
         } catch { failedLabels.push({ id: resolvedLabel?.id, name }) }
       }
+      const labelled = withLabels(task, addedLabels)
+      createdTask = labelled
       const uploaded = await uploadDrafts(task.id, attachments, draftDescription)
       const failure: PartialFailure = {
         taskId: task.id,
@@ -394,7 +402,7 @@ export function NewTaskComposer({
         ...(uploaded.descriptionPatch ? { descriptionPatch: uploaded.descriptionPatch } : {}),
       }
       closeAndReset()
-      onCreated?.(task)
+      onCreated?.(labelled)
       if (failure.labels.length || failure.attachments.length || failure.descriptionPatch) {
         setAttachments(failure.attachments)
         setPartialFailure(failure)

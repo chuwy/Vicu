@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildCreateExtras, stripPendingImageTokens } from '../composer-queue'
-import type { Label } from '../vikunja-types'
+import { buildCreateExtras, stripPendingImageTokens, withLabels } from '../composer-queue'
+import type { Label, Task } from '../vikunja-types'
 
 const label = (id: number, title: string): Label => ({ id, title, hex_color: '', created: '', updated: '' })
 const bytes = new Uint8Array([1, 2, 3])
@@ -62,5 +62,22 @@ describe('buildCreateExtras (what the queue keeps with a create made offline)', 
     expect(extras.queuedDescription).toBeUndefined()
     expect(extras.images).toBeUndefined()
     expect(extras.labels).toBeUndefined()
+  })
+})
+
+describe('withLabels (the created task handed to onCreated, issue 39)', () => {
+  const task = { id: 7, title: 'test task', labels: null } as unknown as Task
+
+  it('adds the labels attached after the create, so a label-filtered list sees them', () => {
+    expect(withLabels(task, [label(3, 'Bunnings')]).labels?.map((entry) => entry.id)).toEqual([3])
+  })
+
+  it('keeps labels the task already has and adds none twice', () => {
+    const labelled = { ...task, labels: [label(3, 'Bunnings')] } as Task
+    expect(withLabels(labelled, [label(3, 'Bunnings'), label(4, 'Home')]).labels?.map((entry) => entry.id)).toEqual([3, 4])
+  })
+
+  it('returns the same task when nothing was added', () => {
+    expect(withLabels(task, [])).toBe(task)
   })
 })

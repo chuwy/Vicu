@@ -1,5 +1,5 @@
 import type { CreateExtras } from './offline-mutations'
-import type { Label } from './vikunja-types'
+import type { Label, Task } from './vikunja-types'
 
 // What the new-task composer hands to the offline queue when its create cannot reach the server:
 // the labels the user picked or typed, the images pasted into the notes and the files attached. The
@@ -62,4 +62,12 @@ export function buildCreateExtras(input: ComposerExtrasInput): CreateExtras & { 
     ...(images.length > 0 ? { images } : {}),
     ...(stripped !== input.description ? { queuedDescription: stripped } : {}),
   }
+}
+
+/** The created task with the labels added after the create (the create's answer has none of them). */
+export function withLabels(task: Task, added: readonly Label[]): Task {
+  if (added.length === 0) return task
+  const labels = [...(task.labels ?? [])]
+  for (const label of added) if (!labels.some((existing) => existing.id === label.id)) labels.push(label)
+  return { ...task, labels }
 }
