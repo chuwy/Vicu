@@ -61,4 +61,54 @@ describe('known user', () => {
     expect(await known.ensureKnownUserId()).toBe(4)
     expect(lookup).toHaveBeenCalledTimes(1)
   })
+
+  describe('account data of another user (a different user of the same server signs in)', () => {
+    const accountData = {
+      inbox_project_id: 5,
+      custom_lists: [{ id: 'a' }],
+      custom_lists_sync: { dirty: true },
+      synced_prefs_sync: { moved: true },
+      sidebar_collapsed_projects: [3],
+      last_username: 'bea',
+      theme: 'dark',
+    }
+    const savedFull = () => JSON.parse(readFileSync(join(state.dir, 'config.json'), 'utf-8')) as Record<string, unknown>
+
+    it('clears the previous user\'s lists, synced settings and Inbox, and keeps device preferences', async () => {
+      writeConfig({ ...accountData, account_owner: { server: 'https://tasks.example.com', id: 12 } })
+      const known = await load()
+      const cleared = vi.fn()
+      known.onAccountDataCleared(cleared)
+      known.rememberKnownUser('https://tasks.example.com', 13)
+      const config = savedFull()
+      expect(cleared).toHaveBeenCalledOnce()
+      expect(config.inbox_project_id).toBe(0)
+      expect(config.custom_lists_sync).toBeUndefined()
+      expect(config.synced_prefs_sync).toBeUndefined()
+      expect(config.sidebar_collapsed_projects).toBeUndefined()
+      expect(config.account_owner).toEqual({ server: 'https://tasks.example.com', id: 13 })
+      expect(config.known_user).toEqual({ server: 'https://tasks.example.com', id: 13 })
+      expect(config.theme).toBe('dark')
+      expect(config.last_username).toBe('bea')
+    })
+
+    it('keeps everything for the same user, also after signing out and in again', async () => {
+      writeConfig({ ...accountData, account_owner: { server: 'https://tasks.example.com', id: 12 } })
+      const known = await load()
+      known.forgetKnownUser()
+      known.rememberKnownUser('https://tasks.example.com', 12)
+      const config = savedFull()
+      expect(config.inbox_project_id).toBe(5)
+      expect(config.custom_lists_sync).toEqual({ dirty: true })
+    })
+
+    it('adopts the data of a config from a version that recorded no owner', async () => {
+      writeConfig(accountData)
+      const known = await load()
+      expect(known.claimAccountData('https://tasks.example.com', 12)).toBe(false)
+      const config = savedFull()
+      expect(config.inbox_project_id).toBe(5)
+      expect(config.account_owner).toEqual({ server: 'https://tasks.example.com', id: 12 })
+    })
+  })
 })

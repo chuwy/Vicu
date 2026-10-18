@@ -47,6 +47,7 @@ import {
   loadConfig,
   saveConfig,
   type AppConfig,
+  type ConnectionFields,
 } from './config'
 import { directoryFromSelectedFile, resolveDialogDefaultPath } from './dialog-path'
 import {
@@ -111,7 +112,7 @@ import { getOfflineQueue, knownUserIdFor, rememberKnownUser } from './offline/se
 import { registerOfflineQueueIpc } from './offline/ipc'
 import { registerCollaborationIpc } from './collab-ipc'
 import { accountChanged, refreshKnownUser, replayPendingActions } from './sync'
-import { ensureKnownUserId } from './known-user'
+import { claimAccountData, ensureKnownUserId } from './known-user'
 import {
   createFromQuickEntry,
   queueQuickEntryFollowUps,
@@ -209,6 +210,23 @@ function persistConfig(config: AppConfig, announce = true): void {
     viewerWindow.webContents.send('viewer-config-changed')
   }
   if (config.custom_lists?.length || config.custom_lists_sync?.dirty) void syncCustomLists()
+}
+
+/**
+ * Before a new connection of the same server is saved: who signs in with it. When it is another
+ * user than the one the account data belongs to, that data is cleared (`claimAccountData`). Best
+ * effort: when the user cannot be read now, the check runs when the user is learnt.
+ */
+async function claimAccountDataFor(connection: ConnectionFields): Promise<void> {
+  const current = loadConfig()
+  const url = connection.vikunja_url.replace(/\/+$/, '')
+  if (!url || !current?.account_owner || current.vikunja_url.replace(/\/+$/, '') !== url) return
+  const token = connection.auth_method === 'api_token'
+    ? (connection.api_token || getAPIToken())
+    : authManager.getTokenSync()
+  if (!token) return
+  const user = await fetchCurrentUser(url, token).catch(() => null)
+  if (user) claimAccountData(url, user.id)
 }
 
 /** The project of a task as the server returned it, or undefined (then every project is asked again). */
@@ -419,8 +437,11 @@ export function registerIpcHandlers(): void {
 
   // Setup, OIDC/password login and disconnect: only the connection fields change, every
   // preference is kept (see applyConnectionFields).
-  handleTrusted('save-connection-config', (_event, connection: unknown) => {
+  handleTrusted('save-connection-config', async (_event, connection: unknown) => {
     if (!isConnectionFields(connection)) throw new Error('Invalid connection settings')
+    // Another user of the same server: their data goes before the connection (and setup's Inbox
+    // choice) is applied, so the choice is kept. Offline, the check runs when the user is learnt.
+    await claimAccountDataFor(connection)
     persistConfig(applyConnectionFields(loadConfig(), connection))
     // A different server or user: changes queued for the previous account must not follow.
     accountChanged()

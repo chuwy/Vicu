@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { randomUUID } from 'crypto'
 import { loadCustomListCarriers } from './carrier-service'
 import { loadConfig, saveConfig, type AppConfig } from './config'
+import { onAccountDataCleared } from './known-user'
 import {
   CUSTOM_LIST_CARRIER_TITLE,
   activeLists,
@@ -120,6 +121,9 @@ const service = createSyncedDocumentService<CustomListSyncDocumentV1>({
   beforeChange: rememberBroadcastBaseline,
   loadCarriers: () => loadCustomListCarriers(),
 })
+
+// Another user of this server signed in and the previous user's lists were cleared: show that.
+onAccountDataCleared(() => broadcastLists())
 
 export function getCustomListSyncStatus(): CustomListSyncStatus {
   return service.status()

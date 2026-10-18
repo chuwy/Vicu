@@ -173,6 +173,8 @@ Three separate files in `userData`, all held in memory and written by `JsonFileS
 - **Task cache** (`offline-cache.json`): last successful Quick View task fetch, served with the queue overlaid when offline. Disposable.
 - **Standalone mode** (`standalone-tasks.json` + `.bak`): fully local task storage without a Vikunja server (`src/main/cache.ts`)
 
+**Account owner.** `config.account_owner` records whose account data the config holds (custom lists, synced documents, the Inbox, sidebar state); unlike `known_user` it survives signing out. When the user learnt at sign-in (`claimAccountData` in `known-user.ts`, called by `rememberKnownUser` and, before setup's connection is saved, by `save-connection-config`) is someone else, `withoutOtherUsersData` clears that data, so a second user of the same server neither sees nor merges the first user's lists and settings. A server change resets it with the other account keys.
+
 An older combined `offline-cache.json` is split once at startup (`offline/legacy-migration.ts`), keeping the original as `offline-cache.json.bak`.
 
 ### Collaboration (assignees, comments, sharing)

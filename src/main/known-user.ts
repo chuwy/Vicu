@@ -1,4 +1,4 @@
-import { loadConfig, saveConfigQuietly } from './config'
+import { loadConfig, saveConfig, saveConfigQuietly, withoutOtherUsersData } from './config'
 import { normalizeServerUrl } from './offline/owner'
 
 /**
@@ -40,9 +40,45 @@ function store(user: KnownUser | null): void {
   saveConfigQuietly(config, 'the signed-in user')
 }
 
+const accountDataClearedListeners = new Set<() => void>()
+
+/** Called after another user's data was cleared (the services tell the windows). */
+export function onAccountDataCleared(listener: () => void): () => void {
+  accountDataClearedListeners.add(listener)
+  return () => { accountDataClearedListeners.delete(listener) }
+}
+
+/**
+ * The account data in config.json belongs to this user from now on. When it belonged to someone
+ * else (another user of the same server signed in, possibly after signing out), that user's custom
+ * lists, synced settings and Inbox are cleared first, so they are neither shown nor merged into the
+ * new user's carriers. A config without an owner (older versions did not record one) is adopted as
+ * it is. Returns true when data was cleared.
+ */
+export function claimAccountData(serverUrl: string, userId: number): boolean {
+  if (!Number.isInteger(userId) || userId <= 0) return false
+  const config = loadConfig()
+  if (!config || config.standalone_mode) return false
+  const server = normalizeServerUrl(serverUrl)
+  const owner = config.account_owner
+  if (owner?.server === server && owner.id === userId) return false
+  const cleared = owner !== undefined
+  const next = cleared ? withoutOtherUsersData(config) : config
+  next.account_owner = { server, id: userId }
+  if (cleared) {
+    saveConfig(next)
+    console.log('[Account] Another user signed in; the previous user\'s lists and synced settings were cleared')
+    for (const listener of accountDataClearedListeners) listener()
+  } else {
+    saveConfigQuietly(next, 'the account owner')
+  }
+  return cleared
+}
+
 /** The user id of the signed-in account, as the server answered it. */
 export function rememberKnownUser(serverUrl: string, userId: number): void {
   if (!Number.isInteger(userId) || userId <= 0) return
+  claimAccountData(serverUrl, userId)
   cached = { server: normalizeServerUrl(serverUrl), id: userId }
   store(cached)
 }
@@ -86,4 +122,5 @@ export async function ensureKnownUserId(): Promise<number | undefined> {
 /** For tests: forget what was read from config.json. */
 export function resetKnownUserCache(): void {
   cached = undefined
+  accountDataClearedListeners.clear()
 }

@@ -219,6 +219,12 @@ export interface AppConfig {
    * Hidden tasks are read and written only when they belong to this user (cross-app semantics 10.3).
    */
   known_user?: { server: string; id: number }
+  /**
+   * The user the account data in this config belongs to (custom lists, synced settings, the Inbox).
+   * Unlike `known_user` it outlives signing out, so a different user of the same server signing in
+   * afterwards is noticed and does not inherit it (`claimAccountData` in `src/main/known-user.ts`).
+   */
+  account_owner?: { server: string; id: number }
   // Quick Entry / Quick View
   quick_entry_enabled?: boolean
   quick_view_enabled?: boolean

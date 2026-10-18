@@ -139,6 +139,7 @@ export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
       ? raw.synced_prefs_sync as AppConfig['synced_prefs_sync']
       : undefined,
     known_user: isKnownUser(raw.known_user) ? { server: raw.known_user.server, id: raw.known_user.id } : undefined,
+    account_owner: isKnownUser(raw.account_owner) ? { server: raw.account_owner.server, id: raw.account_owner.id } : undefined,
     // Quick Entry / Quick View
     quick_entry_enabled: raw.quick_entry_enabled === true,
     quick_view_enabled: raw.quick_view_enabled === true,
@@ -287,6 +288,7 @@ const ACCOUNT_SPECIFIC_KEYS = [
   'custom_lists_sync',
   'synced_prefs_sync',
   'known_user',
+  'account_owner',
   'quick_entry_default_project_id',
   'secondary_projects',
   'viewer_filter',
@@ -310,7 +312,7 @@ export function connectionKeysIn(patch: object): string[] {
 }
 
 /** Owned by main (the custom list service with its own IPCs and sync, the known user); never taken from a renderer patch. */
-const MAIN_OWNED_KEYS: ReadonlySet<string> = new Set(['custom_lists', 'custom_lists_sync', 'synced_prefs_sync', 'known_user'])
+const MAIN_OWNED_KEYS: ReadonlySet<string> = new Set(['custom_lists', 'custom_lists_sync', 'synced_prefs_sync', 'known_user', 'account_owner'])
 
 /** Every key of AppConfig, derived from the normalizer so the two cannot drift apart. */
 const CONFIG_KEYS: ReadonlySet<string> = new Set(Object.keys(normalizeConfig({})))
@@ -321,6 +323,20 @@ function trimUrl(url: unknown): string {
 
 function resetAccountData(config: Record<string, unknown>): void {
   for (const key of ACCOUNT_SPECIFIC_KEYS) config[key] = undefined
+}
+
+/** What a different user of the same server keeps: the connection it signed in with. */
+const KEPT_FOR_ANOTHER_USER: ReadonlySet<string> = new Set(['standalone_mode', 'last_username'])
+
+/**
+ * The config without the previous user's data, for a different user of the same server: the
+ * account-specific keys and the Inbox (that user's project) go, the connection and every device
+ * preference stay. The synced documents start empty, so the next sync reads the new user's own.
+ */
+export function withoutOtherUsersData(config: AppConfig): AppConfig {
+  const next: Record<string, unknown> = { ...config, inbox_project_id: 0 }
+  for (const key of ACCOUNT_SPECIFIC_KEYS) if (!KEPT_FOR_ANOTHER_USER.has(key)) next[key] = undefined
+  return normalizeConfig(next)
 }
 
 /**

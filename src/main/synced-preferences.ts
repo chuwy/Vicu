@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { searchTasksAt } from './api-client'
 import { loadPrefsCarriers } from './carrier-service'
 import { loadConfig, saveConfig, type AppConfig } from './config'
+import { onAccountDataCleared } from './known-user'
 import { fetchCurrentUser } from './auth/user-info'
 import { normalizeServerUrl } from './offline/owner'
 import { createSyncedDocumentService, type SyncedDocumentCodec, type SyncedDocumentStatus } from './synced-document-service'
@@ -177,6 +178,12 @@ const service = createSyncedDocumentService<SyncedPrefsDocument>({
   beforeChange: rememberBaseline,
   loadCarriers: () => loadPrefsCarriers(),
   afterSync: (config, state) => moveLocalSettings(config, state as PrefsState, Date.now()),
+})
+
+// Another user of this server signed in and the previous user's settings and Inbox were cleared.
+onAccountDataCleared(() => {
+  const config = loadConfig()
+  if (config) broadcast(config)
 })
 
 export function syncSyncedPrefs(): Promise<SyncedDocumentStatus> {
