@@ -32,3 +32,17 @@ export function projectProgress(done: number | undefined, open: number | undefin
 export function progressLabel(progress: ProjectProgress): string {
   return `${progress.done} of ${progress.total} done`
 }
+
+/**
+ * The open-task count a sidebar row shows: null while the counts load and for a project without
+ * open tasks (the row then shows nothing, as on mobile). Hidden tasks are never in `openCounts`.
+ */
+export function shownOpenCount(openCounts: ReadonlyMap<number, number> | null, projectId: number): number | null {
+  const count = openCounts?.get(projectId) ?? 0
+  return count > 0 ? count : null
+}
+
+/** What assistive technology reads for a count: "1 open task", "3 open tasks". */
+export function openTaskCountLabel(count: number): string {
+  return `${count} open ${count === 1 ? 'task' : 'tasks'}`
+}

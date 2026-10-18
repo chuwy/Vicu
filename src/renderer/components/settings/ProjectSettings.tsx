@@ -436,6 +436,13 @@ export function ProjectSettings({ config, onChange }: ProjectSettingsProps) {
           />
           <span className="text-sm text-[var(--text-primary)]">Show project progress in the sidebar</span>
         </label>
+        <label className="mt-2 flex cursor-pointer items-center gap-2">
+          <Checkbox
+            checked={config.show_project_task_count === true}
+            onChange={(event) => onChange({ show_project_task_count: event.target.checked })}
+          />
+          <span className="text-sm text-[var(--text-primary)]">Show task count in the sidebar</span>
+        </label>
         <TaskOrderSetting />
       </div>
 

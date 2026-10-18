@@ -9,6 +9,9 @@
 //   C. Collapsing an area hides its children, is saved in the config and survives a reload;
 //      expanding brings them back. Keyboard: ArrowLeft / ArrowRight on a focused row.
 //   D. Captures of the sidebar (expanded and collapsed).
+//   E. "Show task count": off by default; on, each row shows its open tasks after the ring (the
+//      Website redesign count matches the server, the row name says it, every row keeps the column),
+//      the … button covers both on hover, and the count stays when the rings are turned off.
 //
 // Run it alone for the cleanest count (--scenario sidebar-tree): the log covers everything since launch.
 export const meta = {
@@ -141,5 +144,56 @@ export default async function run(h) {
   await h.assert('expanding brings the children back', async () => (await sidebar(page).getByText('Website redesign', { exact: true }).count()) > 0)
   await h.wait(600)
 
+  // --- E. Task count ----------------------------------------------------------------------
+  await h.assert('no row shows a task count while the option is off', async () =>
+    (await page.locator('aside [data-project-count]').count()) === 0)
+  await page.evaluate(() => window.api.saveConfigPatch({ show_project_task_count: true }))
+  await page.reload()
+  await page.waitForLoadState('domcontentloaded')
+  await h.wait(2000)
+  await h.settle(page, 500)
+
+  const counts = await page.evaluate(() =>
+    Object.fromEntries([...document.querySelectorAll('aside [data-sidebar-project]')].map((row) => [
+      row.getAttribute('data-sidebar-project'),
+      {
+        count: row.querySelector('[data-project-count]')?.textContent?.trim() ?? null,
+        ring: !!row.querySelector('[data-progress-ring]'),
+        name: row.querySelector('[role="button"]')?.textContent ?? '',
+      },
+    ])))
+  const websiteRow = counts[String(h.ids.website)]
+  await h.assert('Website redesign shows its open tasks next to its ring', {
+    ok: !!websiteRow && websiteRow.ring && websiteRow.count === (wOpen > 0 ? String(wOpen) : ''),
+    detail: JSON.stringify({ row: websiteRow ?? null, server: wOpen }),
+  })
+  await h.assert('the count is part of the row name for assistive technology', {
+    ok: !!websiteRow && (wOpen === 0 || websiteRow.name.includes(`, ${wOpen} open task`)),
+    detail: websiteRow?.name ?? '',
+  })
+  await h.assert('every row reserves the count column, so rings line up', Object.values(counts).every((c) => c.count !== null))
+
+  const websiteSidebarRow = sidebar(page).locator(`[data-sidebar-project="${h.ids.website}"]`)
+  await websiteSidebarRow.hover()
+  await h.wait(300)
+  await h.assert('on hover the … button takes the place of the ring and count', async () =>
+    (await websiteSidebarRow.getByRole('button', { name: 'Website redesign actions' }).isVisible()) &&
+    (await websiteSidebarRow.locator('[data-project-count]').evaluate((el) => getComputedStyle(el).visibility)) === 'hidden')
+  await page.mouse.move(900, 400)
+  await h.wait(300)
+  await h.capture('sidebar-task-count', { clip: sidebar(page) })
+
+  await page.evaluate(() => window.api.saveConfigPatch({ show_project_progress: false }))
+  await page.reload()
+  await page.waitForLoadState('domcontentloaded')
+  await h.wait(2000)
+  await h.settle(page, 500)
+  await h.assert('with the rings off the count still shows', async () =>
+    (await page.locator('aside [data-progress-ring]').count()) === 0 &&
+    (await page.locator(`aside [data-sidebar-project="${h.ids.website}"] [data-project-count]`).count()) === 1)
+  await h.capture('sidebar-task-count-no-rings', { clip: sidebar(page) })
+
   await h.axe('aside', { label: 'sidebar' })
+
+  await page.evaluate(() => window.api.saveConfigPatch({ show_project_progress: true, show_project_task_count: false }))
 }

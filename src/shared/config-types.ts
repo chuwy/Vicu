@@ -253,6 +253,8 @@ export interface AppConfig {
   show_today_overdue_badge?: boolean
   /** Progress rings next to the projects in the sidebar. Missing means on. */
   show_project_progress?: boolean
+  /** Each project's number of open tasks in the sidebar, beside the ring when both are on. Missing means off. */
+  show_project_task_count?: boolean
   // Obsidian
   obsidian_mode?: 'off' | 'ask' | 'always'
   obsidian_api_key?: string

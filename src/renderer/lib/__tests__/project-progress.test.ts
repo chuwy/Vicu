@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toggleCollapsed } from '../../hooks/use-sidebar-collapsed'
-import { openCountsByProject, progressLabel, projectProgress } from '../project-progress'
+import { openCountsByProject, openTaskCountLabel, progressLabel, projectProgress, shownOpenCount } from '../project-progress'
 
 describe('openCountsByProject', () => {
   it('counts open tasks per project and ignores done ones', () => {
@@ -32,6 +32,25 @@ describe('projectProgress', () => {
 
   it('reads as plain words', () => {
     expect(progressLabel({ done: 3, total: 8, fraction: 3 / 8 })).toBe('3 of 8 done')
+  })
+})
+
+describe('shownOpenCount', () => {
+  const counts = new Map([[1, 3], [2, 0]])
+
+  it('is the open tasks of the project', () => {
+    expect(shownOpenCount(counts, 1)).toBe(3)
+  })
+
+  it('is nothing while loading and for a project without open tasks', () => {
+    expect(shownOpenCount(null, 1)).toBeNull()
+    expect(shownOpenCount(counts, 2)).toBeNull()
+    expect(shownOpenCount(counts, 9)).toBeNull()
+  })
+
+  it('reads as plain words', () => {
+    expect(openTaskCountLabel(1)).toBe('1 open task')
+    expect(openTaskCountLabel(3)).toBe('3 open tasks')
   })
 })
 

@@ -40,6 +40,7 @@ function userConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     launch_on_startup: true,
     show_today_overdue_badge: true,
     show_project_progress: false,
+    show_project_task_count: true,
     notifications_enabled: true,
     notifications_daily_reminder_time: '07:30',
     notifications_sound: false,
@@ -81,6 +82,7 @@ const PREFERENCE_KEYS = [
   'launch_on_startup',
   'show_today_overdue_badge',
   'show_project_progress',
+  'show_project_task_count',
   'notifications_enabled',
   'notifications_daily_reminder_time',
   'notifications_sound',
@@ -427,6 +429,21 @@ describe('start_hidden (D-LNX-1)', () => {
     const after = applyConfigPatch(before, { start_hidden: true })
     expect(after.start_hidden).toBe(true)
     expect(after.launch_on_startup).toBe(true)
+  })
+})
+
+describe('show_project_task_count', () => {
+  it('is off unless the config says true', () => {
+    expect(normalizeConfig({}).show_project_task_count).toBe(false)
+    expect(normalizeConfig({ show_project_task_count: 'yes' }).show_project_task_count).toBe(false)
+    expect(normalizeConfig({ show_project_task_count: true }).show_project_task_count).toBe(true)
+  })
+
+  it('is changed by a patch without touching the progress rings', () => {
+    const before = userConfig({ show_project_progress: false })
+    const after = applyConfigPatch(before, { show_project_task_count: true })
+    expect(after.show_project_task_count).toBe(true)
+    expect(after.show_project_progress).toBe(false)
   })
 })
 

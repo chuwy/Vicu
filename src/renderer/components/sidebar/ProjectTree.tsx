@@ -168,6 +168,7 @@ export function ProjectTree() {
   const { data: config, isLoading: configLoading } = useAppConfig()
   const inboxProjectId = config?.inbox_project_id || undefined
   const showProgress = config?.show_project_progress !== false
+  const showCount = config?.show_project_task_count === true
 
   const visibleTree = useMemo(
     () => (inboxProjectId ? data?.tree.filter((n) => n.id !== inboxProjectId) : data?.tree) ?? [],
@@ -204,6 +205,7 @@ export function ProjectTree() {
             node={node}
             openCounts={openCounts}
             showProgress={showProgress}
+            showCount={showCount}
             collapsed={collapsed}
             onToggleCollapsed={setCollapsed}
             onOpenMenu={openTreeMenu}

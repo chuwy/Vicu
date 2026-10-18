@@ -6,6 +6,7 @@ import { useDndContext, useDraggable, useDroppable } from '@dnd-kit/core'
 import { cn } from '@/lib/cn'
 import { normalizeHex } from '@/lib/constants'
 import { ProgressRing } from '@/components/shared/ProgressRing'
+import { RollingCount } from '@/components/shared/RollingCount'
 import { Tooltip } from '@/components/overlay/Tooltip'
 import { nameList } from '@/lib/collaboration'
 import { useCollabMe, useProjectAccess } from '@/hooks/use-project-access'
@@ -17,6 +18,7 @@ import {
   useProjectRowKeys,
 } from '@/components/projects/ProjectRowParts'
 import { useProjectProgress } from '@/hooks/use-project-progress'
+import { openTaskCountLabel, shownOpenCount } from '@/lib/project-progress'
 import { useRowDropZone } from '@/stores/project-drop-store'
 import type { ProjectTreeNode } from '@/hooks/use-projects'
 
@@ -34,6 +36,8 @@ interface ProjectTreeItemProps {
   openCounts: ReadonlyMap<number, number> | null
   /** Whether rings are drawn at all (Settings); off, no done count is asked for either. */
   showProgress: boolean
+  /** Whether each row shows its number of open tasks (Settings), independent of the rings. */
+  showCount: boolean
   /** Ids of the collapsed projects; a project not in it shows its children. */
   collapsed: ReadonlySet<number>
   onToggleCollapsed: (id: number, collapse: boolean) => void
@@ -52,6 +56,7 @@ export function ProjectTreeItem(props: ProjectTreeItemProps) {
     depth = 0,
     openCounts,
     showProgress,
+    showCount,
     collapsed,
     onToggleCollapsed,
     onOpenMenu,
@@ -71,6 +76,7 @@ export function ProjectTreeItem(props: ProjectTreeItemProps) {
   const expanded = hasChildren && !collapsed.has(node.id)
   const color = normalizeHex(node.hex_color)
   const progress = useProjectProgress(node.id, openCounts, showProgress)
+  const openCount = showCount ? shownOpenCount(openCounts, node.id) : null
   const renaming = renamingId === node.id
   const menuOpen = menuOpenFor === node.id
 
@@ -177,18 +183,29 @@ export function ProjectTreeItem(props: ProjectTreeItemProps) {
             />
             <span className="min-w-0 flex-1 truncate text-xs">{node.title}</span>
             <SharedMark projectId={node.id} />
+            {openCount !== null && <span className="sr-only">, {openTaskCountLabel(openCount)}</span>}
           </div>
         )}
 
-        {/* One slot at the right edge: the progress ring, or the … button on hover and focus. */}
-        <span className="relative mx-1.5 flex h-5 w-5 shrink-0 items-center justify-center">
-          {showProgress && progress && (
-            <ProgressRing
-              progress={progress}
-              color={color}
-              className={cn('group-hover:hidden group-focus-within:hidden', menuOpen && 'hidden')}
-            />
-          )}
+        {/* The trailing slot at the right edge: the progress ring, then the open-task count in an
+            end-aligned column (so rings and numbers line up row after row, as on mobile), or the …
+            button on hover and focus. The ring and count only turn invisible, so the title keeps its
+            width when the button takes their place. */}
+        <span className="relative mx-1.5 flex h-5 min-w-5 shrink-0 items-center justify-end">
+          <span
+            className={cn(
+              'flex items-center gap-1.5',
+              'group-hover:invisible group-focus-within:invisible',
+              menuOpen && 'invisible',
+            )}
+          >
+            {showProgress && progress && <ProgressRing progress={progress} color={color} />}
+            {showCount && (
+              <span aria-hidden="true" data-project-count={openCount ?? 0} className="min-w-5 text-right text-meta text-text-secondary">
+                {openCount !== null && <RollingCount value={openCount} />}
+              </span>
+            )}
+          </span>
           <button
             ref={moreRef}
             type="button"
@@ -198,7 +215,7 @@ export function ProjectTreeItem(props: ProjectTreeItemProps) {
             aria-expanded={menuOpen}
             onClick={openMenuAtButton}
             className={cn(
-              'absolute inset-0 items-center justify-center rounded-control text-[var(--text-secondary)] hover:bg-[var(--bg-selected)] hover:text-[var(--text-primary)]',
+              'absolute inset-y-0 right-0 w-5 items-center justify-center rounded-control text-[var(--text-secondary)] hover:bg-[var(--bg-selected)] hover:text-[var(--text-primary)]',
               menuOpen ? 'flex text-[var(--text-primary)]' : isDragging ? 'hidden' : 'hidden group-hover:flex group-focus-within:flex',
             )}
           >
