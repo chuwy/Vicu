@@ -123,6 +123,15 @@ export type CustomListSyncStatus =
   | { state: 'update_required'; message: string }
   | { state: 'local_only' }
 
+/**
+ * The synced documents (custom lists, synced settings) whose local copy holds changes the server
+ * has not got: each one's sync status, or null when it has none. Not part of the offline queue.
+ */
+export interface UnsyncedDocuments {
+  customLists: CustomListSyncStatus | null
+  preferences: CustomListSyncStatus | null
+}
+
 // --- Quick View, review, connection ----------------------------------------------------------
 
 export interface ViewerFilter {

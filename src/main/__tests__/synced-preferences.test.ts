@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   dir: '',
   tasks: new Map<number, { id: number; title: string; description: string; done: boolean; project_id: number; created_by: { id: number } }>(),
   nextId: 100,
+  /** Every request fails as if the server could not be reached. */
+  offline: false,
   sent: [] as Array<{ channel: string; payload: unknown }>,
   user: { id: 1, username: 'me', email: '', name: 'Me', default_project_id: 3 } as null | { id: number; username: string; email: string; name: string; default_project_id?: number },
 }))
@@ -34,6 +36,7 @@ vi.mock('../api-client', () => {
   const search = (q: string) => [...state.tasks.values()].filter((task) => task.description.includes(q)).map((task) => ({ ...task }))
   return {
     fetchTasks: async (params: Record<string, unknown>) => {
+      if (state.offline) return { success: false, error: 'Network error: connection refused' }
       let rows = [...state.tasks.values()]
       if (params.filter === 'done = true') rows = rows.filter((task) => task.done)
       if (typeof params.q === 'string') rows = search(params.q)
@@ -41,6 +44,7 @@ vi.mock('../api-client', () => {
     },
     searchTasksAt: async (_url: string, _token: string, q: string) => ({ success: true, data: search(q) }),
     fetchTaskById: async (id: number) => {
+      if (state.offline) return { success: false, error: 'Network error: connection refused' }
       const task = state.tasks.get(id)
       return task ? { success: true, data: { ...task } } : { success: false, error: 'Not found', statusCode: 404 }
     },
@@ -50,6 +54,7 @@ vi.mock('../api-client', () => {
       return { success: true, data: { ...task } }
     },
     updateTask: async (id: number, patch: { title?: string; description?: string; done?: boolean }) => {
+      if (state.offline) return { success: false, error: 'Network error: connection refused' }
       const task = state.tasks.get(id)
       if (!task) return { success: false, error: 'Not found', statusCode: 404 }
       if (patch.description !== undefined) task.description = patch.description
@@ -102,6 +107,7 @@ describe('synced preferences', () => {
     state.dir = mkdtempSync(join(tmpdir(), 'vicu-prefs-'))
     state.tasks.clear()
     state.nextId = 100
+    state.offline = false
     state.sent.length = 0
     state.user = { id: 1, username: 'me', email: '', name: 'Me', default_project_id: 3 }
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -194,6 +200,34 @@ describe('synced preferences', () => {
     expect((await service.syncSyncedPrefs()).state).toBe('update_required')
     expect(state.tasks.get(7)!.description).toBe('<!-- vicu-prefs:v2:e30 -->')
     expect(carriers()).toHaveLength(1)
+  })
+
+  it('discards settings changes that never reached the server: the synced Inbox and order come back', async () => {
+    writeConfig({ inbox_project_id: 5 })
+    putCarrier(7, { version: 1, entries: { inbox_project_id: entry(9), 'task_order.project.4': entry('manual') } })
+    const service = await loadService()
+    await service.syncSyncedPrefs()
+    expect(savedConfig().inbox_project_id).toBe(9)
+    const before = state.tasks.get(7)!.description
+
+    state.offline = true
+    service.setSyncedPreference('task_order', 'title')
+    service.setSyncedPreference('inbox_project_id', 12)
+    await vi.waitFor(() => expect(service.getSyncedPrefsStatus().state).toBe('offline'))
+    expect(service.hasUnsyncedPreferenceChanges()).toBe(true)
+    expect(service.getSyncedPrefs().inboxProjectId).toBe(12)
+    state.sent.length = 0
+
+    expect(service.discardUnsyncedPreferenceChanges()).toBe(true)
+    expect(service.hasUnsyncedPreferenceChanges()).toBe(false)
+    expect(service.getSyncedPrefs()).toEqual({ values: { inbox_project_id: 9, 'task_order.project.4': 'manual' }, inboxProjectId: 9 })
+    expect(state.sent.some((entry) => entry.channel === 'synced-prefs-changed')).toBe(true)
+
+    state.offline = false
+    expect((await service.syncSyncedPrefs()).state).toBe('idle')
+    expect(state.tasks.get(7)!.description).toBe(before)
+    expect(savedConfig().synced_prefs_sync?.dirty).toBe(false)
+    expect(service.discardUnsyncedPreferenceChanges()).toBe(false)
   })
 
   describe('setup', () => {

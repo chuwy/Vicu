@@ -89,4 +89,9 @@ describe('sync status label', () => {
     expect(syncStatusLabel({ pending: 2, failed: 1 }, true)).toBe('Sign in needed · 1 failed · 2 waiting')
     expect(syncStatusLabel({ pending: 3, failed: 0 }, false)).toBe('3 waiting')
   })
+
+  it('adds custom-list and settings changes that are stuck last', () => {
+    expect(syncStatusLabel({ pending: 1, failed: 0 }, false, 'Custom lists waiting')).toBe('1 waiting · Custom lists waiting')
+    expect(syncStatusLabel({ pending: 0, failed: 0 }, false, null)).toBe('')
+  })
 })

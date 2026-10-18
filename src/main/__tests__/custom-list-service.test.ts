@@ -16,6 +16,8 @@ const state = vi.hoisted(() => ({
   deleted: [] as number[],
   failWrites: false,
   failDeletes: false,
+  /** Every read fails as if the server could not be reached. */
+  offline: false,
   /** Called with the id of every GET /tasks/{id}, before the answer is built. */
   onFetchById: null as null | ((id: number) => void),
   sent: [] as Array<{ channel: string; payload: unknown }>,
@@ -36,6 +38,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../api-client', () => ({
   fetchTasks: async (params: Record<string, unknown>) => {
+    if (state.offline) return { success: false, error: 'Network error: connection refused' }
     // A search finds open and done tasks; a listing with the done filter only done ones.
     let rows = [...state.tasks.values()].filter((task) => task.done || (typeof params.q === 'string' && params.filter === undefined))
     if (typeof params.q === 'string') rows = rows.filter((task) => task.description.includes(params.q as string))
@@ -43,6 +46,7 @@ vi.mock('../api-client', () => ({
   },
   fetchTaskById: async (id: number) => {
     state.onFetchById?.(id)
+    if (state.offline) return { success: false, error: 'Network error: connection refused' }
     const task = state.tasks.get(id)
     return task ? { success: true, data: { created_by: { id: 1 }, ...task } } : { success: false, error: 'Not found', statusCode: 404 }
   },
@@ -134,6 +138,7 @@ describe('custom-list service', () => {
     state.deleted.length = 0
     state.failWrites = false
     state.failDeletes = false
+    state.offline = false
     state.onFetchById = null
     state.sent.length = 0
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -404,6 +409,96 @@ describe('custom-list service', () => {
       await service.syncCustomLists()
 
       expect(state.tasks.get(7)!.description).toBe(afterFirst)
+    })
+  })
+
+  describe('discarding unsynced changes', () => {
+    const goOffline = () => {
+      state.offline = true
+      state.failWrites = true
+    }
+
+    it("goes back to the server's lists at once, offline too, and sends nothing afterwards", async () => {
+      writeConfig({ custom_lists: [] })
+      putCarrier(7, documentFromLists([list('x', 'Work')], 'android', Date.now() - DAY))
+      const service = await loadService()
+      await service.syncCustomLists()
+      const before = state.tasks.get(7)!.description
+
+      goOffline()
+      service.upsertCustomList(list('y', 'Offline list'))
+      service.upsertCustomList({ ...list('x'), name: 'Renamed offline' })
+      await vi.waitFor(() => expect(service.getCustomListSyncStatus().state).toBe('offline'))
+      expect(service.hasUnsyncedCustomListChanges()).toBe(true)
+      state.sent.length = 0
+
+      expect(service.discardUnsyncedCustomListChanges()).toBe(true)
+      expect(service.getCustomLists().map((entry) => [entry.id, entry.name])).toEqual([['x', 'Work']])
+      expect(service.hasUnsyncedCustomListChanges()).toBe(false)
+      const changed = state.sent.find((entry) => entry.channel === 'custom-lists-changed')
+      expect((changed?.payload as Array<{ name: string }>).map((entry) => entry.name)).toEqual(['Work'])
+
+      // The read-back fails while offline; that does not make the restored copy unsynced again.
+      expect((await service.syncCustomLists()).state).toBe('offline')
+      expect(service.hasUnsyncedCustomListChanges()).toBe(false)
+
+      state.offline = false
+      state.failWrites = false
+      expect((await service.syncCustomLists()).state).toBe('idle')
+      expect(state.tasks.get(7)!.description).toBe(before)
+      expect(state.tasks.size).toBe(1)
+    })
+
+    it('reads the carrier again, so what another device wrote meanwhile shows', async () => {
+      writeConfig({ custom_lists: [] })
+      putCarrier(7, documentFromLists([list('x')], 'android', Date.now() - DAY))
+      const service = await loadService()
+      await service.syncCustomLists()
+
+      state.failWrites = true
+      service.upsertCustomList(list('y'))
+      await vi.waitFor(() => expect(service.getCustomListSyncStatus().state).toBe('offline'))
+      state.failWrites = false
+      putCarrier(7, documentFromLists([list('x'), list('z')], 'android', Date.now() - 1000))
+      const before = state.tasks.get(7)!.description
+
+      service.discardUnsyncedCustomListChanges()
+      await vi.waitFor(() => expect(service.getCustomListSyncStatus().state).toBe('idle'))
+      expect(service.getCustomLists().map((entry) => entry.id).sort()).toEqual(['x', 'z'])
+      expect(state.tasks.get(7)!.description).toBe(before)
+    })
+
+    it('without a known server copy, starts empty and reads the carrier back', async () => {
+      // Synced by a version that did not keep the server copy yet.
+      const local = documentFromLists([list('y', 'Never sent')], 'desk', Date.now())
+      writeConfig({ custom_lists: [list('y', 'Never sent')], custom_lists_sync: { device_id: 'desk', document: local, dirty: true } })
+      putCarrier(7, documentFromLists([list('x')], 'android', Date.now() - DAY))
+      const before = state.tasks.get(7)!.description
+      state.offline = true
+      const service = await loadService()
+
+      expect(service.discardUnsyncedCustomListChanges()).toBe(true)
+      expect(service.getCustomLists()).toEqual([])
+      state.offline = false
+      await vi.waitFor(() => expect(service.getCustomLists().map((entry) => entry.id)).toEqual(['x']))
+      await vi.waitFor(() => expect(service.getCustomListSyncStatus().state).toBe('idle'))
+      expect(state.tasks.get(7)!.description).toBe(before)
+    })
+
+    it('does nothing when every change reached the server, or in standalone mode', async () => {
+      writeConfig({ custom_lists: [] })
+      const service = await loadService()
+      service.upsertCustomList(list('a'))
+      await vi.waitFor(() => expect(service.getCustomListSyncStatus().state).toBe('idle'))
+      expect(service.discardUnsyncedCustomListChanges()).toBe(false)
+      expect(service.getCustomLists().map((entry) => entry.id)).toEqual(['a'])
+
+      writeConfig({ standalone_mode: true, custom_lists: [] })
+      const standalone = await loadService()
+      standalone.upsertCustomList(list('local'))
+      expect(standalone.hasUnsyncedCustomListChanges()).toBe(false)
+      expect(standalone.discardUnsyncedCustomListChanges()).toBe(false)
+      expect(standalone.getCustomLists().map((entry) => entry.id)).toEqual(['local'])
     })
   })
 

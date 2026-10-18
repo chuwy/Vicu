@@ -31,6 +31,12 @@ export interface SyncedDocumentState<Doc> {
   dirty: boolean
   carrier_task_id?: number
   last_synced_at?: string
+  /**
+   * What the carrier held after the last successful sync, so a discard of unsynced changes can go
+   * back to it at once, offline too. Missing before the first sync with this version, and when the
+   * user has no carrier.
+   */
+  synced_document?: Doc
 }
 
 export interface ParsedDocumentCarrier<Doc> {
@@ -49,6 +55,8 @@ export interface SyncedDocumentCodec<Doc> {
   /** The description a carrier is written with (the marker only). */
   encode(document: Doc): string
   normalize(document: Doc): Doc
+  /** The document of a device that holds nothing (what a discard starts from without a server copy). */
+  empty(deviceId: string): Doc
   /** `merge(local, server)`. */
   merge(local: Doc, server: Doc): Doc
   /** The document without tombstones older than 90 days before `now`. */
@@ -118,6 +126,14 @@ export interface SyncedDocumentService<Doc> {
   mutate(change: (document: Doc, deviceId: string) => Doc): AppConfig
   /** Saves `document` as the local copy (the `dirty` flag given). */
   persist(config: AppConfig, document: Doc, dirty: boolean): void
+  /** True when the local copy holds changes the server has not got (never in standalone mode or without a server). */
+  hasUnsyncedChanges(): boolean
+  /**
+   * Drops the local changes that never reached the server: the local copy goes back to what the
+   * carrier held after the last successful sync (empty when that is not known), is no longer
+   * unsynced, and is read again from the carriers. Returns false when there was nothing to drop.
+   */
+  discardUnsynced(): boolean
 }
 
 /** The user id is not known yet: no carrier is discovered, nothing is written, the sync waits. */
@@ -249,6 +265,9 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
     if (!config.vikunja_url) return setStatus({ state: 'pending', message: messages.connect })
     const syncUrl = config.vikunja_url.replace(/\/+$/, '')
     setStatus({ state: 'syncing' })
+    // Set once the carriers were merged into the local copy: from then on a failure leaves the copy
+    // unsynced, since it may hold what the carrier lacks. A failure before it leaves the flag alone.
+    let merging = false
 
     try {
       const carriers = await fetchCarriers()
@@ -270,6 +289,7 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
       // Tombstones older than 90 days are dropped before writing and before comparing (section
       // 10.6), so the document stops growing. A carrier that still holds them counts as changed.
       merged = codec.prune(merged, now())
+      merging = true
       persist(config, merged, hadPendingLocalChanges)
       options.changed?.(config)
 
@@ -327,6 +347,9 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
       latestState.carrier_task_id = carrierId
       latestState.dirty = false
       latestState.last_synced_at = lastSyncedAt
+      // The carrier holds exactly `merged` now (read back above), or the user has none.
+      if (carrierId) latestState.synced_document = codec.normalize(merged)
+      else delete latestState.synced_document
       options.afterPersist?.(latest, latestState)
       saveConfig(latest)
       options.changed?.(latest)
@@ -346,7 +369,7 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
       }
       const message = error instanceof Error ? error.message : messages.failed
       const latest = loadConfig()
-      if (latest) {
+      if (latest && merging) {
         const latestState = options.ensureState(latest)
         latestState.dirty = true
         saveConfig(latest)
@@ -393,5 +416,38 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
     return config
   }
 
-  return { sync, status, mutate, persist }
+  /** Only a copy that can reach a server has changes to discard; standalone lists are local by design. */
+  function hasUnsyncedChanges(): boolean {
+    const config = loadConfig()
+    return !!config && !config.standalone_mode && !!config.vikunja_url && isDirty(config)
+  }
+
+  /** The last synced server copy, when it is still readable (round-tripped through the carrier format). */
+  function syncedCopy(state: SyncedDocumentState<Doc>): Doc | undefined {
+    if (state.synced_document === undefined) return undefined
+    try {
+      return codec.parse(codec.encode(state.synced_document)).document
+    } catch {
+      return undefined
+    }
+  }
+
+  function discardUnsynced(): boolean {
+    if (!hasUnsyncedChanges()) return false
+    const config = loadConfig()!
+    options.beforeChange?.(config)
+    const state = options.ensureState(config)
+    // Android clears its copy and reads it back (LocalDataWiper). Going back to the last server
+    // copy first gives the same result once the carrier is read, and keeps the lists and settings
+    // the server had while it cannot be reached.
+    persist(config, syncedCopy(state) ?? codec.empty(state.device_id), false)
+    options.changed?.(config)
+    setStatus({ state: 'pending' })
+    // A sync that is running may have read the old copy: read the carriers again after it.
+    if (inFlightSync) resyncRequested = true
+    else void sync()
+    return true
+  }
+
+  return { sync, status, mutate, persist, hasUnsyncedChanges, discardUnsynced }
 }

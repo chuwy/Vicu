@@ -227,6 +227,10 @@ export const api = {
   readSetupPreferences: (url: string, token?: string) => window.api.readSetupPreferences(url, token),
   syncCustomLists: () => window.api.syncCustomLists(),
   getCustomListSyncStatus: () => window.api.getCustomListSyncStatus(),
+  getUnsyncedDocuments: () => window.api.getUnsyncedDocuments(),
+  discardUnsyncedDocuments: () => window.api.discardUnsyncedDocuments(),
+  onSyncedPrefsStatus: (cb: (status: import('./vikunja-types').CustomListSyncStatus) => void) =>
+    window.api.onSyncedPrefsStatus(cb),
   onCustomListsChanged: (cb: (lists: import('./vikunja-types').CustomList[]) => void) =>
     window.api.onCustomListsChanged(cb),
   onCustomListSyncStatus: (cb: (status: import('./vikunja-types').CustomListSyncStatus) => void) =>

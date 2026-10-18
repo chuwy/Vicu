@@ -217,6 +217,7 @@ export type {
   CustomListSyncStatus,
   ReviewConfig,
   SecondaryProject,
+  UnsyncedDocuments,
   ViewerFilter,
 } from '../../shared/config-types'
 export {

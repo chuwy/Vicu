@@ -53,20 +53,25 @@ import { directoryFromSelectedFile, resolveDialogDefaultPath } from './dialog-pa
 import {
   deleteCustomList,
   getCustomLists,
+  discardUnsyncedCustomListChanges,
   getCustomListSyncStatus,
+  hasUnsyncedCustomListChanges,
   reorderCustomLists,
   syncCustomLists,
   upsertCustomList,
 } from './custom-list-service'
 import {
+  discardUnsyncedPreferenceChanges,
   getSyncedPrefs,
   getSyncedPrefsStatus,
+  hasUnsyncedPreferenceChanges,
   inboxChosenAtSetup,
   readSetupPreferences,
   setSyncedPreference,
   syncSyncedPrefs,
 } from './synced-preferences'
 import type { CustomListWire } from './custom-list-protocol'
+import type { UnsyncedDocuments } from '../shared/config-types'
 import { hasVicuMetadataMarker } from './custom-list-protocol'
 import { discoverProviders, discoverAuthMethods } from './auth/oidc-discovery'
 import { fetchCurrentUser } from './auth/user-info'
@@ -469,6 +474,17 @@ export function registerIpcHandlers(): void {
   })
   handleTrusted('synced-prefs:sync', () => syncSyncedPrefs())
   handleTrusted('synced-prefs:status', () => getSyncedPrefsStatus())
+
+  // Custom-list and settings changes that have not reached the server (they are not in the offline
+  // queue). The sync panel shows them and can discard them: each goes back to the server's copy.
+  handleTrusted('synced-documents:unsynced', (): UnsyncedDocuments => ({
+    customLists: hasUnsyncedCustomListChanges() ? getCustomListSyncStatus() : null,
+    preferences: hasUnsyncedPreferenceChanges() ? getSyncedPrefsStatus() : null,
+  }))
+  handleTrusted('synced-documents:discard', () => ({
+    customLists: discardUnsyncedCustomListChanges(),
+    preferences: discardUnsyncedPreferenceChanges(),
+  }))
   // Setup reads the account's synced Inbox before it asks for one (section 11.4). An API-token
   // setup passes its token (nothing is saved yet); a sign-in uses the session it just stored.
   handleTrusted('synced-prefs:read-for-setup', async (_event, url: unknown, token: unknown) => {

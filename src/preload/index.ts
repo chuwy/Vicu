@@ -131,6 +131,8 @@ const api = {
     return () => { ipcRenderer.removeListener('synced-prefs-sync-status', handler) }
   },
   getCustomListSyncStatus: () => ipcRenderer.invoke('custom-lists:status'),
+  getUnsyncedDocuments: () => ipcRenderer.invoke('synced-documents:unsynced'),
+  discardUnsyncedDocuments: () => ipcRenderer.invoke('synced-documents:discard'),
   onCustomListsChanged: (cb: (lists: unknown[]) => void) => {
     const handler = (_: unknown, lists: unknown[]) => cb(lists)
     ipcRenderer.on('custom-lists-changed', handler)

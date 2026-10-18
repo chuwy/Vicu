@@ -8,6 +8,7 @@ import {
   activeLists,
   appListToWire,
   documentFromLists,
+  emptyCustomListDocument,
   encodeCustomListEnvelope,
   hasCustomListMarker,
   mergeCustomListDocuments,
@@ -90,6 +91,7 @@ const customListCodec: SyncedDocumentCodec<CustomListSyncDocumentV1> = {
   },
   encode: encodeCustomListEnvelope,
   normalize: normalizeDocument,
+  empty: emptyCustomListDocument,
   merge: mergeCustomListDocuments,
   prune: pruneTombstones,
   same: (left, right) => JSON.stringify(normalizeDocument(left)) === JSON.stringify(normalizeDocument(right)),
@@ -181,4 +183,14 @@ export function reorderCustomLists(ids: string[]): CustomList[] {
 
 export function syncCustomLists(): Promise<CustomListSyncStatus> {
   return service.sync()
+}
+
+/** Custom-list changes made here that have not reached the server yet. */
+export function hasUnsyncedCustomListChanges(): boolean {
+  return service.hasUnsyncedChanges()
+}
+
+/** Drops them: the lists go back to what the server last held and are read again. */
+export function discardUnsyncedCustomListChanges(): boolean {
+  return service.discardUnsynced()
 }

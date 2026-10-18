@@ -9,6 +9,8 @@ import { formatAbsoluteDateTime } from '@/lib/date-utils'
 import { useDateFormat } from '@/hooks/use-date-format'
 import { useOfflineStore } from '@/stores/offline-store'
 import { useUIStore } from '@/stores/ui-store'
+import { UNSYNCED_DOCUMENTS_QUERY_KEY, useUnsyncedDocuments } from '@/hooks/use-unsynced-documents'
+import { discardDocumentsPrompt, unsyncedDocumentItems } from '@/lib/unsynced-documents'
 import { Dialog } from '@/components/overlay/Dialog'
 import type { OfflineFailedItemView, OfflineFailureReason } from '../../../shared/offline-queue-types'
 
@@ -89,7 +91,9 @@ function FailedRow({
 
 /**
  * Pending and failed offline changes (D-REN-3, D-SYNC-6): retry or discard what the server refused,
- * sync what is waiting, and sign in again when the session ran out.
+ * sync what is waiting, and sign in again when the session ran out. Custom-list and settings
+ * changes that have not reached the server are listed too and can be discarded (they go back to
+ * the server's copy), like Android's "Discard unsynced changes".
  */
 export function SyncPanel({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
@@ -101,8 +105,11 @@ export function SyncPanel({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const titleId = useId()
 
+  const { data: unsyncedDocuments } = useUnsyncedDocuments()
+
   const failed = snapshot?.failed ?? []
   const pending = snapshot?.pending ?? []
+  const documents = unsyncedDocumentItems(unsyncedDocuments)
 
   const run = async (action: () => Promise<{ success: boolean; error?: string }>, failure: string) => {
     setBusy(true)
@@ -128,6 +135,13 @@ export function SyncPanel({ onClose }: { onClose: () => void }) {
       confirmLabel: 'Discard',
     })
     if (ok) await discard()
+  }
+  const syncDocuments = () => run(() => api.syncCustomLists().then(() => ({ success: true })), 'Could not sync')
+  const discardDocuments = async () => {
+    const ok = await confirmDelete(discardDocumentsPrompt(documents), { force: true, confirmLabel: 'Discard' })
+    if (!ok) return
+    await run(() => api.discardUnsyncedDocuments().then(() => ({ success: true })), 'Could not discard')
+    void qc.invalidateQueries({ queryKey: UNSYNCED_DOCUMENTS_QUERY_KEY })
   }
   const syncNow = () => run(() => api.offlineQueue.replayNow().then((r) => (r.success ? { success: true } : r)), 'Could not sync')
 
@@ -194,6 +208,40 @@ export function SyncPanel({ onClose }: { onClose: () => void }) {
             </section>
           )}
 
+          {documents.length > 0 && (
+            <section className="border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2 px-4 pb-1 pt-3">
+                <h3 className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Lists and settings
+                </h3>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void syncDocuments()}
+                  className="flex items-center gap-1 rounded-control border border-[var(--border-color)] px-2 py-0.5 text-[11px] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-50"
+                >
+                  <RefreshCw className="h-3 w-3" /> Sync now
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void discardDocuments()}
+                  className="rounded-control border border-[var(--border-color)] px-2 py-0.5 text-[11px] text-danger hover:bg-[var(--bg-hover)] disabled:opacity-50"
+                >
+                  Discard
+                </button>
+              </div>
+              <ul className="px-4 pb-3">
+                {documents.map((item) => (
+                  <li key={item.key} className="py-0.5">
+                    <p className="break-words text-[12px] text-[var(--text-primary)]">{item.label}</p>
+                    <p className="break-words text-[11px] text-[var(--text-secondary)]">{item.note}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {failed.length > 0 && (
             <section>
               <div className="flex items-center gap-2 px-4 pb-1 pt-3">
@@ -231,7 +279,7 @@ export function SyncPanel({ onClose }: { onClose: () => void }) {
             </section>
           )}
 
-          {!authProblem && counts.pending === 0 && failed.length === 0 && (
+          {!authProblem && counts.pending === 0 && failed.length === 0 && documents.length === 0 && (
             <p className="px-4 py-6 text-center text-[12px] text-[var(--text-secondary)]">Everything is synced.</p>
           )}
         </div>

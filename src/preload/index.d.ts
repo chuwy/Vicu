@@ -21,6 +21,7 @@ import type {
   AuthCheckResult,
   CustomList,
   CustomListSyncStatus,
+  UnsyncedDocuments,
   PersonRef,
   ProjectShares,
   TaskComment,
@@ -137,6 +138,10 @@ export interface ElectronAPI {
   readSetupPreferences(url: string, token?: string): Promise<{ inboxProjectId: number | null; defaultProjectId: number | null }>
   onSyncedPrefsChanged(cb: (snapshot: SyncedPrefsSnapshot) => void): () => void
   onSyncedPrefsStatus(cb: (status: CustomListSyncStatus) => void): () => void
+  /** Custom-list and settings changes that have not reached the server, with their sync status. */
+  getUnsyncedDocuments(): Promise<UnsyncedDocuments>
+  /** Drops those changes; each document goes back to the server's copy. Says which had any. */
+  discardUnsyncedDocuments(): Promise<{ customLists: boolean; preferences: boolean }>
   setTaskBadge(count: number, dataUrl: string | null): Promise<void>
   testConnection(url: string, token: string): Promise<ApiResult<Project[]>>
 

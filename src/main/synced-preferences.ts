@@ -117,6 +117,7 @@ const prefsCodec: SyncedDocumentCodec<SyncedPrefsDocument> = {
   },
   encode: encodePrefsEnvelope,
   normalize: (document) => document,
+  empty: () => emptySyncedPrefs(),
   merge: mergeSyncedPrefs,
   prune: pruneSyncedPrefs,
   same: sameSyncedPrefs,
@@ -192,6 +193,19 @@ export function syncSyncedPrefs(): Promise<SyncedDocumentStatus> {
 
 export function getSyncedPrefsStatus(): SyncedDocumentStatus {
   return service.status()
+}
+
+/** Synced settings changed here that have not reached the server yet. */
+export function hasUnsyncedPreferenceChanges(): boolean {
+  return service.hasUnsyncedChanges()
+}
+
+/**
+ * Drops them: the settings go back to what the server last held (the Inbox too, once it follows the
+ * synced entry) and are read again. The one-time move (section 11.5) does not run again.
+ */
+export function discardUnsyncedPreferenceChanges(): boolean {
+  return service.discardUnsynced()
 }
 
 /** The values the windows use, and the Inbox. */
