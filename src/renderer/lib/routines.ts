@@ -106,7 +106,10 @@ export function statusRecord(
   const now = formatInstant()
   const id = deviceId()
   const key = routineOccurrenceKey(payload.definition.id, date, slot.id)
+  // A record logged before keeps the fields this app does not know (contract 10.8).
+  const previous = payload.occurrences[key]
   return {
+    ...previous,
     key,
     routineId: payload.definition.id,
     slotId: slot.id,

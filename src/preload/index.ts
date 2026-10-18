@@ -17,6 +17,8 @@ const api = {
     ipcRenderer.invoke('fetch-tasks', params),
   fetchRoutineCarriers: () =>
     ipcRenderer.invoke('fetch-routine-carriers'),
+  getOwnUserId: () =>
+    ipcRenderer.invoke('account:own-user-id'),
   createTask: (projectId: number, task: Record<string, unknown>) =>
     ipcRenderer.invoke('create-task', projectId, task),
   // The task writes go through the main process's write gate; `options.queue` says the caller can

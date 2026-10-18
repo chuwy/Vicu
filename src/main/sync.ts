@@ -21,6 +21,8 @@ import {
 import { findQueuedComment } from './offline/comment-overlay'
 import { OFFLINE_EVENTS, forgetKnownUser, getOfflineQueue, knownUserIdFor, rememberKnownUser, sendToAppWindows } from './offline/service'
 import { fetchCurrentUser } from './auth/user-info'
+import { setKnownUserLookup } from './known-user'
+import { isHiddenTask } from '../shared/hidden-tasks'
 import { authManager } from './auth/auth-manager'
 import { getAPIToken } from './auth/token-store'
 import { matchesQueuedCreate } from './offline/duplicate-match'
@@ -49,7 +51,9 @@ const api: ReplayApi = {
     const title = typeof fields.title === 'string' ? fields.title : ''
     const found = await fetchTasks({ q: title, filter: `project_id = ${projectId}`, [KEEP_NESTED_SUBTASKS_PARAM]: true })
     if (!found.success) return found
-    return { success: true, data: found.data.find((t) => matchesQueuedCreate(t, projectId, fields, since)) as { id: number } | undefined ?? null }
+    // A hidden task (a routine or another carrier) is never the earlier attempt of a user's task.
+    const match = found.data.find((t) => !isHiddenTask((t as { description?: string } | null)?.description) && matchesQueuedCreate(t, projectId, fields, since))
+    return { success: true, data: match as { id: number } | undefined ?? null }
   },
   addTaskAssignee: (taskId, userId) => sendSerially(() => addTaskAssignee(taskId, userId)),
   removeTaskAssignee: (taskId, userId) => sendSerially(() => removeTaskAssignee(taskId, userId)),
@@ -101,6 +105,9 @@ export async function refreshKnownUser(): Promise<void> {
   const user = await fetchCurrentUser(config.vikunja_url, token)
   if (user) rememberKnownUser(config.vikunja_url, user.id)
 }
+
+// The hidden tasks wait for the user id (cross-app semantics 10.3): they ask through this lookup.
+setKnownUserLookup(refreshKnownUser)
 
 /**
  * Replay the offline queue (see src/main/offline/replay.ts for the rules). Safe to call from every

@@ -114,30 +114,43 @@ export interface ParsedRoutineEnvelope {
   body: string
   payload?: RoutinePayload
   error?: string
+  /**
+   * A newer version of Vicu wrote it (marker or payload version above the one this app knows): it
+   * is shown as "update required" and never written or deleted (cross-app semantics 10.7).
+   */
+  updateRequired?: boolean
 }
 
 export interface ParsedArchiveEnvelope {
   isArchive: boolean
   part?: RoutineArchivePart
   error?: string
+  /** Written by a newer version of Vicu; never written over. */
+  updateRequired?: boolean
 }
 
 // --- Markers -----------------------------------------------------------------------------
 
-const MARKER_RE = /<!--\s*vicu-routine:v(\d+):([A-Za-z0-9_-]+={0,2})\s*-->/
+// Whitespace inside the comment is only space, tab, CR and LF, as in the hiding rule
+// (docs/cross-app-semantics-v1.md section 10.1, shared/hidden-tasks.ts).
+const MARKER_RE = /<!--[ \t\r\n]*vicu-routine:v(\d+):([A-Za-z0-9_-]+={0,2})[ \t\r\n]*-->/
 /** Any main-carrier marker; the lookahead keeps archive markers out. */
-const ANY_MARKER_RE = /<!--\s*vicu-routine:(?!archive:)[\s\S]*?-->/
-const ARCHIVE_MARKER_RE = /<!--\s*vicu-routine:archive:v(\d+):([A-Za-z0-9_-]+={0,2})\s*-->/
-const ANY_ARCHIVE_MARKER_RE = /<!--\s*vicu-routine:archive:[\s\S]*?-->/
+const ANY_MARKER_RE = /<!--[ \t\r\n]*vicu-routine:(?!archive:)[\s\S]*?-->/
+/** The start of a main-carrier marker, closed or not. */
+const MARKER_START_RE = /<!--[ \t\r\n]*vicu-routine:(?!archive:)/
+const ARCHIVE_MARKER_RE = /<!--[ \t\r\n]*vicu-routine:archive:v(\d+):([A-Za-z0-9_-]+={0,2})[ \t\r\n]*-->/
+const ANY_ARCHIVE_MARKER_RE = /<!--[ \t\r\n]*vicu-routine:archive:[\s\S]*?-->/
+/** The start of an archive-part marker, closed or not. */
+const ARCHIVE_MARKER_START_RE = /<!--[ \t\r\n]*vicu-routine:archive:/
 
 /** True when the description holds a main routine carrier marker (not an archive part). */
 export function hasRoutineMarker(description?: string | null): boolean {
-  return !!description && ANY_MARKER_RE.test(description)
+  return !!description && MARKER_START_RE.test(description)
 }
 
 /** True when the description holds a routine archive part marker. */
 export function hasRoutineArchiveMarker(description?: string | null): boolean {
-  return !!description && ANY_ARCHIVE_MARKER_RE.test(description)
+  return !!description && ARCHIVE_MARKER_START_RE.test(description)
 }
 
 // --- Encoding ----------------------------------------------------------------------------
@@ -210,18 +223,37 @@ export function routineJsonBytes(payload: RoutinePayload): number {
   return utf8Bytes(JSON.stringify(payload))
 }
 
+/** True when decoded JSON says it was written by a newer version than this app knows. */
+function isNewerPayload(value: unknown): boolean {
+  const version = (value as { version?: unknown } | null)?.version
+  return typeof value === 'object' && value !== null && typeof version === 'number' && version > CURRENT_VERSION
+}
+
 export function parseRoutineEnvelope(description?: string | null): ParsedRoutineEnvelope {
   if (!description) return { isCarrier: false, body: '' }
   const any = description.match(ANY_MARKER_RE)
-  if (!any || any.index === undefined) return { isCarrier: false, body: description }
+  if (!any || any.index === undefined) {
+    // An unclosed marker still makes it a carrier, an unreadable one.
+    return MARKER_START_RE.test(description)
+      ? { isCarrier: true, body: description, error: 'Malformed routine metadata' }
+      : { isCarrier: false, body: description }
+  }
   const body = `${description.slice(0, any.index)}${description.slice(any.index + any[0].length)}`.trimEnd()
   const marker = any[0].match(MARKER_RE)
   if (!marker) return { isCarrier: true, body, error: 'Malformed routine metadata' }
   if (Number(marker[1]) !== CURRENT_VERSION) {
-    return { isCarrier: true, body, error: `Routine metadata version ${marker[1]} is not supported` }
+    return {
+      isCarrier: true,
+      body,
+      error: `Routine metadata version ${marker[1]} is not supported`,
+      ...(Number(marker[1]) > CURRENT_VERSION ? { updateRequired: true } : {}),
+    }
   }
   try {
     const payload = decodeBase64Url(marker[2]) as RoutinePayload
+    if (isNewerPayload(payload)) {
+      return { isCarrier: true, body, error: `Routine payload version ${payload.version} is not supported`, updateRequired: true }
+    }
     validatePayload(payload)
     return { isCarrier: true, body, payload }
   } catch (error) {
@@ -250,14 +282,25 @@ export function upsertRoutineEnvelope(body: string, payload: RoutinePayload): st
 export function parseRoutineArchiveEnvelope(description?: string | null): ParsedArchiveEnvelope {
   if (!description) return { isArchive: false }
   const any = description.match(ANY_ARCHIVE_MARKER_RE)
-  if (!any) return { isArchive: false }
+  if (!any) {
+    return ARCHIVE_MARKER_START_RE.test(description)
+      ? { isArchive: true, error: 'Malformed routine archive metadata' }
+      : { isArchive: false }
+  }
   const marker = any[0].match(ARCHIVE_MARKER_RE)
   if (!marker) return { isArchive: true, error: 'Malformed routine archive metadata' }
   if (Number(marker[1]) !== CURRENT_VERSION) {
-    return { isArchive: true, error: `Routine archive version ${marker[1]} is not supported` }
+    return {
+      isArchive: true,
+      error: `Routine archive version ${marker[1]} is not supported`,
+      ...(Number(marker[1]) > CURRENT_VERSION ? { updateRequired: true } : {}),
+    }
   }
   try {
     const part = decodeBase64Url(marker[2]) as RoutineArchivePart
+    if (isNewerPayload(part)) {
+      return { isArchive: true, error: `Routine archive version ${part.version} is not supported`, updateRequired: true }
+    }
     validateArchivePart(part)
     return { isArchive: true, part }
   } catch (error) {
@@ -439,6 +482,12 @@ export function dropPrunedOccurrences(
   return kept
 }
 
+/**
+ * Merges the local payload with the server's (`remote`, contract 6.3). Fields this app does not
+ * know are kept at every level (contract 10.8): the winning definition and each winning occurrence
+ * carry their own, and the unknown top-level fields are the union of both sides, the server's value
+ * kept for a field on both.
+ */
 export function mergeRoutinePayload(local: RoutinePayload, remote: RoutinePayload): RoutinePayload {
   const definition = compareWrites(
     local.definition.updatedAt,
@@ -448,6 +497,8 @@ export function mergeRoutinePayload(local: RoutinePayload, remote: RoutinePayloa
   ) >= 0 ? local.definition : remote.definition
   const prunedBefore = laterDate(local.prunedBefore ?? '', remote.prunedBefore ?? '')
   return {
+    ...local,
+    ...remote,
     version: Math.max(local.version, remote.version),
     definition,
     occurrences: dropPrunedOccurrences(mergeOccurrenceMaps(local.occurrences, remote.occurrences), prunedBefore),

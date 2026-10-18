@@ -8,14 +8,19 @@
  *
  * - The ids of the carriers seen so far are remembered per server and fetched directly, one
  *   `GET /tasks/{id}` each.
- * - New carriers (created by another device) are found with a `q` search for the marker name plus
- *   `done = true`, at most once per `DISCOVERY_INTERVAL_MS`. Vikunja 2.4 matches the marker text
+ * - New carriers (created by another device) are found with a `q` search for the marker name, at
+ *   most once per `DISCOVERY_INTERVAL_MS` and whenever none is known. There is no `done` filter: a
+ *   carrier someone reopened in Vikunja's web UI is still the carrier, and its next write marks it
+ *   done again (docs/cross-app-semantics-v1.md section 10.4). Vikunja 2.4 matches the marker text
  *   inside the HTML comment; a literal `<!--` matches nothing, so the search text is the marker
  *   name only. The routine search text stops after `vicu-routine:v`, which matches the main carrier
  *   (`vicu-routine:v1:...`) and not the archive parts (`vicu-routine:archive:v1:...`): the day views
  *   never download history.
  * - A full scan of the done tasks is only a fallback: when a remembered id is gone (404 or 403),
  *   and as a once-a-day safety net for servers whose search does not look into descriptions.
+ * - A task is a carrier when its description holds the kind's marker (never by its title) and the
+ *   signed-in user created it (`created_by`, section 10.3): another user's carriers in a shared
+ *   project are left alone.
  *
  * Kept free of Electron so the rules run in unit tests; `carrier-service.ts` wires it to the API
  * client and the config.
@@ -23,10 +28,11 @@
 import { join } from 'path'
 import type { ApiResult } from './api-result'
 import { MAX_PAGE_SIZE } from './api-v2'
-import { CUSTOM_LIST_CARRIER_SEARCH, CUSTOM_LIST_CARRIER_TITLE, hasCustomListMarker } from './custom-list-protocol'
+import { CUSTOM_LIST_CARRIER_SEARCH, hasCustomListMarker } from './custom-list-protocol'
 import { JsonFileStore } from './json-file-store'
 import { mapLimited } from './map-limited'
-import { ROUTINE_CARRIER_SEARCH, hasRoutineMarker } from '../shared/routines'
+import { isOwnTask } from '../shared/hidden-tasks'
+import { ROUTINE_ARCHIVE_SEARCH, ROUTINE_CARRIER_SEARCH, hasRoutineArchiveMarker, hasRoutineMarker } from '../shared/routines'
 
 export const DISCOVERY_INTERVAL_MS = 60_000
 export const FULL_SCAN_INTERVAL_MS = 24 * 60 * 60_000
@@ -35,7 +41,9 @@ const DIRECT_FETCH_CONCURRENCY = 4
 
 export const CARRIER_IDS_FILENAME = 'carrier-ids.json'
 
-export type CarrierKind = 'routine' | 'custom-lists'
+export type CarrierKind = 'routine' | 'routine-archive' | 'custom-lists'
+
+const CARRIER_KINDS: readonly CarrierKind[] = ['routine', 'routine-archive', 'custom-lists']
 
 export interface CarrierTask {
   id: number
@@ -43,6 +51,7 @@ export interface CarrierTask {
   description?: string
   done?: boolean
   project_id?: number
+  created_by?: { id?: unknown } | null
 }
 
 export interface CarrierSpec {
@@ -59,10 +68,18 @@ export const ROUTINE_CARRIER_SPEC: CarrierSpec = {
   isCarrier: (task) => hasRoutineMarker(task.description),
 }
 
+/** The routine archive parts: only the sidebar counts load them here (the history reads its own). */
+export const ROUTINE_ARCHIVE_SPEC: CarrierSpec = {
+  kind: 'routine-archive',
+  search: ROUTINE_ARCHIVE_SEARCH,
+  isCarrier: (task) => hasRoutineArchiveMarker(task.description),
+}
+
+/** By the marker only: a task the user titled like the carrier stays theirs (section 10.1). */
 export const CUSTOM_LIST_CARRIER_SPEC: CarrierSpec = {
   kind: 'custom-lists',
   search: CUSTOM_LIST_CARRIER_SEARCH,
-  isCarrier: (task) => task.title === CUSTOM_LIST_CARRIER_TITLE || hasCustomListMarker(task.description),
+  isCarrier: (task) => hasCustomListMarker(task.description),
 }
 
 // --- What is remembered ------------------------------------------------------------------
@@ -113,7 +130,7 @@ function parseFileShape(json: unknown): FileShape {
   for (const [server, kinds] of Object.entries(raw as Record<string, unknown>)) {
     if (!kinds || typeof kinds !== 'object' || Array.isArray(kinds)) continue
     const entry: Partial<Record<CarrierKind, CarrierIdState>> = {}
-    for (const kind of ['routine', 'custom-lists'] as const) {
+    for (const kind of CARRIER_KINDS) {
       const state = (kinds as Record<string, unknown>)[kind] as Partial<CarrierIdState> | undefined
       if (!state || typeof state !== 'object') continue
       const ids = Array.isArray(state.ids)
@@ -189,8 +206,11 @@ export interface CarrierLoaderDeps {
 }
 
 export interface CarrierLoader {
-  /** Every carrier of `spec.kind` on `server`, ascending by id. */
-  load(spec: CarrierSpec, server: string): Promise<ApiResult<CarrierTask[]>>
+  /**
+   * Every carrier of `spec.kind` on `server` that the user `ownerId` created, ascending by id,
+   * done or reopened.
+   */
+  load(spec: CarrierSpec, server: string, ownerId: number): Promise<ApiResult<CarrierTask[]>>
   /** A carrier this app just created: fetched directly from the next load on. */
   remember(server: string, kind: CarrierKind, id: number): void
   /** A task this app deleted: never fetched again. */
@@ -221,26 +241,31 @@ export function createCarrierLoader(deps: CarrierLoaderDeps): CarrierLoader {
     return finished
   }
 
-  /** The tasks of a done-task listing that are carriers of this kind. */
-  function carriersIn(spec: CarrierSpec, tasks: unknown[]): CarrierTask[] {
+  /** The tasks of a listing that are the owner's carriers of this kind, done or not. */
+  function carriersIn(spec: CarrierSpec, tasks: unknown[], ownerId: number): CarrierTask[] {
     return tasks.filter((raw): raw is CarrierTask => {
       const task = raw as CarrierTask | null
-      return !!task && typeof task.id === 'number' && task.done !== false && spec.isCarrier(task)
+      return !!task && typeof task.id === 'number' && spec.isCarrier(task) && isOwnTask(task, ownerId)
     })
   }
 
-  async function run(spec: CarrierSpec, server: string): Promise<ApiResult<CarrierTask[]>> {
+  async function run(spec: CarrierSpec, server: string, ownerId: number): Promise<ApiResult<CarrierTask[]>> {
     const key = flightKey(server, spec.kind)
     const state = deps.store.get(server, spec.kind)
     const found = new Map<number, CarrierTask>()
     let gone = false
+    // A remembered task that is not (this user's) carrier any more: it may have been replaced, so
+    // look again now rather than answer "none" (another user signed in on the same server, too).
+    let dropped = false
 
     const direct = await mapLimited(state.ids, DIRECT_FETCH_CONCURRENCY, async (id) => ({ id, result: await deps.fetchTaskById(id) }))
     for (const { id, result } of direct) {
       if (result.success) {
         const task = result.data as CarrierTask | null
-        // Reopened or rewritten into something else: it is not a carrier any more.
-        if (task && task.id === id && carriersIn(spec, [task]).length === 1) found.set(id, task)
+        // Still a carrier when someone reopened it; not one any more when it was rewritten into
+        // something else, or when it is not this user's (an id remembered before owners counted).
+        if (task && task.id === id && carriersIn(spec, [task], ownerId).length === 1) found.set(id, task)
+        else dropped = true
       } else if (isGone(result)) {
         gone = true
       } else {
@@ -251,16 +276,16 @@ export function createCarrierLoader(deps: CarrierLoaderDeps): CarrierLoader {
 
     const now = deps.now()
     const fullScanDue = gone || now - state.lastFullScanAt >= FULL_SCAN_INTERVAL_MS
-    const searchDue = state.ids.length === 0 || now - (lastDiscoveryAt.get(key) ?? Number.NEGATIVE_INFINITY) >= DISCOVERY_INTERVAL_MS
+    const searchDue = state.ids.length === 0 || dropped || now - (lastDiscoveryAt.get(key) ?? Number.NEGATIVE_INFINITY) >= DISCOVERY_INTERVAL_MS
     let lastFullScanAt = state.lastFullScanAt
 
     if (fullScanDue || searchDue) {
       const listing = fullScanDue
         ? await scanDoneTasks(server)
-        : await deps.fetchTasks({ q: spec.search, filter: 'done = true', per_page: MAX_PAGE_SIZE })
+        : await deps.fetchTasks({ q: spec.search, per_page: MAX_PAGE_SIZE })
       const listed = listing.success && Array.isArray(listing.data) ? listing.data : null
       if (listed) {
-        for (const task of carriersIn(spec, listed)) found.set(task.id, task)
+        for (const task of carriersIn(spec, listed, ownerId)) found.set(task.id, task)
         lastDiscoveryAt.set(key, now)
         if (fullScanDue) lastFullScanAt = now
       } else if (found.size === 0) {
@@ -278,11 +303,11 @@ export function createCarrierLoader(deps: CarrierLoaderDeps): CarrierLoader {
   }
 
   return {
-    load(spec, server) {
-      const key = flightKey(server, spec.kind)
+    load(spec, server, ownerId) {
+      const key = `${flightKey(server, spec.kind)}\n${ownerId}`
       const running = inFlight.get(key)
       if (running) return running
-      const started = run(spec, server).finally(() => { inFlight.delete(key) })
+      const started = run(spec, server, ownerId).finally(() => { inFlight.delete(key) })
       inFlight.set(key, started)
       return started
     },

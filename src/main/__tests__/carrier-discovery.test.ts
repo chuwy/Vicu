@@ -17,28 +17,37 @@ import {
 } from '../carrier-discovery'
 
 const SERVER = 'https://tasks.example.com'
+/** The signed-in user; every carrier below is theirs unless it says otherwise. */
+const ME = 1
+const mine = { created_by: { id: ME } }
 
 const routineCarrier = (id: number): CarrierTask => ({
   id,
   title: `Routine ${id}`,
   done: true,
   description: `<!-- vicu-routine:v1:e30 -->`,
+  ...mine,
 })
 const archivePart = (id: number): CarrierTask => ({
   id,
   title: 'Vicu routine archive',
   done: true,
   description: `<!-- vicu-routine:archive:v1:e30 -->`,
+  ...mine,
 })
 const listCarrier = (id: number): CarrierTask => ({
   id,
   title: 'Vicu custom lists (sync metadata — do not delete)',
   done: true,
   description: `<!-- vicu-custom-lists:v1:e30 -->`,
+  ...mine,
 })
-const plainDone = (id: number): CarrierTask => ({ id, title: `Done ${id}`, done: true, description: '<p>nothing</p>' })
+const plainDone = (id: number): CarrierTask => ({ id, title: `Done ${id}`, done: true, description: '<p>nothing</p>', ...mine })
 
-/** A tiny fake server: done tasks by id, with a search that behaves like Vikunja's `q` (substring). */
+/**
+ * A tiny fake server: tasks by id, with a search that behaves like Vikunja's `q` (substring, done or
+ * not unless a done filter is given) and a full listing of the done tasks.
+ */
 function fakeServer(initial: CarrierTask[]) {
   const tasks = new Map<number, CarrierTask>(initial.map((task) => [task.id, task]))
   const calls = { list: [] as Array<Record<string, unknown>>, byId: [] as number[] }
@@ -47,7 +56,8 @@ function fakeServer(initial: CarrierTask[]) {
   const fetchTasks = async (params: Record<string, unknown>): Promise<ApiResult<unknown[]>> => {
     calls.list.push(params)
     if (failing.list) return { success: false, error: failing.list }
-    let result = [...tasks.values()].filter((task) => task.done)
+    let result = [...tasks.values()]
+    if (params.filter === 'done = true') result = result.filter((task) => task.done)
     if (typeof params.q === 'string') {
       const q = params.q
       result = result.filter((task) => (task.title ?? '').includes(q) || (task.description ?? '').includes(q))
@@ -79,7 +89,7 @@ function setup(initial: CarrierTask[], store: CarrierIdStore = createMemoryCarri
     advance: (ms: number) => { nowMs += ms },
     reset: () => { server.calls.list.length = 0; server.calls.byId.length = 0 },
     ids: async (spec = ROUTINE_CARRIER_SPEC) => {
-      const result = await loader.load(spec, SERVER)
+      const result = await loader.load(spec, SERVER, ME)
       if (!result.success) throw new Error(result.error)
       return result.data.map((task) => task.id)
     },
@@ -139,7 +149,9 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
     t.advance(2)
     expect(await t.ids()).toEqual([10, 30])
     expect(t.server.calls.list).toHaveLength(1)
-    expect(t.server.calls.list[0]).toMatchObject({ q: 'vicu-routine:v', filter: 'done = true' })
+    expect(t.server.calls.list[0]).toMatchObject({ q: 'vicu-routine:v' })
+    // No done filter: a reopened carrier is still found (cross-app semantics 10.4).
+    expect(t.server.calls.list[0].filter).toBeUndefined()
 
     // From now on it is fetched by id.
     t.reset()
@@ -166,22 +178,42 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
     expect(ROUTINE_CARRIER_SPEC.isCarrier(routineCarrier(10))).toBe(true)
   })
 
-  it('looks for custom-list carriers by the title or the marker, with its own search text', async () => {
+  it('looks for custom-list carriers by the marker only, with its own search text', async () => {
     const t = setup([listCarrier(40), routineCarrier(10)])
     expect(await t.ids(CUSTOM_LIST_CARRIER_SPEC)).toEqual([40])
     t.advance(DISCOVERY_INTERVAL_MS + 1)
     t.reset()
     await t.ids(CUSTOM_LIST_CARRIER_SPEC)
-    expect(t.server.calls.list[0]).toMatchObject({ q: 'vicu-custom-lists', filter: 'done = true' })
-    expect(CUSTOM_LIST_CARRIER_SPEC.isCarrier({ id: 1, title: 'Vicu custom lists (sync metadata — do not delete)', description: '' })).toBe(true)
+    expect(t.server.calls.list[0]).toMatchObject({ q: 'vicu-custom-lists' })
+    // A task the user titled like the carrier stays theirs (cross-app semantics 10.1).
+    expect(CUSTOM_LIST_CARRIER_SPEC.isCarrier({ id: 1, title: 'Vicu custom lists (sync metadata — do not delete)', description: '' })).toBe(false)
     expect(CUSTOM_LIST_CARRIER_SPEC.isCarrier(plainDone(2))).toBe(false)
+  })
+
+  it("leaves another user's carriers alone and finds none until it knows the owner", async () => {
+    const theirs = (task: CarrierTask): CarrierTask => ({ ...task, created_by: { id: 2 } })
+    const t = setup([theirs(listCarrier(40)), listCarrier(41), { ...listCarrier(42), created_by: undefined }])
+    expect(await t.ids(CUSTOM_LIST_CARRIER_SPEC)).toEqual([41])
+    // Another user's id is never remembered, so it is never fetched directly.
+    expect(t.store.get(SERVER, 'custom-lists').ids).toEqual([41])
+    const asTheOther = await t.loader.load(CUSTOM_LIST_CARRIER_SPEC, SERVER, 2)
+    expect(asTheOther).toMatchObject({ success: true })
+    expect((asTheOther as { data: CarrierTask[] }).data.map((task) => task.id)).toEqual([40])
+  })
+
+  it('finds a reopened carrier it does not remember with the search', async () => {
+    const t = setup([plainDone(1)])
+    await t.ids()
+    t.server.tasks.set(70, { ...routineCarrier(70), done: false })
+    t.advance(DISCOVERY_INTERVAL_MS + 1)
+    expect(await t.ids()).toEqual([70])
   })
 
   it('shares one full listing between the kinds when both start together (first run)', async () => {
     const t = setup([routineCarrier(10), listCarrier(40), plainDone(1)])
     const [routines, lists] = await Promise.all([
-      t.loader.load(ROUTINE_CARRIER_SPEC, SERVER),
-      t.loader.load(CUSTOM_LIST_CARRIER_SPEC, SERVER),
+      t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME),
+      t.loader.load(CUSTOM_LIST_CARRIER_SPEC, SERVER, ME),
     ])
     expect(routines).toMatchObject({ success: true })
     expect(lists).toMatchObject({ success: true })
@@ -255,15 +287,28 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
     expect(t.server.calls.list).toHaveLength(1)
   })
 
-  it('drops a remembered task that was reopened or is no longer a carrier, without a scan', async () => {
+  it('keeps a remembered carrier someone reopened (its next write marks it done again)', async () => {
     const t = setup([routineCarrier(10), routineCarrier(11)])
     await t.ids()
     t.server.tasks.set(10, { ...routineCarrier(10), done: false })
     t.reset()
     t.advance(1_000)
 
-    expect(await t.ids()).toEqual([11])
+    expect(await t.ids()).toEqual([10, 11])
     expect(t.server.calls.list).toHaveLength(0)
+    expect(t.store.get(SERVER, 'routine').ids).toEqual([10, 11])
+  })
+
+  it('drops a remembered task that is no longer a carrier, and searches instead of a full scan', async () => {
+    const t = setup([routineCarrier(10), routineCarrier(11)])
+    await t.ids()
+    t.server.tasks.set(10, { ...routineCarrier(10), description: '<p>just a task now</p>' })
+    t.reset()
+    t.advance(1_000)
+
+    expect(await t.ids()).toEqual([11])
+    expect(t.server.calls.list).toHaveLength(1)
+    expect(t.server.calls.list[0].q).toBe('vicu-routine:v')
     expect(t.store.get(SERVER, 'routine').ids).toEqual([11])
   })
 
@@ -274,7 +319,7 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
     t.reset()
     t.advance(1_000)
 
-    const result = await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER)
+    const result = await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME)
     expect(result).toMatchObject({ success: false, error: 'Server error' })
     expect(t.server.calls.list).toHaveLength(0)
     expect(t.store.get(SERVER, 'routine').ids).toEqual([10, 11])
@@ -283,7 +328,7 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
   it('reports the error when nothing is known and the listing fails, instead of "no carriers"', async () => {
     const t = setup([routineCarrier(10)])
     t.server.failing.list = 'Network error'
-    const result = await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER)
+    const result = await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME)
     expect(result).toMatchObject({ success: false, error: 'Network error' })
     expect(t.store.get(SERVER, 'routine')).toEqual({ ids: [], lastFullScanAt: 0 })
   })
@@ -310,7 +355,7 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
 
   it('shares one set of requests between loads that overlap', async () => {
     const t = setup([routineCarrier(10)])
-    const [a, b] = await Promise.all([t.loader.load(ROUTINE_CARRIER_SPEC, SERVER), t.loader.load(ROUTINE_CARRIER_SPEC, SERVER)])
+    const [a, b] = await Promise.all([t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME), t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME)])
     expect(a).toEqual(b)
     expect(t.server.calls.list).toHaveLength(1)
   })

@@ -159,4 +159,9 @@ describe('countCarriersByProject', () => {
     const map = countCarriersByProject([{ project_id: 3 }, { project_id: 3 }, { project_id: 8 }, {}, { project_id: 0 }, { project_id: 1.5 }])
     expect([...map.entries()]).toEqual([[3, 2], [8, 1]])
   })
+
+  it('leaves out a carrier someone reopened: it is not in the done total', () => {
+    const map = countCarriersByProject([{ project_id: 3, done: true }, { project_id: 3, done: false }, { project_id: 3 }])
+    expect([...map.entries()]).toEqual([[3, 2]])
+  })
 })

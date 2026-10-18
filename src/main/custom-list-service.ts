@@ -1,7 +1,9 @@
 import { BrowserWindow } from 'electron'
 import { randomUUID } from 'crypto'
 import { createTask, deleteTask, fetchTaskById, updateTask } from './api-client'
-import { forgetDeletedTask, loadCustomListCarriers, rememberCreatedTask } from './carrier-service'
+import { OWNER_UNKNOWN_ERROR, forgetDeletedTask, loadCustomListCarriers, rememberCreatedTask } from './carrier-service'
+import { ensureKnownUserId } from './known-user'
+import { isOwnTask } from '../shared/hidden-tasks'
 import { loadConfig, saveConfig, type AppConfig } from './config'
 import { invalidateProjectCounts } from './project-counts-service'
 import {
@@ -34,7 +36,12 @@ interface CarrierTask {
   title?: string
   description?: string
   done?: boolean
+  created_by?: { id?: unknown } | null
 }
+
+/** The user id is not known yet: no carrier is discovered, nothing is written, the sync waits. */
+class OwnerUnknownError extends Error {}
+const OWNER_WAIT_MESSAGE = 'Waiting to confirm the signed-in account'
 
 let syncStatus: CustomListSyncStatus = { state: 'idle' }
 let inFlightSync: Promise<CustomListSyncStatus> | null = null
@@ -183,12 +190,16 @@ async function fetchCarriers(): Promise<{ valid: Array<{ task: CarrierTask; docu
   // The carriers this app has seen are fetched by id; new ones are found with a marker search
   // (see carrier-discovery.ts). The done tasks are no longer listed on every sync.
   const result = await loadCustomListCarriers()
-  if (!result.success) throw new Error(result.error)
+  if (!result.success) {
+    if (result.error === OWNER_UNKNOWN_ERROR) throw new OwnerUnknownError(result.error)
+    throw new Error(result.error)
+  }
   const valid: Array<{ task: CarrierTask; document: CustomListSyncDocumentV1 }> = []
   let malformed = 0
   let futureVersion: number | undefined
   for (const task of result.data) {
-    if (task.title !== CUSTOM_LIST_CARRIER_TITLE && !hasCustomListMarker(task.description)) continue
+    // By the marker only (never the title), and only the signed-in user's (the loader checked).
+    if (!hasCustomListMarker(task.description)) continue
     const parsed = parseCustomListEnvelope(task.description)
     if (parsed.document) valid.push({ task, document: parsed.document })
     else if (parsed.version && parsed.version > 1) futureVersion = Math.max(futureVersion ?? 0, parsed.version)
@@ -246,6 +257,7 @@ async function removeDuplicateCarriers(
   extras: Array<{ task: CarrierTask; document: CustomListSyncDocumentV1 }>,
   kept: CustomListSyncDocumentV1,
 ): Promise<void> {
+  const me = await ensureKnownUserId()
   for (const extra of extras) {
     try {
       const fresh = await fetchTaskById(extra.task.id)
@@ -253,6 +265,8 @@ async function removeDuplicateCarriers(
         if (fresh.statusCode === 404) forgetDeletedTask(extra.task.id)
         continue
       }
+      // Another user's carrier is never touched (cross-app semantics 10.3).
+      if (!isOwnTask(fresh.data as CarrierTask, me)) continue
       const parsed = parseCustomListEnvelope((fresh.data as CarrierTask).description)
       if (!parsed.document) continue
       // Tombstones older than 90 days are not kept in the kept carrier, so they do not count.
@@ -338,10 +352,11 @@ async function runSync(): Promise<CustomListSyncStatus> {
       // Include edits made while the write/verification request was in flight. If the
       // carrier does not contain them yet, keep the merged local document dirty.
       const latestLocalDocument = ensureSyncState(latest).document
-      const converged = mergeCustomListDocuments(
+      // Compared after pruning, like every merge result (cross-app semantics 10.6).
+      const converged = pruneTombstones(mergeCustomListDocuments(
         mergeCustomListDocuments(merged, verifiedDocument),
         latestLocalDocument,
-      )
+      ))
       if (!documentsEqual(converged, verifiedDocument)) {
         persist(latest, converged, true)
         broadcastLists(latest)
@@ -371,6 +386,9 @@ async function runSync(): Promise<CustomListSyncStatus> {
     }
     return setStatus({ state: 'idle', last_synced_at: lastSyncedAt })
   } catch (error) {
+    if (error instanceof OwnerUnknownError) {
+      return setStatus({ state: 'pending', message: OWNER_WAIT_MESSAGE })
+    }
     const message = error instanceof Error ? error.message : 'Custom-list sync failed'
     const latest = loadConfig()
     if (latest) {
@@ -387,7 +405,9 @@ export function syncCustomLists(): Promise<CustomListSyncStatus> {
   inFlightSync = runSync().finally(() => {
     inFlightSync = null
     const config = loadConfig()
-    if (syncStatus.state === 'pending' && config?.vikunja_url && config.custom_lists_sync?.dirty) {
+    // Retried at once only when lists changed during the sync; a sync that waits for the user id
+    // runs again with the next trigger (the lookup asks the server at most once a minute).
+    if (syncStatus.state === 'pending' && syncStatus.message !== OWNER_WAIT_MESSAGE && config?.vikunja_url && config.custom_lists_sync?.dirty) {
       setTimeout(() => { void syncCustomLists() }, 250)
     }
   })

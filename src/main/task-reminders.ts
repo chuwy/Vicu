@@ -16,6 +16,7 @@
  */
 
 import { KEEP_NESTED_SUBTASKS_PARAM, MAX_PAGE_SIZE } from './api-v2'
+import { isHiddenTask } from '../shared/hidden-tasks'
 
 export const REFRESH_INTERVAL_MS = 15 * 60_000
 /** Window focus refreshes at most this often. */
@@ -41,6 +42,7 @@ export interface ReminderTask {
   id: number
   title: string
   done?: boolean
+  description?: string | null
   reminders?: Array<{ reminder: string }> | null
 }
 
@@ -175,7 +177,8 @@ export function createTaskReminderScheduler(deps: TaskReminderDeps): TaskReminde
 
     for (const raw of result.data) {
       const task = raw as ReminderTask
-      if (!task || typeof task.id !== 'number' || task.done === true) continue
+      // A hidden task given reminders in the web UI never reminds (cross-app semantics 10.1).
+      if (!task || typeof task.id !== 'number' || task.done === true || isHiddenTask(task.description)) continue
       for (const at of remindersOf(task)) {
         const key = `${task.id}-${at}`
         if (at > now) {

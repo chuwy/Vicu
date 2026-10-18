@@ -68,7 +68,8 @@ export function createProjectCounts(deps: ProjectCountDeps): ProjectCounts {
     const startedIn = generation
     const [total, carriers] = await Promise.all([
       deps.fetchTotal(projectId, done),
-      // Open tasks are never carriers, so only a done count needs them.
+      // Only a done count subtracts carriers: they are done tasks (one someone reopened is not
+      // subtracted, see countCarriersByProject), and the open counts come from a listing that hides them.
       done ? knownCarriers(server) : Promise.resolve(null),
     ])
     if (!total.success) return total
@@ -115,10 +116,14 @@ export function createProjectCounts(deps: ProjectCountDeps): ProjectCounts {
   }
 }
 
-/** The done carrier tasks per project id; tasks without a usable project id are skipped. */
-export function countCarriersByProject(carriers: ReadonlyArray<{ project_id?: number }>): Map<number, number> {
+/**
+ * The done carrier tasks per project id; tasks without a usable project id are skipped, and so is a
+ * carrier someone reopened (it is not in the server's done total).
+ */
+export function countCarriersByProject(carriers: ReadonlyArray<{ project_id?: number; done?: boolean }>): Map<number, number> {
   const counts = new Map<number, number>()
   for (const carrier of carriers) {
+    if (carrier.done === false) continue
     const projectId = carrier.project_id
     if (typeof projectId !== 'number' || !Number.isInteger(projectId) || projectId <= 0) continue
     counts.set(projectId, (counts.get(projectId) ?? 0) + 1)

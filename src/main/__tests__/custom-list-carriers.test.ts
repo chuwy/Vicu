@@ -23,14 +23,15 @@ vi.mock('electron', () => ({
 vi.mock('../api-client', () => ({
   fetchTasks: async (params: Record<string, unknown>) => {
     state.calls.list.push(params)
-    let rows = [...state.tasks.values()].filter((task) => task.done)
+    // A search finds open and done tasks; a listing with the done filter only done ones.
+    let rows = [...state.tasks.values()].filter((task) => task.done || (typeof params.q === 'string' && params.filter === undefined))
     if (typeof params.q === 'string') rows = rows.filter((task) => task.description.includes(params.q as string))
-    return { success: true, data: rows }
+    return { success: true, data: rows.map((task) => ({ created_by: { id: 1 }, ...task })) }
   },
   fetchTaskById: async (id: number) => {
     state.calls.byId.push(id)
     const task = state.tasks.get(id)
-    return task ? { success: true, data: task } : { success: false, error: 'Not found', statusCode: 404 }
+    return task ? { success: true, data: { created_by: { id: 1 }, ...task } } : { success: false, error: 'Not found', statusCode: 404 }
   },
   createTask: async (projectId: number, body: { title: string; description: string; done?: boolean }) => {
     state.calls.create += 1
@@ -102,6 +103,7 @@ function writeConfig(extra: Record<string, unknown> = {}) {
   writeFileSync(join(state.dir, 'config.json'), JSON.stringify({
     vikunja_url: 'https://tasks.example.com',
     api_token: 'unused',
+    known_user: { server: 'https://tasks.example.com', id: 1 },
     inbox_project_id: 5,
     theme: 'dark',
     custom_lists: [],

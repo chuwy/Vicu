@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { useCompletedTasksStore } from '@/stores/completed-tasks-store'
 import { sortProjectTasks } from '@/lib/task-sort'
 import { mergeProjectUndoWindow } from '@/lib/undo-window'
+import { hasVicuMetadataMarker } from '@/lib/metadata-tasks'
 
 export function useProjectTasks(projectId: number | undefined) {
   const matches = useMatches()
@@ -33,7 +34,9 @@ export function useProjectTasks(projectId: number | undefined) {
       return result.data
     },
     enabled: !!viewQuery.data?.id,
-    select: (tasks) => sortProjectTasks(tasks),
+    // Hidden tasks stay out by their marker, not by `done = false` alone: one someone reopened in
+    // the web UI is still hidden (cross-app semantics 10.1).
+    select: (tasks) => sortProjectTasks(tasks.filter((task) => !hasVicuMetadataMarker(task.description))),
   })
 
   // Merge recently completed tasks back so they stay visible with strikethrough

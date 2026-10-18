@@ -17,8 +17,8 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('../api-client', () => ({
-  fetchTasks: async () => ({ success: true, data: state.remote ? [state.remote] : [] }),
-  fetchTaskById: async () => ({ success: true, data: state.remote }),
+  fetchTasks: async () => ({ success: true, data: state.remote ? [{ ...state.remote, created_by: { id: 1 } }] : [] }),
+  fetchTaskById: async () => ({ success: true, data: state.remote && { ...state.remote, created_by: { id: 1 } } }),
   updateTask: async (_id: number, patch: { description?: string }) => {
     state.writes += 1
     if (state.remote && patch.description !== undefined) state.remote.description = patch.description
@@ -71,6 +71,8 @@ describe('custom lists keep fields another app added (cross-app semantics v1, se
     state.writes = 0
     writeFileSync(join(state.dir, 'config.json'), JSON.stringify({
       vikunja_url: 'https://tasks.example.com',
+      // The signed-in user, who wrote the carrier on their phone (cross-app semantics 10.3).
+      known_user: { server: 'https://tasks.example.com', id: 1 },
       api_token: 'unused',
       inbox_project_id: 5,
       theme: 'dark',

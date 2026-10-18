@@ -7,6 +7,7 @@ import type { ProjectTreeNode } from './use-projects'
 import { useCompletedTasksStore } from '@/stores/completed-tasks-store'
 import { sortProjectTasks } from '@/lib/task-sort'
 import { mergeSectionUndoWindow } from '@/lib/undo-window'
+import { hasVicuMetadataMarker } from '@/lib/metadata-tasks'
 import type { SectionTaskCacheEntry } from '@/lib/section-task-cache'
 import type { Task, Project, ProjectView } from '@/lib/vikunja-types'
 import type { CompletedTaskEntry } from '@/stores/completed-tasks-store'
@@ -118,7 +119,8 @@ export function useProjectSections(projectId: number) {
           })
           if (!tasksResult.success) return { id: cp.id, tasks: [] as Task[], viewId: listView.id }
 
-          const tasks = sortProjectTasks(tasksResult.data as Task[])
+          // Hidden tasks stay out by their marker, also when reopened (cross-app semantics 10.1).
+          const tasks = sortProjectTasks((tasksResult.data as Task[]).filter((task) => !hasVicuMetadataMarker(task.description)))
           return { id: cp.id, tasks, viewId: listView.id }
         })
       )

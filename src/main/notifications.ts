@@ -3,6 +3,7 @@ import { join } from 'path'
 import { loadConfig, type AppConfig } from './config'
 import { MAX_PAGE_SIZE } from './api-v2'
 import { fetchTaskById, fetchTasks } from './api-client'
+import { isHiddenTask } from '../shared/hidden-tasks'
 import { loadRoutineCarriers } from './carrier-service'
 import { getAllStandaloneTasks } from './cache'
 import { getOfflineQueue } from './offline/service'
@@ -370,7 +371,7 @@ async function getNotificationTasks(config: AppConfig): Promise<NotificationTask
     })
     if (overdue.success && Array.isArray(overdue.data)) {
       result.overdue = (overdue.data as Array<Record<string, unknown>>)
-        .filter((t) => t.due_date && t.due_date !== NULL_DATE)
+        .filter((t) => t.due_date && t.due_date !== NULL_DATE && !isHiddenTask(t.description as string | undefined))
         .map((t) => ({
           id: t.id as number,
           title: t.title as string,
@@ -390,7 +391,7 @@ async function getNotificationTasks(config: AppConfig): Promise<NotificationTask
     })
     if (dueToday.success && Array.isArray(dueToday.data)) {
       result.dueToday = (dueToday.data as Array<Record<string, unknown>>)
-        .filter((t) => t.due_date && t.due_date !== NULL_DATE)
+        .filter((t) => t.due_date && t.due_date !== NULL_DATE && !isHiddenTask(t.description as string | undefined))
         .map((t) => ({
           id: t.id as number,
           title: t.title as string,
@@ -410,7 +411,7 @@ async function getNotificationTasks(config: AppConfig): Promise<NotificationTask
     })
     if (upcoming.success && Array.isArray(upcoming.data)) {
       result.upcoming = (upcoming.data as Array<Record<string, unknown>>)
-        .filter((t) => t.due_date && t.due_date !== NULL_DATE)
+        .filter((t) => t.due_date && t.due_date !== NULL_DATE && !isHiddenTask(t.description as string | undefined))
         .map((t) => ({
           id: t.id as number,
           title: t.title as string,

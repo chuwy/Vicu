@@ -28,15 +28,30 @@ import {
 
 export interface RoutineDraft extends Omit<RoutineDefinition, 'id' | 'activeFrom' | 'archived' | 'createdAt' | 'updatedAt' | 'updatedBy'> {}
 
-async function fetchCarriers(): Promise<RoutineCarrier<Task>[]> {
+interface RoutineLoad {
+  carriers: RoutineCarrier<Task>[]
+  /** Routines a newer version of Vicu wrote: shown as "update required", never written (contract 10.7). */
+  updateRequired: number
+  /** Routines whose record cannot be read: left out and reported, never written. */
+  unreadable: number
+}
+
+async function fetchCarriers(): Promise<RoutineLoad> {
   // The main process fetches the remembered carriers by id and finds new ones with a marker search;
-  // the done tasks, and the archive parts among them, are not downloaded for the day views.
+  // the done tasks, and the archive parts among them, are not downloaded for the day views. Only
+  // the signed-in user's carriers come back (contract 10.3).
   const result = await api.fetchRoutineCarriers()
   if (!result.success) throw new Error(result.error)
-  return result.data.flatMap((task) => {
+  let updateRequired = 0
+  let unreadable = 0
+  const carriers = result.data.flatMap((task) => {
     const parsed = parseRoutineEnvelope(task.description)
-    return parsed.payload ? [{ task, payload: parsed.payload }] : []
+    if (parsed.payload) return [{ task, payload: parsed.payload }]
+    if (parsed.updateRequired) updateRequired += 1
+    else if (parsed.isCarrier) unreadable += 1
+    return []
   }).sort((left, right) => left.payload.definition.createdAt.localeCompare(right.payload.definition.createdAt))
+  return { carriers, updateRequired, unreadable }
 }
 
 // The latest archive problem that did not stop a write (pruning skipped); shown by the Routines view.
@@ -69,6 +84,8 @@ function writeCarrier(
       return { task, payload }
     })
 }
+
+const NO_CARRIERS: RoutineCarrier<Task>[] = []
 
 /** `enabled: false` reads the cache without fetching (a view that only asks while routines are switched on). */
 export function useRoutines({ enabled = true }: { enabled?: boolean } = {}) {
@@ -179,10 +196,12 @@ export function useRoutines({ enabled = true }: { enabled?: boolean } = {}) {
     onSettled: settle,
   })
 
-  const carriers = query.data ?? []
+  const carriers = query.data?.carriers ?? NO_CARRIERS
   return {
     ...query,
     carriers,
+    updateRequired: query.data?.updateRequired ?? 0,
+    unreadable: query.data?.unreadable ?? 0,
     active: carriers.filter((carrier) => !carrier.payload.definition.archived),
     archived: carriers.filter((carrier) => carrier.payload.definition.archived),
     today: routineDay(carriers.filter((carrier) => !carrier.payload.definition.archived)),

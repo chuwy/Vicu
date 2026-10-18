@@ -11,6 +11,7 @@
  * If step 3 fails the carrier is still written, unpruned, so no history is ever lost.
  */
 import { taskPatch } from './merge-patches'
+import { isOwnTask } from '../../shared/hidden-tasks'
 import {
   NULL_DATE,
   ROUTINE_ARCHIVE_SEARCH,
@@ -39,6 +40,8 @@ import type { ApiResult, CreateTaskPayload, Task, TaskQueryParams, UpdateTaskPay
 
 /** The slice of the task API the routine store needs. */
 export interface RoutineStoreApi {
+  /** The signed-in user's id; archive parts are read, written and deleted only when they are this user's. */
+  ownUserId(): Promise<number | null>
   fetchTasks(params: TaskQueryParams): Promise<ApiResult<Task[]>>
   fetchTaskById(id: number): Promise<ApiResult<Task>>
   createTask(projectId: number, task: CreateTaskPayload): Promise<ApiResult<Task>>
@@ -95,10 +98,16 @@ export async function createRoutineCarrier(
 // --- Archive parts -----------------------------------------------------------------------
 
 async function fetchParts(api: RoutineStoreApi, fullScan: boolean): Promise<ArchivePartRef[]> {
+  const me = await api.ownUserId()
+  // Until the app knows who is signed in it cannot tell its own parts from someone else's in a
+  // shared project (cross-app semantics 10.3), and a write must not guess.
+  if (!me) throw new Error('Vicu could not confirm the signed-in account; try again when connected')
+  // The search has no done filter: a part someone reopened in the web UI is still a part (10.4).
   const tasks = unwrap(await api.fetchTasks(
-    fullScan ? { filter: 'done = true', per_page: PAGE_SIZE } : { filter: 'done = true', q: ROUTINE_ARCHIVE_SEARCH, per_page: PAGE_SIZE },
+    fullScan ? { filter: 'done = true', per_page: PAGE_SIZE } : { q: ROUTINE_ARCHIVE_SEARCH, per_page: PAGE_SIZE },
   ))
   return tasks.flatMap((task) => {
+    if (!isOwnTask(task, me)) return []
     const parsed = parseRoutineArchiveEnvelope(task.description)
     return parsed.part ? [{ taskId: task.id, part: parsed.part }] : []
   })
@@ -131,7 +140,12 @@ async function applyArchiveOp(
     const fresh = unwrap(await api.fetchTaskById(op.taskId))
     const current = parseRoutineArchiveEnvelope(fresh.description).part
     if (current && current.routineId === routineId) {
-      part = { ...op.part, occurrences: mergeOccurrenceMaps(current.occurrences, op.part.occurrences) }
+      // The server's copy keeps its unknown fields (contract 10.8).
+      part = { ...op.part, ...current, occurrences: mergeOccurrenceMaps(current.occurrences, op.part.occurrences) }
+    } else if (!current) {
+      throw new Error(parseRoutineArchiveEnvelope(fresh.description).updateRequired
+        ? 'A newer version of Vicu wrote this routine history; update Vicu to change it'
+        : 'Routine archive part cannot be read')
     }
     if (utf8Bytes(JSON.stringify(part)) > ROUTINE_BUDGET_BYTES) throw new Error('Routine archive part is full')
     task = unwrap(await api.updateTask(op.taskId, taskPatch(fresh, { description: encodeRoutineArchiveEnvelope(part) })))
@@ -165,6 +179,16 @@ async function writeArchive(
 
 // --- Carrier writes ----------------------------------------------------------------------
 
+/** The carrier changed into something this app must not write over; nothing was sent. */
+class UnreadableCarrierError extends Error {}
+
+/** Why a carrier cannot be written: "update required" for a newer version, else damaged. */
+export function unreadableCarrierMessage(parsed: { updateRequired?: boolean; error?: string }): string {
+  return parsed.updateRequired
+    ? 'A newer version of Vicu changed this routine. Update Vicu to change it here.'
+    : `This routine's record cannot be read${parsed.error ? ` (${parsed.error})` : ''}, so it was not changed.`
+}
+
 export async function writeRoutineCarrier(
   api: RoutineStoreApi,
   carrier: RoutineCarrier<Task>,
@@ -180,7 +204,10 @@ export async function writeRoutineCarrier(
   }
 
   let { fresh, parsed } = await readFresh()
-  const merged = parsed.payload ? mergeRoutinePayload(localPayload, parsed.payload) : localPayload
+  // Never write over a carrier this app cannot read: a newer version wrote it, or it was damaged
+  // since it was loaded (cross-app semantics 10.7). The local change stays unsent.
+  if (!parsed.payload) throw new UnreadableCarrierError(unreadableCarrierMessage(parsed))
+  const merged = mergeRoutinePayload(localPayload, parsed.payload)
 
   // A change to an occurrence that is already archived belongs to the archive, not the carrier.
   const late = (options.changed ?? []).filter((record) => record.scheduledDate < merged.prunedBefore)
@@ -197,8 +224,10 @@ export async function writeRoutineCarrier(
       await writeArchive(api, fresh.project_id, routineId, toArchive, merged.prunedBefore !== '')
       // The archive write took a while; pick up whatever another device wrote meanwhile.
       ;({ fresh, parsed } = await readFresh())
-      if (parsed.payload) finalPayload = mergeRoutinePayload(pruned, parsed.payload)
+      if (!parsed.payload) throw new UnreadableCarrierError(unreadableCarrierMessage(parsed))
+      finalPayload = mergeRoutinePayload(pruned, parsed.payload)
     } catch (error) {
+      if (error instanceof UnreadableCarrierError) throw error
       archiveError = messageOf(error)
       console.warn('[Routines] Could not write the routine archive; keeping history in the carrier:', archiveError)
       options.onArchiveError?.(archiveError)

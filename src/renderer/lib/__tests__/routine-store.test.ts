@@ -76,6 +76,12 @@ class FakeServer implements RoutineStoreApi {
   failUpdateOfId: number | null = null
   failDeleteOfId: number | null = null
   dropKeysOnStore = false
+  /** The signed-in user; tasks are theirs unless a test says otherwise. */
+  me: number | null = 7
+
+  async ownUserId(): Promise<number | null> {
+    return this.me
+  }
 
   add(task: Partial<Task> & { id?: number }): Task {
     const id = task.id ?? this.nextId++
@@ -89,6 +95,7 @@ class FakeServer implements RoutineStoreApi {
       repeat_after: 0,
       repeat_mode: 0,
       reminders: [],
+      created_by: { id: 7, username: 'me' },
       ...task,
     } as Task
     this.tasks.set(id, full)
@@ -418,5 +425,78 @@ describe('deleting a routine', () => {
     server.failDeleteOfId = 50
     await expect(deleteRoutine(server, carrierFor(server))).rejects.toThrow('delete failed')
     expect(server.tasks.has(1)).toBe(true)
+  })
+})
+
+describe('hidden-task rules for routines (cross-app semantics 10)', () => {
+  it("reads only the signed-in user's archive parts, and none while the user is not known", async () => {
+    const server = new FakeServer()
+    server.addCarrier(payloadOf(['2026-10-01'], { prunedBefore: '2025-09-01' }))
+    server.addPart({ version: 1, routineId: 'r1', part: 1, occurrences: { 'r1:2025-01-15:s1': record('2025-01-15') } }, 50)
+    const theirs = server.addPart({ version: 1, routineId: 'r1', part: 2, occurrences: { 'r1:2025-02-15:s1': record('2025-02-15') } }, 51)
+    theirs.created_by = { id: 8, username: 'someone-else' }
+    expect((await loadArchiveParts(server, ['r1'])).map((ref) => ref.taskId)).toEqual([50])
+
+    server.me = null
+    await expect(loadArchiveParts(server, ['r1'])).rejects.toThrow()
+  })
+
+  it('finds a part someone reopened: the search has no done filter', async () => {
+    const server = new FakeServer()
+    const part = server.addPart({ version: 1, routineId: 'r1', part: 1, occurrences: {} }, 50)
+    part.done = false
+    expect((await loadArchiveParts(server)).map((ref) => ref.taskId)).toEqual([50])
+  })
+
+  it('never writes over a carrier a newer version wrote, and says an update is required', async () => {
+    const server = new FakeServer()
+    const base = payloadOf(['2026-10-01'])
+    server.addCarrier(base)
+    const loaded = carrierFor(server)
+    // Another device, on a newer version, rewrites the carrier after this one loaded it.
+    server.tasks.get(1)!.description = '<!-- vicu-routine:v2:e30 -->'
+    await expect(writeRoutineCarrier(server, loaded, base, { today: TODAY })).rejects.toThrow(/newer version/)
+    expect(server.log.some((entry) => entry.startsWith('updateTask'))).toBe(false)
+    expect(server.tasks.get(1)!.description).toBe('<!-- vicu-routine:v2:e30 -->')
+  })
+
+  it('never writes over a carrier that became unreadable', async () => {
+    const server = new FakeServer()
+    const base = payloadOf(['2026-10-01'])
+    server.addCarrier(base)
+    const loaded = carrierFor(server)
+    server.tasks.get(1)!.description = '<!-- vicu-routine:v1:not-json -->'
+    await expect(writeRoutineCarrier(server, loaded, base, { today: TODAY })).rejects.toThrow(/cannot be read/)
+    expect(server.log.some((entry) => entry.startsWith('updateTask'))).toBe(false)
+  })
+
+  it('writes a reopened carrier done again', async () => {
+    const server = new FakeServer()
+    const base = payloadOf(['2026-10-01'])
+    server.addCarrier(base)
+    server.tasks.get(1)!.done = false
+    await writeRoutineCarrier(server, carrierFor(server), base, { today: TODAY })
+    expect(server.tasks.get(1)!.done).toBe(true)
+  })
+
+  it('keeps fields it does not know at the top level, in the definition and in occurrences', async () => {
+    const server = new FakeServer()
+    const remote = {
+      ...payloadOf(['2026-10-01']),
+      fromTheFuture: { keep: true },
+    } as RoutinePayload
+    // Written later by a newer app: the winning definition and occurrence carry their own fields.
+    remote.definition = { ...remote.definition, updatedAt: '2026-10-05T08:00:00.000Z', colourScheme: 'warm' } as RoutinePayload['definition']
+    const key = 'r1:2026-10-01:s1'
+    remote.occurrences = { [key]: { ...remote.occurrences[key], modifiedAt: '2026-10-05T08:00:00.000Z', mood: 'good' } as RoutineOccurrenceRecord }
+    server.addCarrier(remote)
+    const local = payloadOf(['2026-10-01'])
+    const change = record('2026-10-06', { status: 'SKIPPED', modifiedAt: '2026-10-06T08:00:00.000Z' })
+    await writeRoutineCarrier(server, carrierFor(server), { ...local, occurrences: { ...local.occurrences, [change.key]: change } }, { changed: [change], today: TODAY })
+    const stored = server.carrier() as RoutinePayload & { fromTheFuture?: unknown }
+    expect(stored.fromTheFuture).toEqual({ keep: true })
+    expect((stored.definition as unknown as { colourScheme?: string }).colourScheme).toBe('warm')
+    expect((stored.occurrences[key] as unknown as { mood?: string }).mood).toBe('good')
+    expect(stored.occurrences[change.key].status).toBe('SKIPPED')
   })
 })

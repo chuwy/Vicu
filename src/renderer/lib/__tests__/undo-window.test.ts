@@ -238,3 +238,25 @@ describe('asksForOpenTasksOnly', () => {
     expect(asksForOpenTasksOnly(undefined)).toBe(false)
   })
 })
+
+describe('hidden tasks in project lists (cross-app semantics 10.1)', () => {
+  const hidden = (id: number, project_id: number): Task =>
+    ({ id, done: false, project_id, description: '<!-- vicu-routine:v1:e30 -->' }) as Task
+
+  it('leaves a reopened carrier out of a project list, which only asks for open tasks', () => {
+    const tasks = [task(1, false, 5), hidden(2, 5), task(3, false, 5)]
+    expect(mergeProjectUndoWindow(tasks, new Map(), '/project/5', 5).map((t) => t.id)).toEqual([1, 3])
+  })
+
+  it('never merges a hidden task back as an undo extra', () => {
+    const completed = store([{ task: { ...hidden(2, 5), done: true } as Task, path: '/project/5' }])
+    expect(mergeProjectUndoWindow([task(1, false, 5)], completed, '/project/5', 5).map((t) => t.id)).toEqual([1])
+  })
+
+  it('leaves hidden tasks out of the sections too', () => {
+    const sections = [{ project: { id: 7 }, tasks: [task(1, false, 7), hidden(2, 7)] }]
+    const completed = store([{ task: { ...hidden(3, 7), done: true } as Task, path: '/project/5' }])
+    const merged = mergeSectionUndoWindow(sections, completed, '/project/5')
+    expect(merged[0].tasks.map((t) => t.id)).toEqual([1])
+  })
+})

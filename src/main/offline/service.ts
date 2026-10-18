@@ -5,6 +5,7 @@ import { loadConfig } from '../config'
 import { getMainWindow, getQuickEntryWindow, getQuickViewWindow } from '../quick-entry-state'
 import { OFFLINE_ATTACHMENTS_DIRNAME } from './attachments'
 import { QUEUE_FILENAME, ensureLegacyMigration } from './legacy-migration'
+import { knownUserIdFor } from '../known-user'
 import { normalizeServerUrl, type OfflineOwner } from './owner'
 import { OfflineQueue } from './queue'
 
@@ -31,21 +32,9 @@ export function sendToAppWindows(channel: string, ...args: unknown[]): void {
 }
 
 let queue: OfflineQueue | null = null
-let knownUser: { server: string; id: number } | null = null
 
-/** The user id of the signed-in account, once something asked the server. Used to tell two users of one server apart. */
-export function rememberKnownUser(serverUrl: string, userId: number): void {
-  knownUser = { server: normalizeServerUrl(serverUrl), id: userId }
-}
-
-/** Signing out or in changes who the account is; the id is looked up again for the next one. */
-export function forgetKnownUser(): void {
-  knownUser = null
-}
-
-export function knownUserIdFor(serverUrl: string): number | undefined {
-  return knownUser && knownUser.server === normalizeServerUrl(serverUrl) ? knownUser.id : undefined
-}
+// The signed-in user's id lives in known-user.ts (kept in config.json); re-exported for the callers here.
+export { forgetKnownUser, knownUserIdFor, rememberKnownUser } from '../known-user'
 
 /** The account the app is signed in to, or null when none is configured (standalone mode, logged out). */
 export function currentOwner(): OfflineOwner | null {

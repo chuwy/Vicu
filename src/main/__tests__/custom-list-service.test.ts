@@ -36,14 +36,15 @@ vi.mock('electron', () => ({
 
 vi.mock('../api-client', () => ({
   fetchTasks: async (params: Record<string, unknown>) => {
-    let rows = [...state.tasks.values()].filter((task) => task.done)
+    // A search finds open and done tasks; a listing with the done filter only done ones.
+    let rows = [...state.tasks.values()].filter((task) => task.done || (typeof params.q === 'string' && params.filter === undefined))
     if (typeof params.q === 'string') rows = rows.filter((task) => task.description.includes(params.q as string))
-    return { success: true, data: rows.map((task) => ({ ...task })) }
+    return { success: true, data: rows.map((task) => ({ created_by: { id: 1 }, ...task })) }
   },
   fetchTaskById: async (id: number) => {
     state.onFetchById?.(id)
     const task = state.tasks.get(id)
-    return task ? { success: true, data: { ...task } } : { success: false, error: 'Not found', statusCode: 404 }
+    return task ? { success: true, data: { created_by: { id: 1 }, ...task } } : { success: false, error: 'Not found', statusCode: 404 }
   },
   createTask: async (projectId: number, body: { title: string; description: string; done?: boolean }) => {
     const task = { id: state.nextId++, title: body.title, description: body.description, done: body.done === true, project_id: projectId }
@@ -105,6 +106,7 @@ function writeConfig(extra: Record<string, unknown> = {}) {
   writeFileSync(join(state.dir, 'config.json'), JSON.stringify({
     vikunja_url: 'https://tasks.example.com',
     api_token: 'unused',
+    known_user: { server: 'https://tasks.example.com', id: 1 },
     inbox_project_id: 5,
     theme: 'dark',
     ...extra,
@@ -402,6 +404,57 @@ describe('custom-list service', () => {
       await service.syncCustomLists()
 
       expect(state.tasks.get(7)!.description).toBe(afterFirst)
+    })
+  })
+
+  describe('hidden-task rules (cross-app semantics 10)', () => {
+    const theirs = (id: number) => {
+      ;(state.tasks.get(id) as unknown as { created_by: { id: number } }).created_by = { id: 2 }
+    }
+
+    it("never merges, writes or deletes another user's carrier in a shared project", async () => {
+      writeConfig({ custom_lists: [] })
+      putCarrier(7, documentFromLists([list('x', 'Their list')], 'their-phone', Date.now() - DAY))
+      theirs(7)
+      putCarrier(9, documentFromLists([list('y', 'My list')], 'my-phone', Date.now() - DAY))
+      const before = state.tasks.get(7)!.description
+      const service = await loadService()
+
+      expect((await service.syncCustomLists()).state).toBe('idle')
+      expect(service.getCustomLists().map((entry) => entry.id)).toEqual(['y'])
+      expect(state.tasks.get(7)!.description).toBe(before)
+      expect(state.deleted).toEqual([])
+    })
+
+    it('does not take a task titled like the carrier for one', async () => {
+      writeConfig({ custom_lists: [] })
+      state.tasks.set(3, { id: 3, title: CUSTOM_LIST_CARRIER_TITLE, description: '<p>my notes</p>', done: true, project_id: 5 })
+      const service = await loadService()
+
+      expect((await service.syncCustomLists()).state).toBe('idle')
+      expect(state.tasks.get(3)!.description).toBe('<p>my notes</p>')
+    })
+
+    it('waits, without creating a carrier, while the signed-in user is not known', async () => {
+      writeConfig({ custom_lists: [list('a')], known_user: undefined })
+      const service = await loadService()
+
+      const status = await service.syncCustomLists()
+      expect(status.state).toBe('pending')
+      expect([...state.tasks.keys()]).toEqual([])
+    })
+
+    it('keeps using a carrier someone reopened and marks it done with the next write', async () => {
+      writeConfig({ custom_lists: [] })
+      putCarrier(7, documentFromLists([list('x')], 'android', Date.now() - DAY))
+      state.tasks.get(7)!.done = false
+      const service = await loadService()
+      await service.syncCustomLists()
+      service.upsertCustomList(list('n', 'New here'))
+      await vi.waitFor(() => expect(idsOf(documentOf(7)).sort()).toEqual(['n', 'x']))
+
+      expect(state.tasks.get(7)!.done).toBe(true)
+      expect([...state.tasks.keys()]).toEqual([7])
     })
   })
 })

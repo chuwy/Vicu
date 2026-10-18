@@ -3,19 +3,24 @@ import type { ApiResult } from './api-result'
 import { fetchTaskById, fetchTasks } from './api-client'
 import {
   CUSTOM_LIST_CARRIER_SPEC,
+  ROUTINE_ARCHIVE_SPEC,
   ROUTINE_CARRIER_SPEC,
   carrierIdsPath,
   createCarrierLoader,
   createFileCarrierIdStore,
   type CarrierLoader,
+  type CarrierSpec,
   type CarrierTask,
 } from './carrier-discovery'
 import { loadConfig } from './config'
+import { ensureKnownUserId } from './known-user'
 import { normalizeServerUrl } from './offline/owner'
 
 /**
  * The process-wide carrier loader: routine carriers for the reminders and the Routines views,
- * custom-list carriers for the sync. See `carrier-discovery.ts` for how they are found.
+ * custom-list carriers for the sync, archive parts for the sidebar counts. See
+ * `carrier-discovery.ts` for how they are found. Only the signed-in user's carriers are returned
+ * (docs/cross-app-semantics-v1.md section 10.3); until the app knows who that is, nothing is.
  */
 let loader: CarrierLoader | null = null
 
@@ -43,15 +48,38 @@ const NOT_CONFIGURED: ApiResult<CarrierTask[]> = {
   error: 'Vikunja is not configured. Open Settings to connect.',
 }
 
-export function loadRoutineCarriers(): Promise<ApiResult<CarrierTask[]>> {
+/**
+ * The answer while the signed-in user's id is not known yet (offline before the first lookup):
+ * carriers are not discovered then, so nobody else's are taken for the user's own, and a caller
+ * must not read it as "there are none" (a sync would create a second carrier).
+ */
+export const OWNER_UNKNOWN_ERROR = 'Waiting to confirm the signed-in account'
+
+export function isOwnerUnknown(result: ApiResult<unknown>): boolean {
+  return !result.success && result.error === OWNER_UNKNOWN_ERROR
+}
+
+async function loadKind(spec: CarrierSpec): Promise<ApiResult<CarrierTask[]>> {
   const server = currentServer()
-  return server ? getLoader().load(ROUTINE_CARRIER_SPEC, server) : Promise.resolve(NOT_CONFIGURED)
+  if (!server) return NOT_CONFIGURED
+  const me = await ensureKnownUserId()
+  if (!me) return { success: false, error: OWNER_UNKNOWN_ERROR }
+  return getLoader().load(spec, server, me)
+}
+
+export function loadRoutineCarriers(): Promise<ApiResult<CarrierTask[]>> {
+  return loadKind(ROUTINE_CARRIER_SPEC)
+}
+
+export function loadRoutineArchiveParts(): Promise<ApiResult<CarrierTask[]>> {
+  return loadKind(ROUTINE_ARCHIVE_SPEC)
 }
 
 export function loadCustomListCarriers(): Promise<ApiResult<CarrierTask[]>> {
-  const server = currentServer()
-  return server ? getLoader().load(CUSTOM_LIST_CARRIER_SPEC, server) : Promise.resolve(NOT_CONFIGURED)
+  return loadKind(CUSTOM_LIST_CARRIER_SPEC)
 }
+
+const REMEMBERED_SPECS: readonly CarrierSpec[] = [ROUTINE_CARRIER_SPEC, ROUTINE_ARCHIVE_SPEC, CUSTOM_LIST_CARRIER_SPEC]
 
 /**
  * A task this app just created through the API: if it is a carrier, fetch it directly from now on.
@@ -62,15 +90,10 @@ export function rememberCreatedTask(task: unknown): boolean {
   const created = task as CarrierTask | null
   const server = currentServer()
   if (!server || !created || typeof created.id !== 'number') return false
-  if (ROUTINE_CARRIER_SPEC.isCarrier(created)) {
-    getLoader().remember(server, 'routine', created.id)
-    return true
-  }
-  if (CUSTOM_LIST_CARRIER_SPEC.isCarrier(created)) {
-    getLoader().remember(server, 'custom-lists', created.id)
-    return true
-  }
-  return false
+  const spec = REMEMBERED_SPECS.find((candidate) => candidate.isCarrier(created))
+  if (!spec) return false
+  getLoader().remember(server, spec.kind, created.id)
+  return true
 }
 
 /** A task this app deleted: never look for it again (a 404 would trigger a full scan). */

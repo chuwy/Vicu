@@ -388,6 +388,8 @@ function RoutinesContent() {
             </section>
           )}
 
+          {routines.updateRequired > 0 && <div className="mx-6 mt-5 rounded-card border border-status-today/30 bg-status-today/10 px-4 py-3 text-xs text-status-today">Update required: {routines.updateRequired === 1 ? 'a routine was' : `${routines.updateRequired} routines were`} saved by a newer version of Vicu. Update Vicu to see and change {routines.updateRequired === 1 ? 'it' : 'them'}.</div>}
+          {routines.unreadable > 0 && <div className="mx-6 mt-5 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-xs text-danger">{routines.unreadable === 1 ? 'A routine record cannot be read and is' : `${routines.unreadable} routine records cannot be read and are`} left out; nothing in {routines.unreadable === 1 ? 'it' : 'them'} was changed.</div>}
           {routines.archiveWarning && <div className="mx-6 mt-5 rounded-card border border-status-today/30 bg-status-today/10 px-4 py-3 text-xs text-status-today">Older history could not be archived yet and stays in the routine for now: {routines.archiveWarning}</div>}
           {exportError && <div className="mx-6 mt-5 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-xs text-danger">{exportError}</div>}
           {routines.error && <div className="mx-6 mt-5 rounded-card border border-danger/30 bg-danger/10 px-4 py-3 text-xs text-danger">{routines.error instanceof Error ? routines.error.message : 'Could not update routines'}</div>}

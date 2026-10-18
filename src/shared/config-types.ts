@@ -199,6 +199,11 @@ export interface AppConfig {
     carrier_task_id?: number
     last_synced_at?: string
   }
+  /**
+   * The signed-in Vikunja user, as `GET user` answered it (owned by main, `src/main/known-user.ts`).
+   * Hidden tasks are read and written only when they belong to this user (cross-app semantics 10.3).
+   */
+  known_user?: { server: string; id: number }
   // Quick Entry / Quick View
   quick_entry_enabled?: boolean
   quick_view_enabled?: boolean

@@ -88,8 +88,9 @@ export function mergeProjectUndoWindow(
   pathname: string,
   projectId: number | undefined
 ): Task[] {
-  const visible = evictForeignCompletions(tasks, completed, pathname).filter(
-    (t) => projectId == null || t.project_id === projectId
+  const evicted = evictForeignCompletions(tasks, completed, pathname)
+  const visible = evicted.filter(
+    (t) => (projectId == null || t.project_id === projectId) && !hasVicuMetadataMarker(t.description)
   )
   const serverIds = new Set(visible.map((t) => t.id))
   const extras = Array.from(completed.values())
@@ -98,11 +99,12 @@ export function mergeProjectUndoWindow(
         entry.path === pathname &&
         !entry.suppressTopLevelUndo &&
         (projectId == null || entry.task.project_id === projectId) &&
-        !serverIds.has(entry.task.id)
+        !serverIds.has(entry.task.id) &&
+        !hasVicuMetadataMarker(entry.task.description)
     )
     .map((entry) => entry.task)
 
-  if (visible === tasks && extras.length === 0) return tasks
+  if (evicted === tasks && visible.length === tasks.length && extras.length === 0) return tasks
   return sortProjectTasks([...visible, ...extras])
 }
 
@@ -123,11 +125,15 @@ export function mergeSectionUndoWindow<
   S extends { tasks: Task[]; project: { id: number } },
 >(sections: S[], completed: Map<number, CompletedTaskEntry>, pathname: string): S[] {
   const samePath = Array.from(completed.values()).filter(
-    (e) => e.path === pathname && !e.suppressTopLevelUndo,
+    (e) => e.path === pathname && !e.suppressTopLevelUndo && !hasVicuMetadataMarker(e.task.description),
   )
   let changed = false
   const next = sections.map((section) => {
-    const visible = evictForeignCompletions(section.tasks, completed, pathname)
+    const evicted = evictForeignCompletions(section.tasks, completed, pathname)
+    // Hidden tasks never show, done or reopened (cross-app semantics 10.1).
+    const visible = evicted.some((t) => hasVicuMetadataMarker(t.description))
+      ? evicted.filter((t) => !hasVicuMetadataMarker(t.description))
+      : evicted
     const serverIds = new Set(visible.map((t) => t.id))
     const extras = samePath
       .filter((e) => e.task.project_id === section.project.id && !serverIds.has(e.task.id))

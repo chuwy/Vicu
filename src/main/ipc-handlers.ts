@@ -103,6 +103,7 @@ import { getOfflineQueue, knownUserIdFor, rememberKnownUser } from './offline/se
 import { registerOfflineQueueIpc } from './offline/ipc'
 import { registerCollaborationIpc } from './collab-ipc'
 import { accountChanged, refreshKnownUser, replayPendingActions } from './sync'
+import { ensureKnownUserId } from './known-user'
 import {
   createFromQuickEntry,
   queueQuickEntryFollowUps,
@@ -222,6 +223,10 @@ export function registerIpcHandlers(): void {
   handleTrusted('fetch-routine-carriers', () => {
     return loadRoutineCarriers()
   })
+
+  // Hidden tasks are read and written only when the signed-in user created them (cross-app
+  // semantics 10.3); the renderer's routine archive asks who that is.
+  handleTrusted('account:own-user-id', async () => (await ensureKnownUserId()) ?? null)
 
   handleTrusted('create-task', async (_event, projectId: number, task: Record<string, unknown>) => {
     const result = await sendSerially(() => createTask(projectId, task))

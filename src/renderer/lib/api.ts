@@ -64,6 +64,9 @@ export const api = {
   fetchRoutineCarriers: () =>
     window.api.fetchRoutineCarriers() as Promise<ApiResult<Task[]>>,
 
+  /** Who is signed in: hidden tasks (routine archive parts) are only ever this user's (contract 10.3). */
+  ownUserId: () => window.api.getOwnUserId(),
+
   createTask: (projectId: number, task: CreateTaskPayload) =>
     window.api.createTask(projectId, task) as Promise<ApiResult<Task>>,
 

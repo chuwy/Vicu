@@ -62,6 +62,8 @@ export interface ElectronAPI {
   fetchTasks(params: TaskQueryParams): Promise<ApiResult<Task[]>>
   /** The routine carrier tasks (hidden done tasks), found without listing every done task. */
   fetchRoutineCarriers(): Promise<ApiResult<Task[]>>
+  /** The signed-in user's id, asked from the server once when not known yet; null when it cannot be told. */
+  getOwnUserId(): Promise<number | null>
   createTask(projectId: number, task: CreateTaskPayload): Promise<ApiResult<Task>>
   /** With `options.queue` the answer may be `QueuedWriteReply`: the change was queued instead of sent. */
   updateTask(id: number, task: UpdateTaskPayload, options?: TaskWriteOptions): Promise<ApiResult<Task> | QueuedWriteReply>

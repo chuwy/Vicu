@@ -7,6 +7,7 @@ import type {
   CustomListWire,
 } from '../shared/config-types'
 import { changedWithinDays } from '../shared/custom-list-filter'
+import { isHiddenTask, kindMarkerPattern } from '../shared/hidden-tasks'
 export type {
   CustomList,
   CustomListFilter,
@@ -24,8 +25,11 @@ export const CUSTOM_LIST_CARRIER_SEARCH = 'vicu-custom-lists'
 export const CUSTOM_LIST_SYNC_VERSION = 1
 export const CUSTOM_LIST_SYNC_MAX_BYTES = 512 * 1024
 
-const MARKER_RE = /<!--\s*vicu-custom-lists:v(\d+):([A-Za-z0-9_-]+={0,2})\s*-->/
-const ANY_MARKER_RE = /<!--\s*vicu-custom-lists:[\s\S]*?-->/
+// Whitespace inside the comment is only space, tab, CR and LF, as in the hiding rule (shared/hidden-tasks.ts).
+const MARKER_RE = /<!--[ \t\r\n]*vicu-custom-lists:v(\d+):([A-Za-z0-9_-]+={0,2})[ \t\r\n]*-->/
+const ANY_MARKER_RE = /<!--[ \t\r\n]*vicu-custom-lists:[\s\S]*?-->/
+/** The start of the marker: enough to call a task a custom-list carrier (readable or not). */
+const MARKER_START_RE = kindMarkerPattern('custom-lists')
 
 export interface ParsedCustomListEnvelope {
   isCarrier: boolean
@@ -40,13 +44,12 @@ function compareStrings(left: string, right: string): number {
 }
 
 export function hasCustomListMarker(description?: string | null): boolean {
-  return !!description && ANY_MARKER_RE.test(description)
+  return !!description && MARKER_START_RE.test(description)
 }
 
+/** Every hidden task, of any kind (cross-app semantics 10.1); the one rule in shared/hidden-tasks.ts. */
 export function hasVicuMetadataMarker(description?: string | null): boolean {
-  return !!description && (
-    /<!--\s*vicu-routine:[\s\S]*?-->/.test(description) || hasCustomListMarker(description)
-  )
+  return isHiddenTask(description)
 }
 
 export function compareRevision(left: CustomListRevision, right: CustomListRevision): number {
@@ -297,7 +300,12 @@ export function validateCustomListDocument(value: unknown): asserts value is Cus
 export function parseCustomListEnvelope(description?: string | null): ParsedCustomListEnvelope {
   if (!description) return { isCarrier: false, body: '' }
   const any = description.match(ANY_MARKER_RE)
-  if (!any || any.index === undefined) return { isCarrier: false, body: description }
+  if (!any || any.index === undefined) {
+    // An unclosed marker is still a carrier, just not a readable one.
+    return MARKER_START_RE.test(description)
+      ? { isCarrier: true, body: description, error: 'Malformed custom-list metadata' }
+      : { isCarrier: false, body: description }
+  }
   const body = `${description.slice(0, any.index)}${description.slice(any.index + any[0].length)}`.trimEnd()
   const marker = any[0].match(MARKER_RE)
   if (!marker) return { isCarrier: true, body, error: 'Malformed custom-list metadata' }
@@ -309,6 +317,12 @@ export function parseCustomListEnvelope(description?: string | null): ParsedCust
     const bytes = Buffer.from(marker[2].replace(/-/g, '+').replace(/_/g, '/'), 'base64')
     if (bytes.byteLength > CUSTOM_LIST_SYNC_MAX_BYTES) throw new Error('Custom-list metadata is too large')
     const document = JSON.parse(bytes.toString('utf8')) as unknown
+    // A v1 marker around a document of a newer version: written by a newer app, so "update
+    // required" rather than malformed (cross-app semantics 10.7).
+    const payloadVersion = (document as { version?: unknown } | null)?.version
+    if (typeof payloadVersion === 'number' && payloadVersion > CUSTOM_LIST_SYNC_VERSION) {
+      return { isCarrier: true, body, version: payloadVersion, error: `Custom-list metadata version ${payloadVersion} is not supported` }
+    }
     validateCustomListDocument(document)
     return { isCarrier: true, body, version, document: normalizeDocument(document) }
   } catch (error) {

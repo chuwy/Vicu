@@ -1,6 +1,10 @@
-const METADATA_MARKER_RE = /<!--\s*vicu-(?:routine|custom-lists):[\s\S]*?-->/
+import { isHiddenTask } from '../../shared/hidden-tasks'
 
-/** True for implementation-detail tasks that must never render as user tasks. */
+/**
+ * True for hidden tasks (custom-list, routine, archive, preferences carriers and any later kind):
+ * they never render as user tasks (cross-app semantics section 10.1). One rule, in
+ * `src/shared/hidden-tasks.ts`, for the renderer and the main process.
+ */
 export function hasVicuMetadataMarker(description?: string | null): boolean {
-  return !!description && METADATA_MARKER_RE.test(description)
+  return isHiddenTask(description)
 }
