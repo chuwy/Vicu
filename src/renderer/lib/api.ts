@@ -25,6 +25,7 @@ import type {
   TaskCommentPage,
 } from './vikunja-types'
 import type { TaskPatch } from './merge-patches'
+import type { SyncedPrefsSnapshot } from '../../shared/synced-prefs'
 import { withCollabSignals } from './collab-signals'
 import { announceAccountChanged } from './account-events'
 import type {
@@ -216,6 +217,14 @@ export const api = {
   upsertCustomList: (list: import('./vikunja-types').CustomList) => window.api.upsertCustomList(list),
   deleteCustomList: (id: string) => window.api.deleteCustomList(id),
   reorderCustomLists: (ids: string[]) => window.api.reorderCustomLists(ids),
+  /** The synced preferences (cross-app semantics 11): every entry's value and the Inbox in use. */
+  getSyncedPrefs: () => window.api.getSyncedPrefs(),
+  /** A choice the user made; `null` resets it to the default on every device. */
+  setSyncedPreference: (key: string, value: unknown) => window.api.setSyncedPreference(key, value),
+  syncSyncedPrefs: () => window.api.syncSyncedPrefs(),
+  onSyncedPrefsChanged: (cb: (snapshot: SyncedPrefsSnapshot) => void) => window.api.onSyncedPrefsChanged(cb),
+  /** Setup: the account's synced Inbox and Vikunja's default project, before the Inbox is asked for. */
+  readSetupPreferences: (url: string, token?: string) => window.api.readSetupPreferences(url, token),
   syncCustomLists: () => window.api.syncCustomLists(),
   getCustomListSyncStatus: () => window.api.getCustomListSyncStatus(),
   onCustomListsChanged: (cb: (lists: import('./vikunja-types').CustomList[]) => void) =>

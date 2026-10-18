@@ -633,6 +633,20 @@ export function testConnection(
   })
 }
 
+/**
+ * A task search with an explicit server and token (setup reads the synced preferences before the
+ * connection is saved). One page of the server maximum; the marker searches it serves are small.
+ */
+export function searchTasksAt(url: string, token: string, q: string): Promise<ApiResult<unknown[]>> {
+  const cleanUrl = url.replace(/\/+$/, '')
+  const qs = new URLSearchParams({ q, per_page: String(MAX_PAGE_SIZE) })
+  return request<PaginatedResponse<unknown>>('GET', `${cleanUrl}${API_BASE_PATH}/tasks?${qs.toString()}`, token)
+    .then((result): ApiResult<unknown[]> => {
+      if (!result.success) return result
+      return { success: true, data: result.data.items ?? [] }
+    })
+}
+
 // --- Attachments ---
 
 function requestMultipart<T>(

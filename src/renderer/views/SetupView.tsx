@@ -143,6 +143,23 @@ export function SetupView({ onComplete }: SetupViewProps) {
     if (inbox) setInboxProjectId(inbox.id)
   }
 
+  /**
+   * The Inbox syncs (cross-app semantics 11.4): before asking, read the account's synced Inbox and
+   * preselect it; without one, Vikunja's default project; else a project called Inbox. An API-token
+   * setup passes its token, a sign-in uses the session it just stored. Offline it works as before.
+   */
+  const preselectInbox = async (projectList: Project[], apiToken?: string) => {
+    autoSelectInbox(projectList)
+    try {
+      const prefs = await api.readSetupPreferences(url.replace(/\/+$/, ''), apiToken)
+      const exists = (id: number | null): id is number => !!id && projectList.some((project) => project.id === id)
+      if (exists(prefs.inboxProjectId)) setInboxProjectId(prefs.inboxProjectId)
+      else if (exists(prefs.defaultProjectId)) setInboxProjectId(prefs.defaultProjectId)
+    } catch {
+      // Nothing synced could be read: the user chooses as before.
+    }
+  }
+
   const handleUrlContinue = async () => {
     const effectiveUrl = url.trim() || DEFAULT_URL
     if (!url.trim()) setUrl(effectiveUrl)
@@ -185,7 +202,7 @@ export function SetupView({ onComplete }: SetupViewProps) {
         const projectsResult = await api.fetchProjects()
         if (projectsResult.success) {
           setProjects(projectsResult.data)
-          autoSelectInbox(projectsResult.data)
+          await preselectInbox(projectsResult.data)
           setStep('project')
         } else {
           setOidcError(projectsResult.error)
@@ -228,7 +245,7 @@ export function SetupView({ onComplete }: SetupViewProps) {
         const projectsResult = await api.fetchProjects()
         if (projectsResult.success) {
           setProjects(projectsResult.data)
-          autoSelectInbox(projectsResult.data)
+          await preselectInbox(projectsResult.data)
           setStep('project')
         } else {
           setPasswordError(projectsResult.error)
@@ -254,7 +271,7 @@ export function SetupView({ onComplete }: SetupViewProps) {
     if (result.success) {
       setTestStatus('success')
       setProjects(result.data)
-      autoSelectInbox(result.data)
+      await preselectInbox(result.data, token)
       setAuthMethod('api_token')
       setStep('project')
     } else {

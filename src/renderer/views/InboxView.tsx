@@ -1,24 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useProjectTasks } from '@/hooks/use-project-tasks'
 import { useProjects } from '@/hooks/use-projects'
+import { useAppConfig } from '@/hooks/use-app-config'
 import { useReorderStore } from '@/stores/reorder-store'
 import { usePrintable } from '@/stores/print-store'
-import { api } from '@/lib/api'
 import { TaskList } from '@/components/task-list/TaskList'
 import { RowViewProvider } from '@/components/task-list/RowViewContext'
 import { ListSkeleton } from '@/components/shared/ListSkeleton'
 
 export function InboxView() {
-  const [inboxProjectId, setInboxProjectId] = useState<number | undefined>()
+  // The Inbox is a synced setting: it can change while the view is open (another device chose one).
+  const { data: config } = useAppConfig()
+  const inboxProjectId = config?.inbox_project_id || undefined
   const { data: projects, isLoading: projectsLoading } = useProjects()
-
-  useEffect(() => {
-    api.getConfig().then((config) => {
-      if (config?.inbox_project_id) {
-        setInboxProjectId(config.inbox_project_id)
-      }
-    })
-  }, [])
 
   const activeInboxId = inboxProjectId && projects?.flat.some((project) => project.id === inboxProjectId)
     ? inboxProjectId

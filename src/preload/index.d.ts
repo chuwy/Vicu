@@ -27,6 +27,7 @@ import type {
   TaskCommentPage,
 } from '../renderer/lib/vikunja-types'
 import type { TaskPatch } from '../shared/merge-patches'
+import type { SyncedPrefsSnapshot } from '../shared/synced-prefs'
 import type {
   OfflineCreateInput,
   OfflineCreateResult,
@@ -126,6 +127,16 @@ export interface ElectronAPI {
   getCustomListSyncStatus(): Promise<CustomListSyncStatus>
   onCustomListsChanged(cb: (lists: CustomList[]) => void): () => void
   onCustomListSyncStatus(cb: (status: CustomListSyncStatus) => void): () => void
+  /** The synced preferences (cross-app semantics 11): every entry's value and the Inbox in use. */
+  getSyncedPrefs(): Promise<SyncedPrefsSnapshot>
+  /** A choice the user made (`null` resets it to the default on every device). */
+  setSyncedPreference(key: string, value: unknown): Promise<SyncedPrefsSnapshot>
+  syncSyncedPrefs(): Promise<CustomListSyncStatus>
+  getSyncedPrefsStatus(): Promise<CustomListSyncStatus>
+  /** Setup: the account's synced Inbox and Vikunja's default project, read before asking for an Inbox. */
+  readSetupPreferences(url: string, token?: string): Promise<{ inboxProjectId: number | null; defaultProjectId: number | null }>
+  onSyncedPrefsChanged(cb: (snapshot: SyncedPrefsSnapshot) => void): () => void
+  onSyncedPrefsStatus(cb: (status: CustomListSyncStatus) => void): () => void
   setTaskBadge(count: number, dataUrl: string | null): Promise<void>
   testConnection(url: string, token: string): Promise<ApiResult<Project[]>>
 

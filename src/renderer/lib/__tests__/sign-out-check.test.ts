@@ -85,3 +85,17 @@ describe('checkUnsyncedWork', () => {
     expect((await checkUnsyncedWork(d)).customListsUnsynced).toBe(false)
   })
 })
+
+describe('synced settings at sign-out', () => {
+  it('gives them a last chance to sync and warns when they did not reach the server', async () => {
+    const syncSyncedPrefs = vi.fn(async () => ({ state: 'offline' as const, message: 'offline' }))
+    const d = deps({
+      syncSyncedPrefs,
+      getConfig: vi.fn(async () => config({ synced_prefs_sync: { device_id: 'd', document: { version: 1, entries: {} }, dirty: true } })),
+    })
+    const work = await checkUnsyncedWork(d)
+    expect(syncSyncedPrefs).toHaveBeenCalledTimes(1)
+    expect(work.preferencesUnsynced).toBe(true)
+    expect(signOutWarning(work)).toContain('synced settings')
+  })
+})

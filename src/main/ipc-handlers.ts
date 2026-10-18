@@ -57,6 +57,14 @@ import {
   syncCustomLists,
   upsertCustomList,
 } from './custom-list-service'
+import {
+  getSyncedPrefs,
+  getSyncedPrefsStatus,
+  inboxChosenAtSetup,
+  readSetupPreferences,
+  setSyncedPreference,
+  syncSyncedPrefs,
+} from './synced-preferences'
 import type { CustomListWire } from './custom-list-protocol'
 import { hasVicuMetadataMarker } from './custom-list-protocol'
 import { discoverProviders, discoverAuthMethods } from './auth/oidc-discovery'
@@ -400,7 +408,13 @@ export function registerIpcHandlers(): void {
     const latest = loadConfig()
     if (!latest) return
     const keys = Object.keys(patch)
-    persistConfig(applyConfigPatch(latest, patch as Record<string, unknown>), !keys.every((k) => QUIET_PATCH_KEYS.has(k)))
+    const next = applyConfigPatch(latest, patch as Record<string, unknown>)
+    persistConfig(next, !keys.every((k) => QUIET_PATCH_KEYS.has(k)))
+    // The Inbox is a synced setting (cross-app semantics 11.4): a choice made here reaches every
+    // device. config.inbox_project_id stays the local cache every reader uses.
+    if ('inbox_project_id' in patch && next.inbox_project_id > 0 && next.inbox_project_id !== latest.inbox_project_id && !next.standalone_mode && next.vikunja_url) {
+      setSyncedPreference('inbox_project_id', next.inbox_project_id)
+    }
   })
 
   // Setup, OIDC/password login and disconnect: only the connection fields change, every
@@ -411,14 +425,41 @@ export function registerIpcHandlers(): void {
     // A different server or user: changes queued for the previous account must not follow.
     accountChanged()
     void replayPendingActions()
+    // Setup's Inbox answer is written as the synced entry unless it is the one setup just read.
+    if (connection.vikunja_url && connection.inbox_project_id) inboxChosenAtSetup(connection.vikunja_url, connection.inbox_project_id)
   })
 
   handleTrusted('custom-lists:get', () => getCustomLists())
   handleTrusted('custom-lists:upsert', (_event, list: CustomListWire) => upsertCustomList(list))
   handleTrusted('custom-lists:delete', (_event, id: string) => deleteCustomList(id))
   handleTrusted('custom-lists:reorder', (_event, ids: string[]) => reorderCustomLists(ids))
-  handleTrusted('custom-lists:sync', () => syncCustomLists())
+  handleTrusted('custom-lists:sync', () => {
+    // The synced preferences sync whenever custom lists do.
+    void syncSyncedPrefs()
+    return syncCustomLists()
+  })
   handleTrusted('custom-lists:status', () => getCustomListSyncStatus())
+
+  // Synced preferences (cross-app semantics section 11): the Inbox and the task order.
+  handleTrusted('synced-prefs:get', () => getSyncedPrefs())
+  handleTrusted('synced-prefs:set', (_event, key: unknown, value: unknown) => {
+    if (typeof key !== 'string') throw new Error('Invalid synced preference')
+    return setSyncedPreference(key, value)
+  })
+  handleTrusted('synced-prefs:sync', () => syncSyncedPrefs())
+  handleTrusted('synced-prefs:status', () => getSyncedPrefsStatus())
+  // Setup reads the account's synced Inbox before it asks for one (section 11.4). An API-token
+  // setup passes its token (nothing is saved yet); a sign-in uses the session it just stored.
+  handleTrusted('synced-prefs:read-for-setup', async (_event, url: unknown, token: unknown) => {
+    if (typeof url !== 'string' || !url) return { inboxProjectId: null, defaultProjectId: null }
+    let useToken = typeof token === 'string' ? token : ''
+    if (!useToken) {
+      const config = loadConfig()
+      if (config?.auth_method === 'api_token') useToken = getAPIToken() || config.api_token
+      else useToken = authManager.getTokenSync() ?? (await authManager.getToken().catch(() => '')) ?? ''
+    }
+    return readSetupPreferences(url, useToken)
+  })
 
   handleTrusted('set-task-badge', (_event, count: number, dataUrl: string | null) => {
     const cfg = loadConfig()

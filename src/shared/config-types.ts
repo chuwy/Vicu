@@ -9,6 +9,8 @@
 // --- Custom lists ----------------------------------------------------------------------------
 
 /** The sort keys a custom list may use, in the order the editor offers them (same as Android). */
+import type { SyncedPrefsDocument } from './synced-prefs'
+
 export const CUSTOM_LIST_SORT_FIELDS = [
   'due_date',
   'created',
@@ -198,6 +200,19 @@ export interface AppConfig {
     dirty: boolean
     carrier_task_id?: number
     last_synced_at?: string
+  }
+  /**
+   * The synced preferences (cross-app semantics section 11): the local copy of the `vicu-prefs:v1`
+   * carrier, owned by `src/main/synced-preferences.ts`; the renderer never writes it. `moved` is set
+   * once the settings this device kept before they synced were moved into it (section 11.5).
+   */
+  synced_prefs_sync?: {
+    device_id: string
+    document: SyncedPrefsDocument
+    dirty: boolean
+    carrier_task_id?: number
+    last_synced_at?: string
+    moved?: boolean
   }
   /**
    * The signed-in Vikunja user, as `GET user` answered it (owned by main, `src/main/known-user.ts`).

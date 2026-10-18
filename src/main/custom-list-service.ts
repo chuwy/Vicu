@@ -118,7 +118,7 @@ const service = createSyncedDocumentService<CustomListSyncDocumentV1>({
   },
   changed: (config) => broadcastLists(config),
   beforeChange: rememberBroadcastBaseline,
-  loadCarriers: loadCustomListCarriers,
+  loadCarriers: () => loadCustomListCarriers(),
 })
 
 export function getCustomListSyncStatus(): CustomListSyncStatus {

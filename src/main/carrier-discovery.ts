@@ -32,6 +32,7 @@ import { CUSTOM_LIST_CARRIER_SEARCH, hasCustomListMarker } from './custom-list-p
 import { JsonFileStore } from './json-file-store'
 import { mapLimited } from './map-limited'
 import { isOwnTask } from '../shared/hidden-tasks'
+import { PREFS_CARRIER_SEARCH, hasPrefsMarker } from './synced-prefs-protocol'
 import { ROUTINE_ARCHIVE_SEARCH, ROUTINE_CARRIER_SEARCH, hasRoutineArchiveMarker, hasRoutineMarker } from '../shared/routines'
 
 export const DISCOVERY_INTERVAL_MS = 60_000
@@ -41,9 +42,9 @@ const DIRECT_FETCH_CONCURRENCY = 4
 
 export const CARRIER_IDS_FILENAME = 'carrier-ids.json'
 
-export type CarrierKind = 'routine' | 'routine-archive' | 'custom-lists'
+export type CarrierKind = 'routine' | 'routine-archive' | 'custom-lists' | 'prefs'
 
-const CARRIER_KINDS: readonly CarrierKind[] = ['routine', 'routine-archive', 'custom-lists']
+const CARRIER_KINDS: readonly CarrierKind[] = ['routine', 'routine-archive', 'custom-lists', 'prefs']
 
 export interface CarrierTask {
   id: number
@@ -73,6 +74,13 @@ export const ROUTINE_ARCHIVE_SPEC: CarrierSpec = {
   kind: 'routine-archive',
   search: ROUTINE_ARCHIVE_SEARCH,
   isCarrier: (task) => hasRoutineArchiveMarker(task.description),
+}
+
+/** The synced preferences (contract section 11). */
+export const PREFS_CARRIER_SPEC: CarrierSpec = {
+  kind: 'prefs',
+  search: PREFS_CARRIER_SEARCH,
+  isCarrier: (task) => hasPrefsMarker(task.description),
 }
 
 /** By the marker only: a task the user titled like the carrier stays theirs (section 10.1). */

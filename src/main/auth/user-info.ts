@@ -5,6 +5,8 @@ export interface VikunjaUser {
   username: string
   email: string
   name: string
+  /** Vikunja's own default project (user settings); only ever read, a suggestion for the Inbox. */
+  default_project_id?: number
 }
 
 const FETCH_TIMEOUT = 10_000
@@ -36,12 +38,17 @@ export async function fetchCurrentUser(
       username: string
       email?: string
       name?: string
+      settings?: { default_project_id?: unknown } | null
     }
+    const defaultProject = data.settings?.default_project_id
     return {
       id: data.id,
       username: data.username,
       email: data.email ?? '',
       name: data.name ?? data.username,
+      ...(typeof defaultProject === 'number' && Number.isInteger(defaultProject) && defaultProject > 0
+        ? { default_project_id: defaultProject }
+        : {}),
     }
   } catch {
     return null

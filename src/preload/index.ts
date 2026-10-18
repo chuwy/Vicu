@@ -115,6 +115,21 @@ const api = {
   deleteCustomList: (id: string) => ipcRenderer.invoke('custom-lists:delete', id),
   reorderCustomLists: (ids: string[]) => ipcRenderer.invoke('custom-lists:reorder', ids),
   syncCustomLists: () => ipcRenderer.invoke('custom-lists:sync'),
+  getSyncedPrefs: () => ipcRenderer.invoke('synced-prefs:get'),
+  setSyncedPreference: (key: string, value: unknown) => ipcRenderer.invoke('synced-prefs:set', key, value),
+  syncSyncedPrefs: () => ipcRenderer.invoke('synced-prefs:sync'),
+  getSyncedPrefsStatus: () => ipcRenderer.invoke('synced-prefs:status'),
+  readSetupPreferences: (url: string, token?: string) => ipcRenderer.invoke('synced-prefs:read-for-setup', url, token),
+  onSyncedPrefsChanged: (cb: (snapshot: unknown) => void) => {
+    const handler = (_: unknown, snapshot: unknown) => cb(snapshot)
+    ipcRenderer.on('synced-prefs-changed', handler)
+    return () => { ipcRenderer.removeListener('synced-prefs-changed', handler) }
+  },
+  onSyncedPrefsStatus: (cb: (status: unknown) => void) => {
+    const handler = (_: unknown, status: unknown) => cb(status)
+    ipcRenderer.on('synced-prefs-sync-status', handler)
+    return () => { ipcRenderer.removeListener('synced-prefs-sync-status', handler) }
+  },
   getCustomListSyncStatus: () => ipcRenderer.invoke('custom-lists:status'),
   onCustomListsChanged: (cb: (lists: unknown[]) => void) => {
     const handler = (_: unknown, lists: unknown[]) => cb(lists)

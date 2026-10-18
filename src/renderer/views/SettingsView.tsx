@@ -195,6 +195,7 @@ export function SettingsView() {
     try {
       warning = signOutWarning(await checkUnsyncedWork({
         syncCustomLists: api.syncCustomLists,
+        syncSyncedPrefs: api.syncSyncedPrefs,
         replayNow: api.offlineQueue.replayNow,
         snapshot: api.offlineQueue.snapshot,
         getConfig: api.getConfig,

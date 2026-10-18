@@ -23,6 +23,7 @@ import { replayPendingActions } from './sync'
 import { flushOfflineQueue, offlineQueueHasUnsavedChanges } from './offline/service'
 import { flushTaskCache, taskCacheHasUnsavedChanges } from './cache'
 import { syncCustomLists } from './custom-list-service'
+import { syncSyncedPrefs } from './synced-preferences'
 import { parseHiddenArg, shouldStartHidden } from './login-item-settings'
 import { applyLaunchOnStartup } from './launch-on-startup'
 import { startupEnv } from './startup-env'
@@ -416,6 +417,7 @@ function createAndWireMainWindow(config: AppConfig | null, options: { startHidde
     if (Date.now() - lastCustomListFocusSync < 30_000) return
     lastCustomListFocusSync = Date.now()
     void syncCustomLists()
+    void syncSyncedPrefs()
   })
 
   // Unified close policy, evaluated at close time (not startup time):
@@ -754,6 +756,7 @@ if (!gotLock) {
       authManager.onSystemResume()
       void replayPendingActions()
       void syncCustomLists()
+      void syncSyncedPrefs()
     })
 
     // Replay any offline-queued actions: once shortly after startup, then
@@ -762,6 +765,9 @@ if (!gotLock) {
     setInterval(() => { void replayPendingActions() }, 5 * 60_000)
     setTimeout(() => { void syncCustomLists() }, 12_000)
     setInterval(() => { void syncCustomLists() }, 5 * 60_000)
+    // The synced preferences (the Inbox, the task order) sync whenever custom lists do.
+    setTimeout(() => { void syncSyncedPrefs() }, 12_000)
+    setInterval(() => { void syncSyncedPrefs() }, 5 * 60_000)
 
     // Auto-register browser native messaging hosts on startup so manifests
     // always point to the current app's bridge (important when switching

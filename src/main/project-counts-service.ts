@@ -1,5 +1,5 @@
 import { fetchProjectTaskTotal } from './api-client'
-import { loadCustomListCarriers, loadRoutineArchiveParts, loadRoutineCarriers } from './carrier-service'
+import { loadCustomListCarriers, loadPrefsCarriers, loadRoutineArchiveParts, loadRoutineCarriers } from './carrier-service'
 import { loadConfig } from './config'
 import { normalizeServerUrl } from './offline/owner'
 import { countCarriersByProject, createProjectCounts, type ProjectCounts } from './project-task-counts'
@@ -15,9 +15,9 @@ function getCounts(): ProjectCounts {
     counts = createProjectCounts({
       fetchTotal: fetchProjectTaskTotal,
       // Every hidden done task of the user's that the app knows: routine carriers, archive parts and
-      // the custom-list carrier (cross-app semantics 10.1).
+      // the custom-list and preferences carriers (cross-app semantics 10.1).
       carrierCounts: async () => {
-        const loads = await Promise.all([loadRoutineCarriers(), loadRoutineArchiveParts(), loadCustomListCarriers()])
+        const loads = await Promise.all([loadRoutineCarriers(), loadRoutineArchiveParts(), loadCustomListCarriers(), loadPrefsCarriers()])
         const failed = loads.find((result) => !result.success)
         if (failed && !failed.success) return failed
         return { success: true, data: countCarriersByProject(loads.flatMap((result) => (result.success ? result.data : []))) }

@@ -31,6 +31,16 @@ export interface SyncedPrefsDocument {
   [unknownField: string]: unknown
 }
 
+/** What the windows get from the main process (`synced-prefs:get`, `synced-prefs-changed`). */
+export interface SyncedPrefsSnapshot {
+  /** Every entry's value by key (`null` for a reset). */
+  values: Record<string, unknown>
+  /** The Inbox in use (the local cache, `config.inbox_project_id`). */
+  inboxProjectId: number
+  /** Set once, when the first read of the carrier switched this device to the account's Inbox. */
+  adoptedInbox?: number
+}
+
 export function emptySyncedPrefs(): SyncedPrefsDocument {
   return { version: SYNCED_PREFS_VERSION, entries: {} }
 }

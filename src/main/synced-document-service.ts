@@ -99,8 +99,11 @@ export interface SyncedDocumentOptions<Doc> {
   beforeChange?(config: AppConfig | null): void
   /** The user's carriers of this kind (`carrier-service.ts`). */
   loadCarriers(): Promise<ApiResult<CarrierTask[]>>
-  /** After a successful sync that read the carrier (the one-time move of synced preferences). */
-  afterSync?(config: AppConfig, state: SyncedDocumentState<Doc>): void
+  /**
+   * After a successful sync that read the carrier (the one-time move of synced preferences). It may
+   * change and save the state; returning true asks for another sync once this one is over.
+   */
+  afterSync?(config: AppConfig, state: SyncedDocumentState<Doc>): boolean | void
   /** Defaults to `Date.now`; tests pass a clock. */
   now?: () => number
 }
@@ -142,6 +145,7 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
   const now = options.now ?? (() => Date.now())
   let syncStatus: SyncedDocumentStatus = { state: 'idle' }
   let inFlightSync: Promise<SyncedDocumentStatus> | null = null
+  let resyncRequested = false
 
   /** Unsynced local changes, as stored (no state is made up for a config that has none yet). */
   const isDirty = (config: AppConfig): boolean => (config[options.stateKey] as { dirty?: boolean } | undefined)?.dirty === true
@@ -326,7 +330,7 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
       options.afterPersist?.(latest, latestState)
       saveConfig(latest)
       options.changed?.(latest)
-      options.afterSync?.(latest, latestState)
+      if (options.afterSync?.(latest, latestState)) resyncRequested = true
       // The oldest carrier now holds everything: the other carriers are only clutter in the user's
       // Vikunja, so remove them. Never part of the sync result; a failure is retried next time.
       if (carrierId) {
@@ -355,6 +359,11 @@ export function createSyncedDocumentService<Doc>(options: SyncedDocumentOptions<
     if (inFlightSync) return inFlightSync
     inFlightSync = runSync().finally(() => {
       inFlightSync = null
+      if (resyncRequested) {
+        resyncRequested = false
+        setTimeout(() => { void sync() }, 0)
+        return
+      }
       const config = loadConfig()
       // Retried at once only when the document changed during the sync; a sync that waits for the
       // user id runs again with the next trigger (the lookup asks the server at most once a minute).

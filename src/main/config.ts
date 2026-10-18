@@ -135,6 +135,9 @@ export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
     custom_lists_sync: raw.custom_lists_sync && typeof raw.custom_lists_sync === 'object'
       ? raw.custom_lists_sync as AppConfig['custom_lists_sync']
       : undefined,
+    synced_prefs_sync: raw.synced_prefs_sync && typeof raw.synced_prefs_sync === 'object'
+      ? raw.synced_prefs_sync as AppConfig['synced_prefs_sync']
+      : undefined,
     known_user: isKnownUser(raw.known_user) ? { server: raw.known_user.server, id: raw.known_user.id } : undefined,
     // Quick Entry / Quick View
     quick_entry_enabled: raw.quick_entry_enabled === true,
@@ -282,6 +285,7 @@ const ACCOUNT_SPECIFIC_KEYS = [
   'sidebar_collapsed_projects',
   'custom_lists',
   'custom_lists_sync',
+  'synced_prefs_sync',
   'known_user',
   'quick_entry_default_project_id',
   'secondary_projects',
@@ -306,7 +310,7 @@ export function connectionKeysIn(patch: object): string[] {
 }
 
 /** Owned by main (the custom list service with its own IPCs and sync, the known user); never taken from a renderer patch. */
-const MAIN_OWNED_KEYS: ReadonlySet<string> = new Set(['custom_lists', 'custom_lists_sync', 'known_user'])
+const MAIN_OWNED_KEYS: ReadonlySet<string> = new Set(['custom_lists', 'custom_lists_sync', 'synced_prefs_sync', 'known_user'])
 
 /** Every key of AppConfig, derived from the normalizer so the two cannot drift apart. */
 const CONFIG_KEYS: ReadonlySet<string> = new Set(Object.keys(normalizeConfig({})))

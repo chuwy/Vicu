@@ -98,13 +98,20 @@ export async function refreshKnownUser(): Promise<void> {
   const config = loadConfig()
   if (!config || config.standalone_mode || !config.vikunja_url) return
   if (knownUserIdFor(config.vikunja_url) !== undefined) return
+  // Callers that ask while a lookup runs wait for it (the hidden tasks need the answer).
+  if (userLookup) return userLookup
   if (Date.now() - userLookupAt < 60_000) return
   userLookupAt = Date.now()
   const token = config.auth_method === 'api_token' ? (getAPIToken() || config.api_token) : authManager.getTokenSync()
   if (!token) return
-  const user = await fetchCurrentUser(config.vikunja_url, token)
-  if (user) rememberKnownUser(config.vikunja_url, user.id)
+  const url = config.vikunja_url
+  userLookup = fetchCurrentUser(url, token)
+    .then((user) => { if (user) rememberKnownUser(url, user.id) })
+    .finally(() => { userLookup = null })
+  return userLookup
 }
+
+let userLookup: Promise<void> | null = null
 
 // The hidden tasks wait for the user id (cross-app semantics 10.3): they ask through this lookup.
 setKnownUserLookup(refreshKnownUser)

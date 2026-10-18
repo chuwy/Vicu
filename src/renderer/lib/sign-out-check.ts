@@ -9,6 +9,8 @@ import type { OfflineQueueResult, OfflineQueueSnapshot, OfflineReplayEvent } fro
 export interface UnsyncedWork {
   queuedChanges: number
   customListsUnsynced: boolean
+  /** Synced settings (the Inbox, the task order) that have not reached the server. */
+  preferencesUnsynced?: boolean
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -18,6 +20,9 @@ export function signOutWarning(work: UnsyncedWork): string | null {
   const lines: string[] = []
   if (work.customListsUnsynced) {
     lines.push('Changes to your custom lists have not reached the server yet. Signing out deletes them.')
+  }
+  if (work.preferencesUnsynced) {
+    lines.push('Changes to your synced settings (the Inbox, the task order) have not reached the server yet. Signing out deletes them.')
   }
   if (work.queuedChanges > 0) {
     const one = work.queuedChanges === 1
@@ -32,6 +37,8 @@ export function signOutWarning(work: UnsyncedWork): string | null {
 
 export interface SignOutCheckDeps {
   syncCustomLists(): Promise<CustomListSyncStatus>
+  /** The synced preferences get the same last chance (optional for callers that predate them). */
+  syncSyncedPrefs?(): Promise<CustomListSyncStatus>
   replayNow(): Promise<OfflineQueueResult<OfflineReplayEvent | null>>
   snapshot(): Promise<OfflineQueueResult<OfflineQueueSnapshot>>
   getConfig(): Promise<AppConfig | null>
@@ -53,6 +60,7 @@ export async function checkUnsyncedWork(deps: SignOutCheckDeps): Promise<Unsynce
   const timeoutMs = deps.timeoutMs ?? 8000
   await Promise.all([
     settleWithin(deps.syncCustomLists(), timeoutMs),
+    ...(deps.syncSyncedPrefs ? [settleWithin(deps.syncSyncedPrefs(), timeoutMs)] : []),
     settleWithin(deps.replayNow(), timeoutMs),
   ])
   const [snapshot, config] = await Promise.all([
@@ -63,5 +71,7 @@ export async function checkUnsyncedWork(deps: SignOutCheckDeps): Promise<Unsynce
     queuedChanges: snapshot?.success ? snapshot.data.pending.length : 0,
     // Standalone lists are local by design and survive a sign-out from standalone mode.
     customListsUnsynced: !!config && !config.standalone_mode && !!config.vikunja_url && !!config.custom_lists_sync?.dirty,
+    // Only named when there is something to say, like the warning line it adds.
+    ...(!!config && !config.standalone_mode && !!config.vikunja_url && config.synced_prefs_sync?.dirty ? { preferencesUnsynced: true } : {}),
   }
 }

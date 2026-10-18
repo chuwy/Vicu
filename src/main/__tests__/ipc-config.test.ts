@@ -11,6 +11,8 @@ const hoisted = vi.hoisted(() => ({
   accountChanged: vi.fn(),
   replay: vi.fn(async () => null),
   viewerSend: vi.fn(),
+  setSyncedPreference: vi.fn(),
+  inboxChosenAtSetup: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -45,6 +47,11 @@ vi.mock('../config', async (importOriginal) => {
   }
 })
 vi.mock('../custom-list-service', () => ({ syncCustomLists: async () => undefined }))
+vi.mock('../synced-preferences', () => ({
+  setSyncedPreference: hoisted.setSyncedPreference,
+  inboxChosenAtSetup: hoisted.inboxChosenAtSetup,
+  syncSyncedPrefs: async () => undefined,
+}))
 vi.mock('../auth/oidc-discovery', () => ({}))
 vi.mock('../auth/user-info', () => ({}))
 vi.mock('../auth/auth-manager', () => ({ authManager: {} }))
@@ -82,7 +89,7 @@ const baseConfig = () => ({
 describe('config writes over IPC', () => {
   beforeEach(() => {
     hoisted.handlers.clear()
-    for (const fn of [hoisted.saveConfig, hoisted.storeAPIToken, hoisted.accountChanged, hoisted.replay, hoisted.viewerSend]) fn.mockReset()
+    for (const fn of [hoisted.saveConfig, hoisted.storeAPIToken, hoisted.accountChanged, hoisted.replay, hoisted.viewerSend, hoisted.setSyncedPreference, hoisted.inboxChosenAtSetup]) fn.mockReset()
     hoisted.replay.mockResolvedValue(null)
     hoisted.config.current = baseConfig()
     registerIpcHandlers()
@@ -134,6 +141,8 @@ describe('config writes over IPC', () => {
     it('still accepts the inbox project, a preference within the account', async () => {
       await call('save-config-patch', { inbox_project_id: 8 })
       expect(hoisted.saveConfig.mock.calls[0][0]).toMatchObject({ inbox_project_id: 8 })
+      // The Inbox is a synced setting: the choice is written for every device (contract 11.4).
+      expect(hoisted.setSyncedPreference).toHaveBeenCalledWith('inbox_project_id', 8)
     })
   })
 
