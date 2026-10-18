@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { CheckCircle2, Circle, Folder, Plus, Settings, SunMoon, Tag } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2, Circle, Folder, Plus, RefreshCw, Settings, SunMoon, Tag } from 'lucide-react'
 import { Dialog } from '@/components/overlay/Dialog'
 import { nextOptionIndex } from '@/components/overlay/popover-logic'
 import { useSmartLists } from '@/components/sidebar/SmartListNav'
@@ -11,6 +12,7 @@ import { useOpenTask } from '@/hooks/use-open-task'
 import { useProjects } from '@/hooks/use-projects'
 import { useLabels } from '@/hooks/use-labels'
 import { useIsDark } from '@/hooks/use-is-dark'
+import { refreshNow } from '@/hooks/use-manual-refresh'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { applyTheme } from '@/lib/theme'
@@ -59,6 +61,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const openTask = useOpenTask()
   const smartLists = useSmartLists()
   const { data: projects } = useProjects()
@@ -83,6 +86,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const runCommand = (command: PaletteCommand) => {
     if (command === 'settings') {
       void navigate({ to: '/settings' })
+    } else if (command === 'refresh') {
+      refreshNow(queryClient)
     } else if (command === 'toggle-theme') {
       const next = isDark ? 'light' : 'dark'
       applyTheme(next)
@@ -134,6 +139,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const detailOf = ({ action, kind }: PaletteItem): string => {
     if (action.type === 'task') return projects?.all.find((p) => p.id === action.task.project_id)?.title ?? kind
     if (action.type === 'command' && action.command === 'new-task') return shortcutHint('Mod+N', window.api.platform === 'darwin')
+    if (action.type === 'command' && action.command === 'refresh') return window.api.platform === 'darwin' ? shortcutHint('Mod+R', true) : 'F5'
     return kind
   }
 
@@ -141,6 +147,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     if (action.type === 'task' && action.task.done) return CheckCircle2
     if (action.type === 'command' && action.command === 'settings') return Settings
     if (action.type === 'command' && action.command === 'toggle-theme') return SunMoon
+    if (action.type === 'command' && action.command === 'refresh') return RefreshCw
     return ICONS[kind]
   }
 

@@ -98,8 +98,16 @@ export function setupApplicationMenu(getMainWindow: () => BrowserWindow | null):
   template.push({
     label: 'View',
     submenu: [
-      { role: 'reload' },
-      { role: 'forceReload' },
+      {
+        // Reads the page again from the server without leaving it (F5 is handled by the page).
+        label: 'Refresh',
+        accelerator: 'CmdOrCtrl+R',
+        click: () => {
+          const win = getMainWindow()
+          if (win && win.isVisible()) win.webContents.send('refresh-view')
+        },
+      },
+      { role: 'forceReload', label: 'Reload window' },
       { role: 'toggleDevTools' },
       { type: 'separator' },
       { role: 'resetZoom' },

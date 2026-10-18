@@ -369,6 +369,8 @@ export const api = {
 
   onNewTask: (cb: () => void) =>
     window.api.onNewTask?.(cb) ?? (() => {}),
+  onRefreshView: (cb: () => void) =>
+    window.api.onRefreshView?.(cb) ?? (() => {}),
   onAppResumed: (cb: () => void) =>
     window.api.onAppResumed?.(cb) ?? (() => {}),
   printHtml: (html: string) =>

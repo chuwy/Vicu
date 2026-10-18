@@ -323,6 +323,12 @@ const api = {
     ipcRenderer.on('new-task', handler)
     return () => { ipcRenderer.removeListener('new-task', handler) }
   },
+  // View > Refresh (Mod+R): read the page again from the server.
+  onRefreshView: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on('refresh-view', handler)
+    return () => { ipcRenderer.removeListener('refresh-view', handler) }
+  },
   // Main asks the window to show one task (a clicked reminder, Quick View's "open in app").
   onNavigateToTask: (cb: (taskId: number) => void) => {
     const handler = (_: unknown, taskId: number) => cb(taskId)

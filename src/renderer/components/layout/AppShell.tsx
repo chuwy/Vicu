@@ -55,6 +55,7 @@ import { openTaskInApp } from '@/lib/open-task'
 import { toast } from '@/stores/toast-store'
 import { useOfflineQueueSync } from '@/hooks/use-offline-queue'
 import { useFreshness } from '@/hooks/use-freshness'
+import { useManualRefresh } from '@/hooks/use-manual-refresh'
 import { useUIStore } from '@/stores/ui-store'
 import { refreshTasks } from '@/lib/task-refresh'
 import { reloadCompletionSound, setCompletionSoundEnabled } from '@/lib/completion-sound'
@@ -175,6 +176,7 @@ export function AppShell() {
   useOfflineQueueSync()
   // Task lists refetch on focus and on a timer, and the date-dependent views roll over at midnight.
   useFreshness()
+  useManualRefresh()
 
   // On a route change the completion hold ends and the recently-completed-tasks store is cleared,
   // so completed tasks don't bleed into the next view.
