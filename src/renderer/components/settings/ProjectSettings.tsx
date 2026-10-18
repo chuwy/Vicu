@@ -381,7 +381,11 @@ interface ProjectSettingsProps {
  */
 function TaskOrderSetting() {
   const selectId = useId()
-  const { global, setGlobal } = useTaskOrderSettings()
+  const { global, setGlobal, projectsWithOwnOrder, resetProjects } = useTaskOrderSettings()
+  const { data: projects } = useProjects()
+  // Deleted projects may still have an entry; count the ones that exist (Reset clears them all).
+  const known = new Set(projects?.all.map((project) => project.id) ?? [])
+  const ownCount = projectsWithOwnOrder.filter((id) => known.has(id)).length
   return (
     <div className="mt-4">
       <label htmlFor={selectId} className="mb-1 block text-xs text-[var(--text-secondary)]">Sort project tasks by</label>
@@ -398,6 +402,20 @@ function TaskOrderSetting() {
       <p className="mt-1 text-xs text-[var(--text-secondary)]">
         Projects and the Inbox, on every device. A project can choose its own under Sort tasks in its menu.
       </p>
+      {ownCount > 0 && (
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <p className="text-xs text-[var(--text-secondary)]">
+            {ownCount === 1 ? '1 project has its own order.' : `${ownCount} projects have their own order.`}
+          </p>
+          <button
+            type="button"
+            onClick={resetProjects}
+            className="rounded-control px-2 py-1 text-xs text-[var(--accent-blue)] hover:bg-[var(--bg-hover)]"
+          >
+            Reset
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -36,13 +36,25 @@ export function useTaskOrder(projectId: number | undefined): TaskOrderKey {
   return useTaskOrderResolver()(projectId)
 }
 
+const PROJECT_KEY_PREFIX = 'task_order.project.'
+const PROJECT_KEY = /^task_order\.project\.[1-9]\d*$/
+
 /** The global order, and a project's own entry (null: "Default", it follows its parent). */
 export function useTaskOrderSettings(projectId?: number) {
   const { snapshot } = useSyncedPrefs()
   const set = useSetSyncedPreference()
   const own = projectId ? snapshot.values[projectTaskOrderKey(projectId)] : undefined
+  // Every project entry that is set (null is "Default"); deleted projects included, so a reset clears them too.
+  const projectKeys = Object.keys(snapshot.values)
+    .filter((key) => PROJECT_KEY.test(key) && snapshot.values[key] !== null && snapshot.values[key] !== undefined)
   return {
     global: parseTaskOrder(snapshot.values[GLOBAL_TASK_ORDER_KEY]),
+    /** The ids of the projects that have their own order. */
+    projectsWithOwnOrder: projectKeys.map((key) => Number(key.slice(PROJECT_KEY_PREFIX.length))),
+    /** Every project back to "Default": they follow their parent or the global order again, on every device. */
+    resetProjects: () => {
+      for (const key of projectKeys) set.mutate({ key, value: null })
+    },
     /** The project's own choice, or null when it follows its parent or the global order. */
     projectOwn: own === undefined || own === null ? null : parseTaskOrder(own),
     setGlobal: (order: TaskOrderKey) => set.mutate({ key: GLOBAL_TASK_ORDER_KEY, value: order }),
