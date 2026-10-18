@@ -866,7 +866,9 @@ A value an app does not know acts as `due_date_first`.
 
 Its own entry (`task_order.project.<id>`), else the entry of its nearest ancestor that has one
 (walking `parent_project_id`; a cycle ends the walk), else `task_order`, else `due_date_first`.
-A `null` entry is no entry. The Inbox uses the order of the Inbox project.
+A `null` entry is no entry; any other value is an entry, and one an app cannot use (a newer
+order, or not a string) acts as `due_date_first` (section 12.1). The Inbox uses the order of the
+Inbox project.
 
 ### 12.4 Dragging
 
