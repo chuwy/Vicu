@@ -8,7 +8,7 @@ Test vectors live in `test-fixtures/` in both repos and must stay byte-identical
 
 | Fixture | Covers |
 |---|---|
-| `cross-app-semantics-v1.json` | due-date rules, smart lists, weeks, custom-list windows, review math, completion hold, date display, collaboration |
+| `cross-app-semantics-v1.json` | due-date rules, smart lists, weeks, custom-list windows, review math, completion hold, date display, collaboration, hidden tasks, synced preferences, task order |
 | `nlp-corpus-v1.json` | quick-add parsing |
 | `routine-archive-v1.json` | routine merge, pruning and archive rules |
 | `design-tokens-v1.json` | colour roles, type, radii and motion (see `design-system-v1.md`) |
@@ -653,3 +653,229 @@ text merged), the `plain` flag and, for plain comments, the `editText`. `mention
 the caret (a UTF-16 offset), `me`, the members, the expected `query` (or `null`), the suggested
 usernames and, when `pick` is set, the text and caret after picking that username. `edited` gives
 `created`, `updated` (UTC instants) and the flag.
+
+---
+
+## 10. Hidden tasks
+
+Vicu keeps the data that must reach every device in ordinary Vikunja tasks that both apps hide
+("hidden tasks", "carriers"): the custom-list carrier (section 3), routine carriers and archive
+parts (section 6) and the preferences carrier (section 11). These rules hold for every kind.
+
+### 10.1 Marker and hiding
+
+- The marker is `<!-- vicu-<kind>:v<N>:<payload> -->` in the task description. `<kind>` is
+  lowercase letters, digits and hyphens, optionally followed by a colon-separated sub-kind
+  (`routine:archive`). `<payload>` is UTF-8 JSON in base64url without padding.
+- A task is **hidden** when its description matches `<!--[ \t\r\n]*vicu-[a-z0-9-]+:` (case
+  sensitive; only those four whitespace characters), whatever the kind, known or not. That lets a
+  later version add a kind without older versions showing it. The title never decides.
+- Every list, count, badge, search and widget leaves hidden tasks out by this test, never by
+  `done` alone: a hidden task someone reopened in Vikunja's web UI stays hidden.
+
+### 10.2 Shape
+
+- A hidden task is created **done**, in one request, with the null due date, no repeat, no
+  reminders, no labels and no assignees, and is never positioned in a list view.
+- Every write sends `done: true`, `due_date: "0001-01-01T00:00:00Z"`, `repeat_after: 0`,
+  `repeat_mode: 0` and `reminders: []` again, so an edit made in the web UI is undone.
+- A **reopened** hidden task is still the same carrier: apps keep using it and the next write marks
+  it done again.
+
+### 10.3 Ownership
+
+- A hidden task belongs to the user who created it (`created_by.id`, set by the server; a task
+  created over an API token belongs to the token's user). An app reads, merges, writes and deletes
+  only its signed-in user's hidden tasks. Other users' hidden tasks stay hidden and are otherwise
+  ignored, so a shared project never mixes two people's data.
+- Until the app knows its user id (`GET user`), it does not discover carriers.
+
+### 10.4 Placement and discovery
+
+- New carriers go in the Inbox project (section 11.4). Discovery covers every project.
+- Apps remember carrier ids per server and kind and fetch them by id, done or not. They search
+  `GET tasks?q=<kind search>` (no `done` filter) at most once a minute and whenever no id is
+  known, and list all done tasks when a remembered id answers 404 or 403 and once a day. A task
+  found is a carrier when its description has that kind's marker and the user created it.
+- Vikunja 2.4 leaves tasks of archived projects out of every list and search (a remembered id is
+  still fetched) and refuses writes there with 412. A carrier in an archived project is
+  therefore read only, and a device that does not remember it creates a new one.
+
+### 10.5 Duplicates
+
+- Every own carrier of a kind is read and merged into the local copy; the one with the lowest id
+  is written.
+- After a successful write, each other own carrier is fetched again and deleted when
+  `prune(merge(kept, extra))` equals `kept` (section 10.6), so it holds nothing the kept one lacks.
+  A malformed carrier or one with a higher version is never deleted.
+
+### 10.6 Revisions and tombstones
+
+- Documents made of records stamp each record with a revision
+  `{ "wall_time_ms", "counter", "device_id" }`, compared in that order (`device_id` as a string);
+  the newer record wins a merge.
+- A record with `"value": null` is a tombstone (a deletion, or a reset to the default). Before
+  writing and before comparing a merge result with the server's copy, apps drop every tombstone
+  whose `wall_time_ms` is earlier than now minus 90 days (7,776,000,000 ms). A device offline for
+  longer may bring a deleted record back; that is accepted so documents stop growing.
+
+### 10.7 Versions and damage
+
+- A carrier whose marker version or payload `version` is higher than the app knows makes that
+  kind read only with "update required"; it is never written or deleted.
+- A write that needs the server's copy and cannot read it (a higher version, or malformed) is not
+  sent.
+- A malformed carrier is ignored and reported; the valid ones are still used.
+
+### 10.8 Unknown data and size
+
+- Fields an app does not know are kept at every level of every payload (documents, records,
+  values, filters, routine definitions, slots, occurrences, archive parts) and written back
+  unchanged. A merged record keeps the winning side's unknown fields. Unknown fields at the top
+  level of a document are the union of both sides; for a field on both sides the server copy's
+  value is kept.
+- The decoded JSON stays within 384 KiB when written; 512 KiB is the most an app accepts.
+
+### 10.9 Vectors
+
+`hiddenTasks.markers` gives a title, a description and whether the task is hidden.
+`hiddenTasks.ownership` gives the signed-in user id (`null`: not known yet), carriers with
+`createdBy`, the ids used and the id written. `hiddenTasks.tombstones` gives `nowMs`, records with
+`wallTimeMs` and whether they hold a value, and the ids kept.
+
+---
+
+## 11. Synced preferences
+
+Settings that change what a list shows or how input is read are the same on every device of an
+account. They live in one carrier per account.
+
+### 11.1 Carrier
+
+- Title `Vicu preferences (sync metadata — do not delete)`, marker `vicu-prefs:v1`, search text
+  `vicu-prefs`. Section 10 applies.
+- It is created, in the Inbox project, only once the document holds an entry: a device that never
+  changed a synced setting never creates one.
+
+### 11.2 Document
+
+```json
+{
+  "version": 1,
+  "entries": {
+    "task_order": {
+      "value": "due_date_first",
+      "revision": { "wall_time_ms": 1792000000000, "counter": 0, "device_id": "4f1c" }
+    },
+    "task_order.project.7": {
+      "value": null,
+      "revision": { "wall_time_ms": 1792000900000, "counter": 1, "device_id": "9a07" }
+    }
+  }
+}
+```
+
+- `value` is any JSON value; `null` means "the default" (a reset reaches every device).
+- **Merge** `merge(local, server)`: the union of keys; for a key on both sides the newer revision
+  wins (section 10.6), and equal revisions keep the server's entry. Tombstones are pruned as in
+  10.6.
+- **Defaults are never written.** A key without an entry uses its default; only a choice the user
+  makes writes an entry, so a new device cannot overwrite anyone's settings with its defaults.
+- **Unknown keys and values are kept.** A key this version does not know is kept and not used. A
+  value it cannot use (wrong type, or a value a newer app added) reads as the default and is kept
+  unchanged.
+- Per-project keys are `<setting>.project.<id>`. They stay when the project is deleted.
+
+### 11.3 Registry
+
+A key is added here, in both repos, in the release that starts writing it.
+
+| Key | Value | Default |
+|---|---|---|
+| `inbox_project_id` | the Inbox project id, a whole number above 0 | none: the app asks during setup |
+| `task_order` | a task order key (section 12.1) | `due_date_first` |
+| `task_order.project.<id>` | a task order key, or `null` | follows the parent project, then `task_order` (section 12.3) |
+
+### 11.4 The Inbox
+
+- The Inbox project is a synced entry. A device without an entry asks during setup and writes
+  the answer. Vikunja's `default_project_id` (`GET user`) may be the preselected answer; apps never
+  write Vikunja's user settings.
+- At setup, after sign-in, apps read the preferences carrier before asking for the Inbox, so the
+  synced Inbox is preselected.
+- An Inbox that does not exist or cannot be read any more is asked for again.
+
+### 11.5 Making an existing setting sync
+
+When a release starts syncing a setting that apps already kept on the device, each device, after
+its first successful read of the carrier, writes its local value as an entry only when the value
+differs from the default and the carrier has no entry for the key (a `null` entry counts as an
+entry). If two devices do this at once, the later write wins. For the Inbox, which has no
+default, the first device to update decides for every device of the account.
+
+### 11.6 Vectors
+
+`syncedPrefs.merge` gives `local`, `server` and the merged document. `syncedPrefs.read` gives
+entries, a key and the value an app uses. `syncedPrefs.move` gives a key, the local value, the
+carrier's entry (absent when not given) and whether the device writes.
+
+---
+
+## 12. Task order
+
+How the tasks of a project are ordered in the project screen and its sections, the Inbox, and the
+widgets that show a project or the Inbox. Today, Upcoming, Anytime and custom lists keep their
+own order.
+
+### 12.1 Orders
+
+| Key | Order |
+|---|---|
+| `due_date_first` (default) | Dated tasks first by due date, then the undated ones in manual order |
+| `due_date_priority` | Dated tasks first by due date, then the undated ones; within each, the highest priority first |
+| `manual` | Every task in manual order (the position in the project's list view) |
+| `priority` | The highest priority first, then as `due_date_first` |
+| `title` | By title |
+| `newest` | The most recently created first |
+| `oldest` | The longest-standing first |
+
+A value an app does not know acts as `due_date_first`.
+
+### 12.2 Comparing tasks
+
+- A task is **dated** when it has a due date that is not the null date. Due and created dates are
+  compared as parsed instants, never as strings. A missing or unreadable created date comes last
+  in both `newest` and `oldest`.
+- Titles are compared lowercased (Unicode lowercase without locale rules), by UTF-16 code units.
+- Priorities run 0 (unset) to 5; higher comes first.
+- A missing position counts as 0.
+- Every order ends with the position (lower first) and then the task id (lower first), so equal
+  rows land in the same place on every device.
+
+| Order | Keys, in turn |
+|---|---|
+| `due_date_first` | dated first; due date; position; id |
+| `due_date_priority` | dated first; due date; priority; position; id |
+| `manual` | position; id |
+| `priority` | priority; dated first; due date; position; id |
+| `title` | title; position; id |
+| `newest` | created, newest first; position; id |
+| `oldest` | created, oldest first; position; id |
+
+### 12.3 Which order a project uses
+
+Its own entry (`task_order.project.<id>`), else the entry of its nearest ancestor that has one
+(walking `parent_project_id`; a cycle ends the walk), else `task_order`, else `due_date_first`.
+A `null` entry is no entry. The Inbox uses the order of the Inbox project.
+
+### 12.4 Dragging
+
+In `manual` every row can be dragged; in `due_date_first` only undated rows, among themselves; in
+the other orders none. The Move up and Move down actions follow the same rule.
+
+### 12.5 Vectors
+
+`taskOrder.tasks` gives tasks (`id`, `title`, `due` as a UTC instant, the null date or `null`,
+`priority`, `position` (absent: 0), `created` as a UTC instant or `null`). `taskOrder.sort` gives an
+order and the expected ids. `taskOrder.resolve` gives parents, entries and, per project, the order
+used. `taskOrder.drag` gives an order and the ids that can be dragged.

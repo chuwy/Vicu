@@ -1614,5 +1614,121 @@
       { "name": "later", "created": "2026-10-10T19:15:18Z", "updated": "2026-10-10T19:15:20Z", "expect": true },
       { "name": "the null date", "created": "2026-10-10T19:15:18Z", "updated": "0001-01-01T00:00:00Z", "expect": false }
     ]
+  },
+  "hiddenTasks": {
+    "about": "Vectors for docs/cross-app-semantics-v1.md section 10.",
+    "markers": [
+      { "name": "custom-list carrier", "title": "", "description": "<!-- vicu-custom-lists:v1:eyJ2ZXJzaW9uIjoxfQ -->", "hidden": true },
+      { "name": "routine carrier", "title": "Water plants", "description": "<!-- vicu-routine:v1:eyJ2ZXJzaW9uIjoxfQ -->", "hidden": true },
+      { "name": "archive part", "title": "Vicu routine archive", "description": "<!-- vicu-routine:archive:v1:eyJ2ZXJzaW9uIjoxfQ -->", "hidden": true },
+      { "name": "preferences carrier", "title": "", "description": "<!-- vicu-prefs:v1:eyJ2ZXJzaW9uIjoxfQ -->", "hidden": true },
+      { "name": "a kind this version does not know", "title": "", "description": "<!-- vicu-someday-kind2:v7:eyJ9 -->", "hidden": true },
+      { "name": "marker after text, no spaces", "title": "Water plants", "description": "<p>Use rain water</p><!--vicu-routine:v1:eyJ2ZXJzaW9uIjoxfQ-->", "hidden": true },
+      { "name": "tab and line breaks", "title": "", "description": "<!--\n\t vicu-prefs:v2:eyJ9\r\n-->", "hidden": true },
+      { "name": "unclosed marker", "title": "", "description": "<!-- vicu-prefs:", "hidden": true },
+      { "name": "title only", "title": "Vicu custom lists (sync metadata — do not delete)", "description": "", "hidden": false },
+      { "name": "no kind", "title": "", "description": "<!-- vicu -->", "hidden": false },
+      { "name": "empty kind", "title": "", "description": "<!-- vicu-: -->", "hidden": false },
+      { "name": "not in a comment", "title": "", "description": "vicu-prefs:v1:eyJ9", "hidden": false },
+      { "name": "marker outside the comment", "title": "", "description": "<!-- note --> vicu-prefs:v1:eyJ9", "hidden": false },
+      { "name": "upper case", "title": "", "description": "<!-- VICU-PREFS:v1:eyJ9 -->", "hidden": false },
+      { "name": "capitalised", "title": "", "description": "<!-- Vicu-prefs:v1:eyJ9 -->", "hidden": false },
+      { "name": "escaped", "title": "", "description": "&lt;!-- vicu-prefs:v1:eyJ9 --&gt;", "hidden": false },
+      { "name": "no-break space is not whitespace here", "title": "", "description": "<!--\u00a0vicu-prefs:v1:eyJ9 -->", "hidden": false },
+      { "name": "underscore", "title": "", "description": "<!-- vicu_prefs:v1:eyJ9 -->", "hidden": false },
+      { "name": "no description", "title": "Plain task", "description": null, "hidden": false }
+    ],
+    "ownership": [
+      { "name": "own carriers only, the lowest id written", "me": 1, "carriers": [{ "id": 9, "createdBy": 1 }, { "id": 3, "createdBy": 2 }, { "id": 5, "createdBy": 1 }, { "id": 4, "createdBy": null }], "use": [5, 9], "write": 5 },
+      { "name": "only someone else's", "me": 2, "carriers": [{ "id": 5, "createdBy": 1 }], "use": [], "write": null },
+      { "name": "user not known yet", "me": null, "carriers": [{ "id": 5, "createdBy": 1 }], "use": [], "write": null }
+    ],
+    "tombstones": {
+      "nowMs": 1792000000000,
+      "records": [
+        { "id": "a", "wallTimeMs": 1784223999999, "hasValue": false },
+        { "id": "b", "wallTimeMs": 1784224000000, "hasValue": false },
+        { "id": "c", "wallTimeMs": 1700000000000, "hasValue": true },
+        { "id": "d", "wallTimeMs": 1791999999999, "hasValue": false },
+        { "id": "e", "wallTimeMs": 1792000005000, "hasValue": false }
+      ],
+      "keep": ["b", "c", "d", "e"]
+    }
+  },
+  "syncedPrefs": {
+    "about": "Vectors for docs/cross-app-semantics-v1.md section 11. merge is merge(local, server).",
+    "merge": [
+      { "name": "union of keys", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order.project.7": { "value": "title", "revision": { "wall_time_ms": 50, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } }, "task_order.project.7": { "value": "title", "revision": { "wall_time_ms": 50, "counter": 0, "device_id": "b" } } } } },
+      { "name": "the newer wall time wins", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 200, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 200, "counter": 0, "device_id": "b" } } } } },
+      { "name": "the local entry wins when newer", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 300, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 200, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 300, "counter": 0, "device_id": "a" } } } } },
+      { "name": "the counter breaks a wall time tie", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 1, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 1, "device_id": "a" } } } } },
+      { "name": "the device id breaks a full tie", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "b" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "b" } } } } },
+      { "name": "equal revisions keep the server's entry", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "title", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } } },
+      { "name": "a newer reset to the default wins and stays as null", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": null, "revision": { "wall_time_ms": 150, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": null, "revision": { "wall_time_ms": 150, "counter": 0, "device_id": "b" } } } } },
+      { "name": "unknown keys and values are kept", "local": { "version": 1, "entries": { "future_setting": { "value": { "mode": "x" }, "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "sideways", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "future_setting": { "value": { "mode": "x" }, "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } }, "task_order": { "value": "sideways", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "b" } } } } },
+      { "name": "unknown entry fields travel with the winner", "local": { "version": 1, "entries": { "task_order": { "value": "manual", "revision": { "wall_time_ms": 100, "counter": 0, "device_id": "a" } } } }, "server": { "version": 1, "entries": { "task_order": { "value": "title", "note": "kept", "revision": { "wall_time_ms": 200, "counter": 0, "device_id": "b" } } } }, "expect": { "version": 1, "entries": { "task_order": { "value": "title", "note": "kept", "revision": { "wall_time_ms": 200, "counter": 0, "device_id": "b" } } } } },
+      { "name": "unknown document fields: union, the server's value on both sides", "local": { "version": 1, "entries": {}, "local_only": true, "shared_field": 1 }, "server": { "version": 1, "entries": {}, "shared_field": 2 }, "expect": { "version": 1, "entries": {}, "local_only": true, "shared_field": 2 } }
+    ],
+    "read": [
+      { "name": "absent", "entries": {}, "key": "task_order", "expect": "due_date_first" },
+      { "name": "null", "entries": { "task_order": null }, "key": "task_order", "expect": "due_date_first" },
+      { "name": "unknown value", "entries": { "task_order": "sideways" }, "key": "task_order", "expect": "due_date_first" },
+      { "name": "wrong type", "entries": { "task_order": 3 }, "key": "task_order", "expect": "due_date_first" },
+      { "name": "set", "entries": { "task_order": "title" }, "key": "task_order", "expect": "title" },
+      { "name": "Inbox absent", "entries": {}, "key": "inbox_project_id", "expect": null },
+      { "name": "Inbox set", "entries": { "inbox_project_id": 42 }, "key": "inbox_project_id", "expect": 42 },
+      { "name": "Inbox zero", "entries": { "inbox_project_id": 0 }, "key": "inbox_project_id", "expect": null },
+      { "name": "Inbox not a number", "entries": { "inbox_project_id": "42" }, "key": "inbox_project_id", "expect": null },
+      { "name": "Inbox not whole", "entries": { "inbox_project_id": 4.5 }, "key": "inbox_project_id", "expect": null }
+    ],
+    "move": [
+      { "name": "a local choice and no entry", "key": "task_order", "local": "manual", "expectWrite": true },
+      { "name": "the default is not written", "key": "task_order", "local": "due_date_first", "expectWrite": false },
+      { "name": "an entry wins", "key": "task_order", "local": "title", "carrier": "manual", "expectWrite": false },
+      { "name": "a null entry is an entry", "key": "task_order", "local": "title", "carrier": null, "expectWrite": false },
+      { "name": "the Inbox has no default", "key": "inbox_project_id", "local": 5, "expectWrite": true },
+      { "name": "no local Inbox", "key": "inbox_project_id", "local": null, "expectWrite": false },
+      { "name": "the Inbox entry wins", "key": "inbox_project_id", "local": 5, "carrier": 9, "expectWrite": false }
+    ]
+  },
+  "taskOrder": {
+    "about": "Vectors for docs/cross-app-semantics-v1.md section 12. Instants are UTC (or carry their offset).",
+    "tasks": [
+      { "id": 1, "title": "Buy milk", "due": "2026-10-08T21:59:59Z", "priority": 0, "position": 300, "created": "2026-10-01T08:00:00Z" },
+      { "id": 2, "title": "apples", "due": null, "priority": 3, "position": 100, "created": "2026-10-02T08:00:00Z" },
+      { "id": 3, "title": "Zebra", "due": "2026-10-06T21:59:59Z", "priority": 1, "position": 500, "created": "2026-09-30T08:00:00Z" },
+      { "id": 4, "title": "banana", "due": "0001-01-01T00:00:00Z", "priority": 0, "position": 200, "created": "2026-10-03T08:00:00Z" },
+      { "id": 5, "title": "Cherry", "due": "2026-10-08T21:59:59Z", "priority": 4, "position": 400, "created": "2026-10-01T08:00:00Z" },
+      { "id": 6, "title": "Apples", "due": null, "priority": 3, "position": 100, "created": null },
+      { "id": 7, "title": "Date", "due": "2026-10-08T23:59:59+02:00", "priority": 0, "position": 300, "created": "2026-10-04T08:00:00+02:00" },
+      { "id": 8, "title": "Élan", "due": null, "priority": 0, "created": "2026-10-05T08:00:00Z" },
+      { "id": 9, "title": "apples", "due": null, "priority": 5, "position": -50, "created": "2026-10-04T06:00:00Z" }
+    ],
+    "sort": [
+      { "order": "due_date_first", "expect": [3, 1, 7, 5, 9, 8, 2, 6, 4] },
+      { "order": "due_date_priority", "expect": [3, 5, 1, 7, 9, 2, 6, 8, 4] },
+      { "order": "manual", "expect": [9, 8, 2, 6, 4, 1, 7, 5, 3] },
+      { "order": "priority", "expect": [9, 5, 2, 6, 3, 1, 7, 8, 4] },
+      { "order": "title", "expect": [9, 2, 6, 4, 1, 5, 7, 3, 8] },
+      { "order": "newest", "expect": [8, 9, 7, 4, 2, 1, 5, 3, 6] },
+      { "order": "oldest", "expect": [3, 1, 5, 2, 4, 9, 7, 8, 6] },
+      { "order": "sideways", "expect": [3, 1, 7, 5, 9, 8, 2, 6, 4] }
+    ],
+    "resolve": {
+      "parents": { "10": 0, "11": 10, "12": 11, "20": 0, "30": 31, "31": 30, "40": 0 },
+      "vectors": [
+        { "name": "a global order and project entries", "entries": { "task_order": "manual", "task_order.project.10": "title", "task_order.project.12": null, "task_order.project.20": "sideways", "task_order.project.40": "newest" }, "expect": { "10": "title", "11": "title", "12": "title", "20": "due_date_first", "30": "manual", "40": "newest", "99": "manual" } },
+        { "name": "no global order", "entries": { "task_order": null, "task_order.project.40": 42 }, "expect": { "10": "due_date_first", "11": "due_date_first", "12": "due_date_first", "20": "due_date_first", "30": "due_date_first", "40": "due_date_first", "99": "due_date_first" } }
+      ]
+    },
+    "drag": [
+      { "order": "due_date_first", "expect": [2, 4, 6, 8, 9] },
+      { "order": "due_date_priority", "expect": [] },
+      { "order": "manual", "expect": [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+      { "order": "priority", "expect": [] },
+      { "order": "title", "expect": [] },
+      { "order": "newest", "expect": [] },
+      { "order": "oldest", "expect": [] }
+    ]
   }
 }
