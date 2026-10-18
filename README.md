@@ -128,7 +128,7 @@ A few platform caveats:
 
 ## See also
 
-- **[Vicu Android](https://github.com/rendyhd/Vicu-Android)** - Android version of Vicu
+- **[Vicu Mobile](https://github.com/rendyhd/Vicu-Mobile)** - Vicu for Android and iOS
 - **[vikunja-quick-entry](https://github.com/rendyhd/vikunja-quick-entry)** — lightweight tray app for Quick Entry and Quick View only, without the full UI
 - **[Vikunja](https://vikunja.io/)** — the open-source backend that powers Vicu
 
