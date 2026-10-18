@@ -8,6 +8,8 @@ import { useCompletedTasksStore } from '@/stores/completed-tasks-store'
 import { sortProjectTasks } from '@/lib/task-sort'
 import { mergeSectionUndoWindow } from '@/lib/undo-window'
 import { hasVicuMetadataMarker } from '@/lib/metadata-tasks'
+import { useTaskOrderResolver } from './use-task-order'
+import { sortTasksByOrder, type TaskOrderKey } from '../../shared/task-order'
 import type { SectionTaskCacheEntry } from '@/lib/section-task-cache'
 import type { Task, Project, ProjectView } from '@/lib/vikunja-types'
 import type { CompletedTaskEntry } from '@/stores/completed-tasks-store'
@@ -17,6 +19,8 @@ export interface SectionData {
   tasks: Task[]
   viewId: number | undefined
   children: SectionData[]
+  /** The section project's task order (cross-app semantics 12.3). */
+  order: TaskOrderKey
 }
 
 function findNodeInTree(nodes: ProjectTreeNode[], id: number): ProjectTreeNode | undefined {
@@ -39,7 +43,8 @@ function collectDescendants(node: ProjectTreeNode): ProjectTreeNode[] {
 
 function buildSectionTree(
   nodes: ProjectTreeNode[],
-  taskMap: Map<number, { tasks: Task[]; viewId: number | undefined }>
+  taskMap: Map<number, { tasks: Task[]; viewId: number | undefined }>,
+  orderOf: (projectId: number) => TaskOrderKey,
 ): SectionData[] {
   return nodes.map((node) => {
     const data = taskMap.get(node.id) ?? { tasks: [], viewId: undefined }
@@ -47,9 +52,19 @@ function buildSectionTree(
       project: node,
       tasks: data.tasks,
       viewId: data.viewId,
-      children: buildSectionTree(node.children, taskMap),
+      children: buildSectionTree(node.children, taskMap, orderOf),
+      order: orderOf(node.id),
     }
   })
+}
+
+/** Each section in its project's order (cross-app semantics 12.3); the cache holds the default one. */
+export function orderSectionTasks(sections: SectionData[]): SectionData[] {
+  return sections.map((section) => ({
+    ...section,
+    tasks: section.order === 'due_date_first' ? section.tasks : sortTasksByOrder(section.tasks, section.order),
+    children: orderSectionTasks(section.children),
+  }))
 }
 
 function applyUndoWindowDeep(
@@ -129,14 +144,16 @@ export function useProjectSections(projectId: number) {
     enabled: hasSections,
   })
 
+  const orderOf = useTaskOrderResolver()
+
   const sections = useMemo(() => {
     if (!projectNode || !sectionTasksQuery.data) return [] as SectionData[]
     const taskMap = new Map(
       sectionTasksQuery.data.map((r) => [r.id, { tasks: r.tasks, viewId: r.viewId }])
     )
-    const rawTree = buildSectionTree(projectNode.children, taskMap)
-    return applyUndoWindowDeep(rawTree, completedTasks, pathname)
-  }, [projectNode, sectionTasksQuery.data, completedTasks, pathname])
+    const rawTree = buildSectionTree(projectNode.children, taskMap, (id) => orderOf(id))
+    return orderSectionTasks(applyUndoWindowDeep(rawTree, completedTasks, pathname))
+  }, [projectNode, sectionTasksQuery.data, completedTasks, pathname, orderOf])
 
   return {
     sections,

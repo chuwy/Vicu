@@ -1,19 +1,14 @@
 import type { Task } from './vikunja-types'
-import { NULL_DATE } from './constants'
+import { compareTasksByOrder } from '../../shared/task-order'
 
-function hasDueDate(t: Task): boolean {
-  return !!t.due_date && t.due_date !== NULL_DATE
-}
-
+/**
+ * The default task order, "Due date, then manual" (cross-app semantics 12.2): dated tasks first by
+ * due date, then the undated ones by position, ties by position and then id. The project and
+ * section caches are kept in it; the lists re-sort with the project's own order on display
+ * (`sortTasksByOrder`, `useTaskOrder`).
+ */
 export function compareProjectTasks(a: Task, b: Task): number {
-  const aDated = hasDueDate(a)
-  const bDated = hasDueDate(b)
-  if (aDated !== bDated) return aDated ? -1 : 1
-  if (aDated && bDated) {
-    const diff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
-    if (diff !== 0) return diff
-  }
-  return (a.position ?? 0) - (b.position ?? 0)
+  return compareTasksByOrder('due_date_first', a, b)
 }
 
 export function sortProjectTasks(tasks: Task[]): Task[] {

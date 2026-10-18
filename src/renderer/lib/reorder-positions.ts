@@ -1,6 +1,8 @@
 // Where a dragged task gets its position. Vikunja orders a list view by a float `position` per
-// task; the list shows dated tasks first (by date) and then the undated ones by position (see
-// task-sort.ts), so only undated positions mean anything and only they anchor a drop.
+// task. In the default order ("Due date, then manual") the list shows dated tasks first (by date)
+// and then the undated ones by position (see task-sort.ts), so only undated positions mean anything
+// and only they anchor a drop. In the manual order every row is in position order and every row
+// anchors (`anchorsFor`, cross-app semantics 12.4).
 //
 // A drop normally sends one position, the middle between the undated neighbours. That fails when
 // the neighbours share a position, which is common: every task moved into a project gets position
@@ -26,17 +28,28 @@ export function isUndatedTask(task: Pick<Task, 'due_date'>): boolean {
   return !task.due_date || task.due_date === NULL_DATE
 }
 
+/** Which rows give a drop its position: every row in the manual order, the undated ones otherwise. */
+export type PositionAnchor = (task: Pick<Task, 'due_date'>) => boolean
+
+export function anchorsFor(order: unknown): PositionAnchor {
+  return order === 'manual' ? () => true : isUndatedTask
+}
+
 /**
  * The position for a task dropped at `targetIdx` of `tasks` (the list without the dragged task):
  * the middle between the nearest undated tasks above and below, half a step past the last one at
  * the end, half of the first at the top. `hasRoom` is false when the neighbours are equal or too
  * close for the middle to tell them apart.
  */
-export function insertPosition(tasks: readonly Task[], targetIdx: number): { position: number; hasRoom: boolean } {
+export function insertPosition(
+  tasks: readonly Task[],
+  targetIdx: number,
+  anchors: PositionAnchor = isUndatedTask,
+): { position: number; hasRoom: boolean } {
   let above = 0
   for (let i = Math.min(targetIdx - 1, tasks.length - 1); i >= 0; i--) {
     const candidate = tasks[i]
-    if (candidate && isUndatedTask(candidate)) {
+    if (candidate && anchors(candidate)) {
       above = candidate.position ?? 0
       break
     }
@@ -45,7 +58,7 @@ export function insertPosition(tasks: readonly Task[], targetIdx: number): { pos
   let below = above + POSITION_STEP
   for (let i = targetIdx; i < tasks.length; i++) {
     const candidate = tasks[i]
-    if (candidate && isUndatedTask(candidate)) {
+    if (candidate && anchors(candidate)) {
       below = candidate.position ?? above + POSITION_STEP
       break
     }
@@ -67,10 +80,15 @@ export interface MovePlan {
  * every undated task gets a fresh position in the new order, one step apart, and only the ones
  * whose position actually changes are listed.
  */
-export function planMove(tasks: readonly Task[], oldIndex: number, newIndex: number): MovePlan {
+export function planMove(
+  tasks: readonly Task[],
+  oldIndex: number,
+  newIndex: number,
+  anchors: PositionAnchor = isUndatedTask,
+): MovePlan {
   const moved = tasks[oldIndex]
   const without = tasks.filter((_, index) => index !== oldIndex)
-  const insert = insertPosition(without, newIndex)
+  const insert = insertPosition(without, newIndex, anchors)
   if (insert.hasRoom) return { position: insert.position, renumbered: [] }
 
   const ordered = [...without.slice(0, newIndex), moved, ...without.slice(newIndex)]
@@ -78,7 +96,7 @@ export function planMove(tasks: readonly Task[], oldIndex: number, newIndex: num
   let movedPosition = insert.position
   let next = POSITION_STEP
   for (const entry of ordered) {
-    if (entry !== moved && !isUndatedTask(entry)) continue
+    if (entry !== moved && !anchors(entry)) continue
     const position = next
     next += POSITION_STEP
     if (entry === moved) movedPosition = position

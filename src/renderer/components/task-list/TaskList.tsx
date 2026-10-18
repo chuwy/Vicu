@@ -3,6 +3,7 @@ import { Plus, Inbox } from 'lucide-react'
 import { SortableContext } from '@dnd-kit/sortable'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/cn'
+import { DEFAULT_TASK_ORDER, canReorderTask, type TaskOrderKey } from '../../../shared/task-order'
 import { verticalListSortingStrategyForeignSafe } from '@/lib/sortable-strategy'
 import { useCompleteTask, useUpdateTask, useDeleteTask } from '@/hooks/use-task-mutations'
 import { usePasteTasks } from '@/hooks/use-paste-tasks'
@@ -42,7 +43,13 @@ interface TaskListProps {
   /** Under the empty state's title (the next upcoming task). */
   emptyExtra?: React.ReactNode
   showNewTask?: boolean
+  /** The list is a project's (or the Inbox's) and rows may be dragged into a new place there. */
   sortable?: boolean
+  /**
+   * The list's task order (cross-app semantics 12.4): every row can be dragged in Manual, only the
+   * undated ones in "Due date, then manual", none in the other orders. Default: the default order.
+   */
+  taskOrder?: TaskOrderKey
   viewId?: number
   className?: string
   children?: React.ReactNode
@@ -76,6 +83,7 @@ export function TaskList({
   emptyExtra,
   showNewTask = true,
   sortable = false,
+  taskOrder = DEFAULT_TASK_ORDER,
   viewId,
   className,
   children,
@@ -562,7 +570,7 @@ export function TaskList({
           />
         ) : sortable ? (
           <SortableContext
-            items={tasks.map((t) => `task-${t.id}`)}
+            items={tasks.filter((t) => canReorderTask(taskOrder, t)).map((t) => `task-${t.id}`)}
             strategy={verticalListSortingStrategyForeignSafe}
           >
             {tasks.length > 0 && (
@@ -575,7 +583,7 @@ export function TaskList({
                         <div className="h-[2px] flex-1 rounded-full bg-[var(--accent-blue)]" />
                       </div>
                     )}
-                    <TaskRow task={task} sortable />
+                    <TaskRow task={task} sortable={canReorderTask(taskOrder, task)} />
                   </Fragment>
                 ))}
                 {insertIndex != null && insertIndex >= tasks.length && (

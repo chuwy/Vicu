@@ -952,6 +952,7 @@ const DraggableTaskRow = memo(function DraggableTaskRow(props: TaskRowProps) {
 }, sameRowProps)
 
 export const TaskRow = memo(function TaskRow(props: TaskRowProps) {
-  // `sortable` is fixed by the list a row belongs to, so a row never switches between the two.
+  // `sortable` follows the list's task order (cross-app semantics 12.4); when it changes (a new
+  // order, a due date set or cleared) the row remounts as the other kind.
   return props.sortable ? <SortableTaskRow {...props} /> : <DraggableTaskRow {...props} />
 }, sameRowProps)

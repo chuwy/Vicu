@@ -57,7 +57,7 @@ export function ProjectView() {
   const archivedProject = projectData?.archived.find((p) => p.id === pid)
   const projectName = activeProject?.title ?? archivedProject?.title ?? 'Project'
 
-  const { data: tasks = [], isLoading: tasksLoading, viewId } = useProjectTasks(activeProject?.id)
+  const { data: tasks = [], isLoading: tasksLoading, viewId, order: taskOrder } = useProjectTasks(activeProject?.id)
   const { sections, hasSections, isLoading: sectionsLoading } = useProjectSections(pid)
   const setReorderContext = useReorderStore((s) => s.setReorderContext)
   const clearSectionContexts = useReorderStore((s) => s.clearSectionContexts)
@@ -66,8 +66,8 @@ export function ProjectView() {
 
   // Push parent-project reorder context whenever its tasks shift.
   useEffect(() => {
-    setReorderContext(viewId ?? null, tasks)
-  }, [viewId, tasks, setReorderContext])
+    setReorderContext(viewId ?? null, tasks, taskOrder)
+  }, [viewId, tasks, taskOrder, setReorderContext])
 
   // Clear section reorder contexts only when navigating to a different project
   // (or unmounting). Tying clearance to `tasks` would wipe contexts on every
@@ -211,6 +211,7 @@ export function ProjectView() {
       tasks={tasks}
       projectId={pid}
       sortable
+      taskOrder={taskOrder}
       viewId={viewId}
       empty={tasks.length === 0 && !hasSections}
       emptyTitle="No tasks in this project"
@@ -237,6 +238,7 @@ export function ProjectView() {
                 childSections={section.children}
                 depth={0}
                 insertIndicator={insertIndicator}
+                taskOrder={section.order}
               />
               </Fragment>
             ))}

@@ -60,7 +60,8 @@ import { refreshTasks } from '@/lib/task-refresh'
 import { reloadCompletionSound, setCompletionSoundEnabled } from '@/lib/completion-sound'
 import { useTodayOverdueCount } from '@/hooks/use-today-overdue-count'
 import { renderBadgeDataUrl } from '@/lib/render-badge-icon'
-import { insertPosition as slotPosition, isUndatedTask, planMove, planSiblingMove } from '@/lib/reorder-positions'
+import { anchorsFor, insertPosition as slotPosition, planMove, planSiblingMove } from '@/lib/reorder-positions'
+import { canReorderTask, type TaskOrderKey } from '../../../shared/task-order'
 import { usePrintStore } from '@/stores/print-store'
 import { buildPrintHtml } from '@/lib/print-template'
 import { sanitizeTaskHtml } from '@/lib/sanitize-html'
@@ -369,11 +370,12 @@ export function AppShell() {
           const ctx = sectionContexts.get(sectionProjectId)
           if (ctx) {
             const otherTasks = ctx.tasks.filter((t) => t.id !== task.id)
-            // Anchor past the last UNDATED task — dated-task positions are
-            // arbitrary so they can't anchor "end of list".
+            // Anchor past the last task whose position means something in this order: the
+            // undated ones by default (dated-task positions are arbitrary), every one in Manual.
+            const anchors = anchorsFor(ctx.order)
             let lastUndatedPos = 0
             for (const t of otherTasks) {
-              if (isUndatedTask(t)) {
+              if (anchors(t)) {
                 lastUndatedPos = Math.max(lastUndatedPos, t.position ?? 0)
               }
             }
@@ -399,6 +401,8 @@ export function AppShell() {
                 }
               )
             } else if (
+              // Only where the order lets this row be dragged (cross-app semantics 12.4).
+              canReorderTask(ctx.order, task) &&
               ctx.tasks.length > 0 &&
               ctx.tasks[ctx.tasks.length - 1].id !== task.id
             ) {
@@ -410,12 +414,13 @@ export function AppShell() {
             }
           }
         } else if (overData?.sortable && active.id !== over.id) {
-          const { orderedTasks, viewId, sectionContexts } = useReorderStore.getState()
+          const { orderedTasks, viewId, order: listOrder, sectionContexts } = useReorderStore.getState()
           const targetTaskId = Number(String(over.id).replace('task-', ''))
 
           // Find source context (where the dragged task lives)
           let sourceViewId: number | null = viewId
           let sourceTasks: Task[] = orderedTasks
+          let sourceOrder: TaskOrderKey = listOrder
 
           if (!viewId || !orderedTasks.some((t) => t.id === task.id)) {
             sourceViewId = null
@@ -423,6 +428,7 @@ export function AppShell() {
               if (ctx.tasks.some((t) => t.id === task.id)) {
                 sourceViewId = ctx.viewId
                 sourceTasks = ctx.tasks
+                sourceOrder = ctx.order
                 break
               }
             }
@@ -432,6 +438,7 @@ export function AppShell() {
           let destViewId: number | null = viewId
           let destTasks: Task[] = orderedTasks
           let destProjectId: number | null = null
+          let destOrder: TaskOrderKey = listOrder
 
           if (viewId && orderedTasks.some((t) => t.id === targetTaskId)) {
             destProjectId = orderedTasks.find((t) => t.id === targetTaskId)?.project_id ?? null
@@ -442,19 +449,22 @@ export function AppShell() {
                 destViewId = ctx.viewId
                 destTasks = ctx.tasks
                 destProjectId = projId
+                destOrder = ctx.order
                 break
               }
             }
           }
 
           if (sourceViewId === destViewId && sourceViewId) {
-            // Same context — simple reorder
+            // Same context — simple reorder, where the order allows it: every row in Manual,
+            // undated rows among themselves in "Due date, then manual", none otherwise (12.4).
             const oldIndex = sourceTasks.findIndex((t) => t.id === task.id)
             const newIndex = sourceTasks.findIndex((t) => t.id === targetTaskId)
-            if (oldIndex !== -1 && newIndex !== -1) {
+            const target = sourceTasks[newIndex]
+            if (oldIndex !== -1 && newIndex !== -1 && canReorderTask(sourceOrder, task) && canReorderTask(sourceOrder, target)) {
               // Usually one position. Tasks that share a position (every task moved into a
               // project starts at 0) cannot be told apart by a midpoint, so planMove then spreads them.
-              const move = planMove(sourceTasks, oldIndex, newIndex)
+              const move = planMove(sourceTasks, oldIndex, newIndex, anchorsFor(sourceOrder))
               // The new order is rendered before the drag ends: the overlay then travels into the
               // slot the row really has, and no row is drawn in its old place for a frame.
               let applied: ReturnType<typeof applyReorderToCache> | undefined
@@ -476,7 +486,7 @@ export function AppShell() {
             // render. deferInvalidation tells useUpdateTask to skip refetching
             // view-tasks/section-tasks; the trailing reorderTask owns that.
             const targetIndex = destTasks.findIndex((t) => t.id === targetTaskId)
-            const insertPosition = slotPosition(destTasks, targetIndex).position
+            const insertPosition = slotPosition(destTasks, targetIndex, anchorsFor(destOrder)).position
 
             const finalDestViewId = destViewId
             updateTask.mutate(

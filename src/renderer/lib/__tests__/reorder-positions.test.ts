@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { NULL_DATE } from '../constants'
 import { sortProjectTasks } from '../task-sort'
 import {
+  anchorsFor,
   planInsertedSibling,
   MIN_POSITION_GAP,
   POSITION_STEP,
@@ -284,5 +285,30 @@ describe('planInsertedSibling', () => {
     const tight = [{ id: 1, position: 1 }, { id: 2, position: 1 }]
     const plan = planInsertedSibling(tight, { id: 9, position: 5 }, 1)
     expect(plan?.renumbered.length).toBeGreaterThan(0)
+  })
+})
+
+describe('the task order decides which rows anchor a drop (cross-app semantics 12.4)', () => {
+  it('uses every row in Manual, dated ones too', () => {
+    const list = [task('a', 100, DUE), task('b', 200), task('c', 300, DUE)]
+    // Dropped between a (dated) and b: in Manual the dated row anchors.
+    expect(insertPosition(list, 1, anchorsFor('manual')).position).toBe(150)
+    // In the default order only undated rows anchor.
+    expect(insertPosition(list, 1, anchorsFor('due_date_first')).position).toBe(100)
+  })
+
+  it('renumbers every row in Manual when there is no room', () => {
+    const list = [task('a', 0, DUE), task('b', 0), task('c', 0, DUE)]
+    const plan = planMove(list, 2, 0, anchorsFor('manual'))
+    const after = applyPlan(list, list[2].id, plan)
+    expect([...after].sort((x, y) => x.position - y.position).map((entry) => entry.title)).toEqual(['c', 'a', 'b'])
+  })
+})
+
+describe('the default order breaks ties by id', () => {
+  it('keeps rows with the same position in id order whatever order they arrive in', () => {
+    const a = task('a', 100)
+    const b = task('b', 100)
+    expect(sortProjectTasks([b, a]).map((entry) => entry.id)).toEqual([a.id, b.id])
   })
 })

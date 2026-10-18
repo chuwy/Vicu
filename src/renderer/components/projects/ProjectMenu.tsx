@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type RefObject } from 'react'
 import {
   Archive,
+  ArrowUpDown,
   Check,
   CheckCircle2,
   FolderInput,
@@ -30,6 +31,7 @@ import { effectivePermission } from '@/lib/collaboration'
 import { projectActions, type ProjectSurface } from '@/stores/project-actions-store'
 import type { Project } from '@/lib/vikunja-types'
 import { parentOptions } from './ProjectDialog'
+import { TaskOrderMenu } from './TaskOrderMenu'
 
 interface ParentPickerProps {
   anchorRef: RefObject<HTMLElement | null>
@@ -95,7 +97,7 @@ export interface ProjectMenuProps {
   onClose: () => void
 }
 
-type Sub = 'move' | 'review' | null
+type Sub = 'move' | 'review' | 'sort' | null
 
 /**
  * The one project menu, used by the sidebar (the … button and right-click), the project page
@@ -104,6 +106,7 @@ type Sub = 'move' | 'review' | null
 export function ProjectMenu({ project, surface, anchorRef, anchorPoint, opener = null, onClose }: ProjectMenuProps) {
   const moveRef = useRef<HTMLButtonElement>(null)
   const reviewRef = useRef<HTMLButtonElement>(null)
+  const sortRef = useRef<HTMLButtonElement>(null)
   const [sub, setSub] = useState<Sub>(null)
   const { data } = useProjects()
   const { data: config } = useAppConfig()
@@ -194,6 +197,17 @@ export function ProjectMenu({ project, surface, anchorRef, anchorPoint, opener =
           onClose={closeSub}
         />
       )}
+
+      <MenuItem
+        ref={sortRef}
+        icon={<ArrowUpDown />}
+        popup="menu"
+        expanded={sub === 'sort'}
+        onSelect={() => setSub((s) => (s === 'sort' ? null : 'sort'))}
+      >
+        Sort tasks
+      </MenuItem>
+      {sub === 'sort' && <TaskOrderMenu project={project} anchorRef={sortRef} onClose={closeSub} />}
 
       {(!isInbox || showReview) && <MenuSeparator />}
       {!isInbox && (

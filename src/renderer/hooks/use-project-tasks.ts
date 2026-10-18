@@ -6,6 +6,8 @@ import { useCompletedTasksStore } from '@/stores/completed-tasks-store'
 import { sortProjectTasks } from '@/lib/task-sort'
 import { mergeProjectUndoWindow } from '@/lib/undo-window'
 import { hasVicuMetadataMarker } from '@/lib/metadata-tasks'
+import { useTaskOrder } from './use-task-order'
+import { sortTasksByOrder } from '../../shared/task-order'
 
 export function useProjectTasks(projectId: number | undefined) {
   const matches = useMatches()
@@ -39,10 +41,15 @@ export function useProjectTasks(projectId: number | undefined) {
     select: (tasks) => sortProjectTasks(tasks.filter((task) => !hasVicuMetadataMarker(task.description))),
   })
 
+  // The project's task order (cross-app semantics 12): its own, its parent's or the global one.
+  const order = useTaskOrder(projectId)
+
   // Merge recently completed tasks back so they stay visible with strikethrough
   const data = useMemo(() => {
-    return mergeProjectUndoWindow(tasksQuery.data ?? [], completedTasks, pathname, projectId)
-  }, [tasksQuery.data, completedTasks, pathname, projectId])
+    const merged = mergeProjectUndoWindow(tasksQuery.data ?? [], completedTasks, pathname, projectId)
+    // The cache is kept in the default order; another order sorts on display.
+    return order === 'due_date_first' ? merged : sortTasksByOrder(merged, order)
+  }, [tasksQuery.data, completedTasks, pathname, projectId, order])
 
-  return { ...tasksQuery, data, viewId: viewQuery.data?.id }
+  return { ...tasksQuery, data, viewId: viewQuery.data?.id, order }
 }

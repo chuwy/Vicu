@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, Fragment } from 'react'
 import { SortableContext } from '@dnd-kit/sortable'
 import { useDroppable, useDndContext } from '@dnd-kit/core'
 import { cn } from '@/lib/cn'
+import { DEFAULT_TASK_ORDER, canReorderTask, type TaskOrderKey } from '../../../shared/task-order'
 import { verticalListSortingStrategyForeignSafe } from '@/lib/sortable-strategy'
 import { useReorderStore } from '@/stores/reorder-store'
 import { useSelectionStore } from '@/stores/selection-store'
@@ -27,6 +28,8 @@ interface SectionGroupProps {
   insertIndicator?: InsertIndicator | null
   childSections?: SectionData[]
   depth?: number
+  /** The section project's task order: which rows can be dragged (cross-app semantics 12.4). */
+  taskOrder?: TaskOrderKey
 }
 
 export function SectionGroup({
@@ -37,6 +40,7 @@ export function SectionGroup({
   insertIndicator,
   childSections = [],
   depth = 0,
+  taskOrder = DEFAULT_TASK_ORDER,
 }: SectionGroupProps) {
   const insertIndex =
     insertIndicator?.containerId === String(project.id) ? insertIndicator.index : undefined
@@ -60,9 +64,9 @@ export function SectionGroup({
 
   useEffect(() => {
     if (viewId != null) {
-      setSectionReorderContext(project.id, viewId, tasks)
+      setSectionReorderContext(project.id, viewId, tasks, taskOrder)
     }
-  }, [project.id, viewId, tasks, setSectionReorderContext])
+  }, [project.id, viewId, tasks, taskOrder, setSectionReorderContext])
 
   useEffect(() => {
     if (isAdding && inputRef.current) {
@@ -109,7 +113,7 @@ export function SectionGroup({
       />
 
       <SortableContext
-        items={tasks.map((t) => `task-${t.id}`)}
+        items={tasks.filter((t) => canReorderTask(taskOrder, t)).map((t) => `task-${t.id}`)}
         strategy={verticalListSortingStrategyForeignSafe}
       >
         {tasks.length > 0 && (
@@ -122,7 +126,7 @@ export function SectionGroup({
                     <div className="h-[2px] flex-1 rounded-full bg-[var(--accent-blue)]" />
                   </div>
                 )}
-                <TaskRow task={task} sortable />
+                <TaskRow task={task} sortable={canReorderTask(taskOrder, task)} />
               </Fragment>
             ))}
             {insertIndex != null && insertIndex >= tasks.length && (
@@ -184,6 +188,7 @@ export function SectionGroup({
               childSections={child.children}
               depth={depth + 1}
               insertIndicator={insertIndicator}
+              taskOrder={child.order}
             />
             </Fragment>
           ))}

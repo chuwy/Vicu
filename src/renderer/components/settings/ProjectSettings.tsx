@@ -15,11 +15,13 @@ import {
 import { useAppConfig } from '@/hooks/use-app-config'
 import { buildProjectTree, useProjects, type ProjectTreeNode } from '@/hooks/use-projects'
 import { useSharedProjectActions } from '@/hooks/use-project-actions'
+import { useTaskOrderSettings } from '@/hooks/use-task-order'
 import { cn } from '@/lib/cn'
 import { normalizeHex } from '@/lib/constants'
 import { projectActions, useProjectActionsStore } from '@/stores/project-actions-store'
 import { useRootDropActive, useRowDropZone } from '@/stores/project-drop-store'
 import type { AppConfig, Project } from '@/lib/vikunja-types'
+import { TASK_ORDER_KEYS, TASK_ORDER_LABELS, parseTaskOrder } from '../../../shared/task-order'
 
 const ROOT_ID = 'project-root-settings'
 
@@ -372,6 +374,34 @@ interface ProjectSettingsProps {
   onChange: (partial: Partial<AppConfig>) => void
 }
 
+/**
+ * The task order of every project and the Inbox (cross-app semantics section 12), synced to every
+ * device. A project can choose its own in its menu ("Sort tasks"); Today, Upcoming, Anytime and
+ * custom lists keep their own order.
+ */
+function TaskOrderSetting() {
+  const selectId = useId()
+  const { global, setGlobal } = useTaskOrderSettings()
+  return (
+    <div className="mt-4">
+      <label htmlFor={selectId} className="mb-1 block text-xs text-[var(--text-secondary)]">Sort project tasks by</label>
+      <select
+        id={selectId}
+        value={global}
+        onChange={(event) => setGlobal(parseTaskOrder(event.target.value))}
+        className="w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+      >
+        {TASK_ORDER_KEYS.map((key) => (
+          <option key={key} value={key}>{TASK_ORDER_LABELS[key]}</option>
+        ))}
+      </select>
+      <p className="mt-1 text-xs text-[var(--text-secondary)]">
+        Projects and the Inbox, on every device. A project can choose its own under Sort tasks in its menu.
+      </p>
+    </div>
+  )
+}
+
 /** Settings → Projects: the Inbox, the project list, how projects show in the sidebar, Review. */
 export function ProjectSettings({ config, onChange }: ProjectSettingsProps) {
   return (
@@ -388,6 +418,7 @@ export function ProjectSettings({ config, onChange }: ProjectSettingsProps) {
           />
           <span className="text-sm text-[var(--text-primary)]">Show project progress in the sidebar</span>
         </label>
+        <TaskOrderSetting />
       </div>
 
       <ReviewSettingsPanel config={config} onChange={onChange} />
