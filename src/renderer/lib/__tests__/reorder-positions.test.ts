@@ -11,8 +11,11 @@ import {
   isUndatedTask,
   planMove,
   planSiblingMove,
+  planTaskStep,
   sendPositionUpdates,
+  taskStepRefusal,
 } from '../reorder-positions'
+import { sortTasksByOrder } from '../../../shared/task-order'
 import type { Task } from '../vikunja-types'
 
 let nextId = 1
@@ -310,5 +313,89 @@ describe('the default order breaks ties by id', () => {
     const a = task('a', 100)
     const b = task('b', 100)
     expect(sortProjectTasks([b, a]).map((entry) => entry.id)).toEqual([a.id, b.id])
+  })
+})
+
+describe('planTaskStep (Move up, Move down; cross-app semantics 12.4)', () => {
+  /** The titles as displayed after the step. */
+  function stepped(list: Task[], title: string, step: 'up' | 'down', order: string): string[] | string {
+    const moved = list.find((entry) => entry.title === title)!
+    const result = planTaskStep(list, moved.id, step, order)
+    if (!result.ok) return result.reason
+    return sortTasksByOrder(applyPlan(list, moved.id, result.plan), order).map((entry) => entry.title)
+  }
+
+  it('trades places with the row above or below in Manual, dated rows too', () => {
+    const list = [task('a', 100, DUE), task('b', 200), task('c', 300, DUE)]
+    expect(stepped(list, 'b', 'up', 'manual')).toEqual(['b', 'a', 'c'])
+    expect(stepped(list, 'b', 'down', 'manual')).toEqual(['a', 'c', 'b'])
+    expect(stepped(list, 'a', 'down', 'manual')).toEqual(['b', 'a', 'c'])
+  })
+
+  it('stops at the edges', () => {
+    const list = [task('a', 100), task('b', 200)]
+    expect(stepped(list, 'a', 'up', 'manual')).toBe('edge')
+    expect(stepped(list, 'b', 'down', 'manual')).toBe('edge')
+  })
+
+  it('moves undated rows among themselves in the default order', () => {
+    const list = [task('dated', 900, DUE), task('a', 100), task('b', 200), task('c', 300)]
+    expect(stepped(list, 'b', 'up', 'due_date_first')).toEqual(['dated', 'b', 'a', 'c'])
+    expect(stepped(list, 'b', 'down', 'due_date_first')).toEqual(['dated', 'a', 'c', 'b'])
+    // The first undated row does not pass the dated one above it.
+    expect(stepped(list, 'a', 'up', 'due_date_first')).toBe('edge')
+    // A dated row stays in date order.
+    expect(stepped(list, 'dated', 'down', 'due_date_first')).toBe('dated')
+  })
+
+  it('moves nothing in the sorted orders', () => {
+    const list = [task('a', 100), task('b', 200)]
+    for (const order of ['due_date_priority', 'priority', 'title', 'newest', 'oldest']) {
+      expect(stepped(list, 'b', 'up', order)).toBe('sorted')
+    }
+  })
+
+  it('treats an unknown order as the default one', () => {
+    const list = [task('a', 100), task('b', 200)]
+    expect(stepped(list, 'b', 'up', 'some_future_order')).toEqual(['b', 'a'])
+  })
+
+  it('spreads rows that share a position so the step shows', () => {
+    const list = [task('a', 0), task('b', 0), task('c', 0)]
+    const result = planTaskStep(list, list[2].id, 'up', 'manual')
+    expect(result.ok && result.plan.renumbered.length).toBeGreaterThan(0)
+    expect(stepped(list, 'c', 'up', 'manual')).toEqual(['a', 'c', 'b'])
+  })
+
+  it('names the row it passes', () => {
+    const list = [task('a', 100), task('b', 200)]
+    const result = planTaskStep(list, list[1].id, 'up', 'manual')
+    expect(result.ok && result.neighbour.title).toBe('a')
+  })
+
+  it('answers not-listed for a task of another list', () => {
+    expect(planTaskStep([task('a', 100)], -1, 'up', 'manual')).toEqual({ ok: false, reason: 'not-listed' })
+  })
+})
+
+describe('taskStepRefusal', () => {
+  it('explains the sorted orders and dated rows in a toast', () => {
+    expect(taskStepRefusal({ ok: false, reason: 'sorted' }, 'a', 'up', 'priority', false)).toEqual({
+      message: 'Tasks here are sorted by Priority. Choose Manual in Sort tasks to move them.',
+      toast: true,
+    })
+    expect(taskStepRefusal({ ok: false, reason: 'dated' }, 'a', 'up', 'due_date_first', false)?.toast).toBe(true)
+  })
+
+  it('only announces an edge', () => {
+    expect(taskStepRefusal({ ok: false, reason: 'edge' }, 'Milk', 'up', 'manual', false)).toEqual({ message: '“Milk” is already first', toast: false })
+    expect(taskStepRefusal({ ok: false, reason: 'edge' }, 'Milk', 'down', 'manual', false)?.message).toBe('“Milk” is already last')
+    expect(taskStepRefusal({ ok: false, reason: 'edge' }, 'Milk', 'up', 'due_date_first', true)?.message).toBe(
+      '“Milk” is already the first task without a due date',
+    )
+  })
+
+  it('says nothing for a task of another list', () => {
+    expect(taskStepRefusal({ ok: false, reason: 'not-listed' }, 'a', 'up', 'manual', false)).toBeNull()
   })
 })

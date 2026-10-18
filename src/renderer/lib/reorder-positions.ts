@@ -13,6 +13,7 @@
 
 import { NULL_DATE } from './constants'
 import type { Task } from './vikunja-types'
+import { canReorderTask, orderAllowsReorder, parseTaskOrder, TASK_ORDER_LABELS } from '../../shared/task-order'
 
 /** The distance Vikunja keeps between neighbouring positions. */
 export const POSITION_STEP = 2 ** 16
@@ -103,6 +104,66 @@ export function planMove(
     else if (entry.position !== position) renumbered.push({ taskId: entry.id, position })
   }
   return { position: movedPosition, renumbered }
+}
+
+export type TaskStep = 'up' | 'down'
+
+/**
+ * Why a row cannot take a step: it is not in the list, the order sorts every row (Priority, Title
+ * ...), the row has a due date in "Due date, then manual", or the row next to it cannot be passed
+ * (the edge of the list, or a dated row above the first undated one).
+ */
+export type TaskStepBlock = 'not-listed' | 'sorted' | 'dated' | 'edge'
+
+export type TaskStepPlan =
+  | { ok: true; neighbour: Task; plan: MovePlan }
+  | { ok: false; reason: TaskStepBlock }
+
+/**
+ * Move up and Move down (Alt+Shift+arrows, the row menu): the task at its place in `tasks` (the
+ * list as displayed) trades places with the row above or below. Like a drag (cross-app semantics
+ * 12.4) both rows must be ones the order lets move, so in "Due date, then manual" an undated row
+ * never passes a dated one. The positions come from planMove, so equal neighbours are spread.
+ */
+export function planTaskStep(tasks: readonly Task[], taskId: number, step: TaskStep, order: unknown): TaskStepPlan {
+  const index = tasks.findIndex((entry) => entry.id === taskId)
+  if (index === -1) return { ok: false, reason: 'not-listed' }
+  if (!orderAllowsReorder(order)) return { ok: false, reason: 'sorted' }
+  if (!canReorderTask(order, tasks[index])) return { ok: false, reason: 'dated' }
+  // In the list without the moved task the row below sits at `index`, so going after it is `index + 1`.
+  const newIndex = step === 'up' ? index - 1 : index + 1
+  const neighbour = tasks[newIndex]
+  if (!neighbour || !canReorderTask(order, neighbour)) return { ok: false, reason: 'edge' }
+  return { ok: true, neighbour, plan: planMove(tasks, index, newIndex, anchorsFor(order)) }
+}
+
+/** What is said when a step cannot be taken. */
+export function taskStepRefusal(
+  result: Extract<TaskStepPlan, { ok: false }>,
+  title: string,
+  step: TaskStep,
+  order: unknown,
+  /** The edge is a dated row (the first undated row in "Due date, then manual"), not the list's end. */
+  datedEdge: boolean,
+): { message: string; toast: boolean } | null {
+  switch (result.reason) {
+    case 'not-listed':
+      return null
+    case 'sorted':
+      return {
+        message: `Tasks here are sorted by ${TASK_ORDER_LABELS[parseTaskOrder(order)]}. Choose Manual in Sort tasks to move them.`,
+        toast: true,
+      }
+    case 'dated':
+      return { message: 'Tasks with a due date stay in date order. Choose Manual in Sort tasks to move them.', toast: true }
+    case 'edge':
+      return {
+        message: datedEdge
+          ? `“${title}” is already the first task without a due date`
+          : `“${title}” is already ${step === 'up' ? 'first' : 'last'}`,
+        toast: false,
+      }
+  }
 }
 
 /** The tasks with the given positions applied (a copy; tasks that are not listed are returned as they are). */

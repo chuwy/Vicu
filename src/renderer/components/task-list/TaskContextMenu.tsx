@@ -1,6 +1,8 @@
 import { useState, useRef, useMemo } from 'react'
 import type { PopoverCloseReason } from '../overlay/Popover'
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
   CalendarRange,
   CalendarX,
@@ -20,6 +22,7 @@ import { isNullDate } from '@/lib/date-utils'
 import { normalizeHex, NULL_DATE } from '@/lib/constants'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useTaskActions } from '@/hooks/use-task-actions'
+import { canStepTask, useTaskStep } from '@/hooks/use-task-step'
 import { useProjects } from '@/hooks/use-projects'
 import { useLabels } from '@/hooks/use-labels'
 import { useSelectionStore } from '@/stores/selection-store'
@@ -38,12 +41,14 @@ interface TaskContextMenuProps {
   fallbackTask: Task
   x: number
   y: number
+  /** The row can be dragged in its list (its order allows it): the menu offers Move up and Move down. */
+  reorderable?: boolean
   onClose: () => void
 }
 
 type SubMenu = 'date' | 'project' | 'label' | null
 
-export function TaskContextMenu({ fallbackTask, x, y, onClose }: TaskContextMenuProps) {
+export function TaskContextMenu({ fallbackTask, x, y, reorderable = false, onClose }: TaskContextMenuProps) {
   const scheduleRef = useRef<HTMLButtonElement>(null)
   const projectRef = useRef<HTMLButtonElement>(null)
   const labelRef = useRef<HTMLButtonElement>(null)
@@ -67,6 +72,7 @@ export function TaskContextMenu({ fallbackTask, x, y, onClose }: TaskContextMenu
   })
 
   const [sub, setSub] = useState<SubMenu>(null)
+  const stepTask = useTaskStep()
 
   // A picker closes the menu too once something was chosen. When the browser dismissed the picker
   // (Escape, or a press that landed elsewhere) only the picker closes: the press may be on a menu
@@ -93,6 +99,11 @@ export function TaskContextMenu({ fallbackTask, x, y, onClose }: TaskContextMenu
   const allSameProject = tasks.every((t) => t.project_id === tasks[0].project_id)
   const currentProjectId = allSameProject ? tasks[0].project_id : undefined
   const datePickerCurrent = tasks.length === 1 ? tasks[0].due_date : NULL_DATE
+  // Move up and Move down, for one row, only where it can go (like a drag; cross-app semantics 12.4).
+  const [canMoveUp, canMoveDown] = useMemo(
+    () => (reorderable && !multi ? [canStepTask(fallbackTask.id, 'up'), canStepTask(fallbackTask.id, 'down')] : [false, false]),
+    [reorderable, multi, fallbackTask.id],
+  )
 
   const hint = (spec: string) => shortcutHint(spec, window.api.platform === 'darwin')
 
@@ -232,6 +243,17 @@ export function TaskContextMenu({ fallbackTask, x, y, onClose }: TaskContextMenu
           }}
           onClose={closeSubAndMenu}
         />
+      )}
+
+      {canMoveUp && (
+        <MenuItem icon={<ArrowUp />} shortcut={hint('Alt+Shift+↑')} onSelect={() => stepTask(fallbackTask.id, 'up')}>
+          Move up
+        </MenuItem>
+      )}
+      {canMoveDown && (
+        <MenuItem icon={<ArrowDown />} shortcut={hint('Alt+Shift+↓')} onSelect={() => stepTask(fallbackTask.id, 'down')}>
+          Move down
+        </MenuItem>
       )}
 
       <MenuSeparator />

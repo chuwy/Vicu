@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Task } from '@/lib/vikunja-types'
 import { DEFAULT_TASK_ORDER, type TaskOrderKey } from '../../shared/task-order'
 
-interface SectionContext {
+export interface SectionContext {
   viewId: number
   tasks: Task[]
   /** The section project's task order: which rows may be dragged and which anchor a drop. */
@@ -34,3 +34,20 @@ export const useReorderStore = create<ReorderState>((set) => ({
     }),
   clearSectionContexts: () => set({ sectionContexts: new Map() }),
 }))
+
+/**
+ * The list a task is reordered in: the view's own list when it holds the task, else the section
+ * that does. Null when no list on screen holds it (or the list has no view id yet).
+ */
+export function reorderContextOf(
+  state: Pick<ReorderState, 'viewId' | 'orderedTasks' | 'order' | 'sectionContexts'>,
+  taskId: number,
+): SectionContext | null {
+  if (state.viewId && state.orderedTasks.some((t) => t.id === taskId)) {
+    return { viewId: state.viewId, tasks: state.orderedTasks, order: state.order }
+  }
+  for (const ctx of state.sectionContexts.values()) {
+    if (ctx.tasks.some((t) => t.id === taskId)) return ctx
+  }
+  return null
+}

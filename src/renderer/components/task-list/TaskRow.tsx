@@ -330,7 +330,14 @@ function RowProjectLookup({ projectId }: { projectId: number }) {
   return project ? <RowProject title={project.title} color={project.hex_color} /> : null
 }
 
-function TaskRowInner({ task, nestedDepth = 0, parentProjectId, projectMeta, drag }: Omit<TaskRowProps, 'sortable'> & { drag: DragBehavior }) {
+function TaskRowInner({
+  task,
+  nestedDepth = 0,
+  parentProjectId,
+  projectMeta,
+  drag,
+  reorderable = false,
+}: Omit<TaskRowProps, 'sortable'> & { drag: DragBehavior; reorderable?: boolean }) {
   // Per-field subscriptions: each row re-renders only when *its own* derived
   // state flips, not on every focus/selection change anywhere in the list.
   const isExpanded = useSelectionStore((s) => s.expandedTaskId === task.id)
@@ -794,6 +801,7 @@ function TaskRowInner({ task, nestedDepth = 0, parentProjectId, projectMeta, dra
           fallbackTask={task}
           x={contextMenu.x}
           y={contextMenu.y}
+          reorderable={reorderable}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -943,7 +951,7 @@ function TaskRowInner({ task, nestedDepth = 0, parentProjectId, projectMeta, dra
 
 const SortableTaskRow = memo(function SortableTaskRow(props: TaskRowProps) {
   const drag = useSortableRow(props.task)
-  return <TaskRowInner task={props.task} nestedDepth={props.nestedDepth} parentProjectId={props.parentProjectId} projectMeta={props.projectMeta} drag={drag} />
+  return <TaskRowInner task={props.task} nestedDepth={props.nestedDepth} parentProjectId={props.parentProjectId} projectMeta={props.projectMeta} drag={drag} reorderable />
 }, sameRowProps)
 
 const DraggableTaskRow = memo(function DraggableTaskRow(props: TaskRowProps) {

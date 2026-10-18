@@ -7,6 +7,7 @@ import { DEFAULT_TASK_ORDER, canReorderTask, type TaskOrderKey } from '../../../
 import { verticalListSortingStrategyForeignSafe } from '@/lib/sortable-strategy'
 import { useCompleteTask, useUpdateTask, useDeleteTask } from '@/hooks/use-task-mutations'
 import { usePasteTasks } from '@/hooks/use-paste-tasks'
+import { useTaskStep } from '@/hooks/use-task-step'
 import { currentExpandedTaskId, useSelectionStore } from '@/stores/selection-store'
 import { useNewTaskRequestStore } from '@/stores/new-task-request-store'
 import { orderedTaskIds, resolveSelectedTasks, copySelectedTitles, isTaskNestedInCurrentList } from '@/lib/task-selection'
@@ -105,6 +106,7 @@ export function TaskList({
   const completeTask = useCompleteTask()
   const updateTask = useUpdateTask()
   const deleteTask = useDeleteTask()
+  const stepTask = useTaskStep()
   const qc = useQueryClient()
   // Narrow selectors: focusedTaskId drives the scroll-into-view effect, so it
   // stays a subscription; expandedTaskId/selectedTaskIds are only read inside
@@ -324,6 +326,16 @@ export function TaskList({
         active === document.body ||
         (!!listRef.current?.contains(active) && !active.closest('[role="menu"], [role="dialog"], [role="listbox"]'))
 
+      // Alt+Shift+Up/Down: move the focused row one place (Move up, Move down), where the list's order
+      // allows it (cross-app semantics 12.4). Lists that keep their own order (Today ...) do nothing.
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && arrowsForList) {
+        e.preventDefault()
+        if (sortable && focusedTaskId && !expandedTaskId && selectedTaskIds.size <= 1) {
+          stepTask(focusedTaskId, e.key === 'ArrowUp' ? 'up' : 'down')
+        }
+        return
+      }
+
       // Arrow Up
       if (e.key === 'ArrowUp' && arrowsForList) {
         e.preventDefault()
@@ -427,6 +439,8 @@ export function TaskList({
       completeTask,
       updateTask,
       deleteTask,
+      sortable,
+      stepTask,
       setFocusedTask,
       collapseAll,
       setIsAdding,
