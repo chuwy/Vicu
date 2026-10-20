@@ -189,6 +189,8 @@ const api = {
     ipcRenderer.invoke('fetch-task-attachment-bytes', taskId, attachmentId),
   openTaskAttachment: (taskId: number, attachmentId: number, fileName: string) =>
     ipcRenderer.invoke('open-task-attachment', taskId, attachmentId, fileName),
+  saveTaskAttachment: (taskId: number, attachmentId: number, fileName: string) =>
+    ipcRenderer.invoke('save-task-attachment', taskId, attachmentId, fileName),
   pickAndUploadAttachment: (taskId: number) =>
     ipcRenderer.invoke('pick-and-upload-attachment', taskId),
 

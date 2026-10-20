@@ -166,6 +166,7 @@ export interface ElectronAPI {
   deleteTaskAttachment(taskId: number, attachmentId: number): Promise<ApiResult<void>>
   fetchTaskAttachmentBytes(taskId: number, attachmentId: number): Promise<ApiResult<Uint8Array>>
   openTaskAttachment(taskId: number, attachmentId: number, fileName: string): Promise<ApiResult<void>>
+  saveTaskAttachment(taskId: number, attachmentId: number, fileName: string): Promise<ApiResult<{ saved: boolean; path?: string }>>
   pickAndUploadAttachment(taskId: number): Promise<ApiResult<{ count: number }>>
 
   // Quick Entry/View

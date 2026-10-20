@@ -4,6 +4,7 @@ import { tokenForConnectionTest } from './connection-test-token'
 import { isExternalAllowed } from './web-security-policy'
 import { isRiskyAttachment, sanitizeAttachmentFileName } from './attachment-safety'
 import { ensureAttachmentTempDir } from './attachment-temp'
+import { saveAttachment } from './attachment-save'
 import * as fs from 'fs'
 import * as path from 'path'
 import {
@@ -981,6 +982,23 @@ export function registerIpcHandlers(): void {
     } catch (err: unknown) {
       return { success: false, error: err instanceof Error ? err.message : 'Failed to open file' }
     }
+  })
+
+  // "Save": the user picks where (starting in Downloads), then the file is downloaded there.
+  handleTrusted('save-task-attachment', async (_event, taskId: number, attachmentId: number, fileName: string) => {
+    if (!Number.isSafeInteger(taskId) || !Number.isSafeInteger(attachmentId)) {
+      return { success: false, error: 'Invalid attachment' }
+    }
+    const win = getMainWindow()
+    return saveAttachment(fileName, attachmentId, app.getPath('downloads'), {
+      chooseFile: async (defaultPath) => {
+        const options = { defaultPath, properties: ['createDirectory' as const, 'showOverwriteConfirmation' as const] }
+        const choice = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+        return choice.canceled || !choice.filePath ? null : choice.filePath
+      },
+      download: () => downloadTaskAttachment(taskId, attachmentId),
+      writeFile: (filePath, data) => fs.promises.writeFile(filePath, data),
+    })
   })
 
   handleTrusted('pick-and-upload-attachment', async (_event, taskId: number) => {
