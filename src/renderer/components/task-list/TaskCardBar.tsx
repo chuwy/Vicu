@@ -243,13 +243,13 @@ export function TaskCardBar({
         prop="checklist"
         name="Subtasks"
         value={checklistLabel(progress.completed, progress.total)}
-        unsetName="Checklist"
+        unsetName="Add subtask"
         tip={progress.total > 0 ? 'Subtasks' : 'Add subtask'}
         isSet={progress.total > 0}
         open={is('subtasks')}
         buttonRef={subtasksRef}
         onClick={() => onToggle('subtasks')}
-        unsetLabel="Checklist"
+        unsetLabel="Subtasks"
         icon={<ListChecks className="h-3.5 w-3.5" aria-hidden="true" />}
       >
         <span>{checklistLabel(progress.completed, progress.total)}</span>

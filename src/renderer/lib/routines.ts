@@ -31,7 +31,6 @@ export interface RoutineOccurrence<TTask = { id: number; description: string }> 
   status: OccurrenceStatus
   loggedAt: string
   note: string
-  overdue: boolean
 }
 
 /** The device's local calendar date (a thin name kept for the views). */
@@ -52,7 +51,9 @@ export function occurrencesForDate<TTask>(
     const key = routineOccurrenceKey(definition.id, effectiveDate, slot.id)
     const record = carrier.payload.occurrences[key]
     let status = record?.status ?? 'PENDING'
-    if (status === 'PENDING' && definition.kind === 'HEALTH' && effectiveDate < today) status = 'NOT_LOGGED'
+    // A missed day of a schedule is not logged; an after-completion routine stays due until it is
+    // done (contract 6.7).
+    if (status === 'PENDING' && definition.schedule.type === 'calendar' && effectiveDate < today) status = 'NOT_LOGGED'
     return {
       carrier,
       key,
@@ -61,7 +62,6 @@ export function occurrencesForDate<TTask>(
       status,
       loggedAt: record?.loggedAt ?? '',
       note: record?.note ?? '',
-      overdue: definition.kind === 'CHORE' && status === 'PENDING' && effectiveDate < today,
     }
   })
 }
@@ -77,7 +77,7 @@ export function routineDay<TTask>(carriers: RoutineCarrier<TTask>[], date = loca
     .sort((left, right) => {
       const leftDone = left.status === 'COMPLETED' ? 1 : 0
       const rightDone = right.status === 'COMPLETED' ? 1 : 0
-      return leftDone - rightDone || Number(right.overdue) - Number(left.overdue) ||
+      return leftDone - rightDone ||
         left.slot.reminderMinutes - right.slot.reminderMinutes ||
         left.carrier.payload.definition.name.localeCompare(right.carrier.payload.definition.name)
     })

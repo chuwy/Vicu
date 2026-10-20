@@ -719,6 +719,43 @@ export function timeLabel(minutes: number): string {
   return `${hour}:${minute}`
 }
 
+// --- Definition fields (section 6.7) ------------------------------------------------------
+// The user sets a name, times and a schedule. The kind, and each slot's label and period, are
+// still written because older app versions need them to read and edit the routine.
+
+/** Older editors keep one time per period, and there are five periods. */
+export const MAX_ROUTINE_TIMES = 5
+
+const PERIOD_ORDER: RoutinePeriod[] = ['MORNING', 'AFTERNOON', 'EVENING', 'ANYTIME', 'HOME']
+
+/** CHORE for an after-completion schedule; otherwise the stored kind, HEALTH for a new routine. */
+export function routineKindFor(schedule: RoutineSchedule, stored?: RoutineKind): RoutineKind {
+  return schedule.type === 'after_completion' ? 'CHORE' : stored ?? 'HEALTH'
+}
+
+/** The period a time falls in: before 12:00 morning, before 17:00 afternoon, otherwise evening. */
+export function periodForMinutes(minutes: number): RoutinePeriod {
+  if (minutes < 12 * 60) return 'MORNING'
+  if (minutes < 17 * 60) return 'AFTERNOON'
+  return 'EVENING'
+}
+
+/**
+ * The slots in time order, each labelled with its time (`HH:MM`) and given a period no earlier
+ * slot has (its own when free, else the first free one). Everything else on a slot is kept.
+ */
+export function normalizeRoutineSlots(slots: RoutineSlot[]): RoutineSlot[] {
+  const taken = new Set<RoutinePeriod>()
+  return [...slots]
+    .sort((left, right) => left.reminderMinutes - right.reminderMinutes)
+    .map((slot) => {
+      const own = periodForMinutes(slot.reminderMinutes)
+      const period = !taken.has(own) ? own : PERIOD_ORDER.find((candidate) => !taken.has(candidate)) ?? own
+      taken.add(period)
+      return { ...slot, label: timeLabel(slot.reminderMinutes), period }
+    })
+}
+
 /**
  * One CSV cell, quoted. A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return
  * is prefixed with `'` so a spreadsheet does not run it as a formula.

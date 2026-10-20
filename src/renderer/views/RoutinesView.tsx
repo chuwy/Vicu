@@ -11,8 +11,6 @@ import {
   Download,
   HeartPulse,
   History,
-  Home,
-  Pill,
   Plus,
   Trash2,
   Undo2,
@@ -28,14 +26,12 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { useRoutineHistory, useRoutines, type RoutineDraft } from '@/hooks/use-routines'
 import {
   csvForRoutines,
-  isoWeekday,
   localDateString,
   newId,
   scheduleSummary,
   timeLabel,
   type RoutineCarrier,
-  type RoutineKind,
-  type RoutinePeriod,
+  MAX_ROUTINE_TIMES,
   type RoutineSlot,
 } from '@/lib/routines'
 import { isRoutinesEnabled, type Task } from '@/lib/vikunja-types'
@@ -52,30 +48,20 @@ const WEEKDAYS = [
   { id: 4, label: 'T' }, { id: 5, label: 'F' }, { id: 6, label: 'S' }, { id: 7, label: 'S' },
 ]
 
-function defaultSlot(kind: RoutineKind, index = 0): RoutineSlot {
-  const presets = [
-    { label: 'Morning', period: 'MORNING' as RoutinePeriod, minutes: 8 * 60 },
-    { label: 'Afternoon', period: 'AFTERNOON' as RoutinePeriod, minutes: 15 * 60 },
-    { label: 'Evening', period: 'EVENING' as RoutinePeriod, minutes: 20 * 60 },
-  ]
-  const preset = presets[Math.min(index, presets.length - 1)]
-  return kind === 'HEALTH'
-    ? { id: newId(), label: preset.label, period: preset.period, reminderMinutes: preset.minutes, reminderEnabled: true, followUpMinutes: 30 }
-    : { id: newId(), label: 'At home', period: 'HOME', reminderMinutes: 9 * 60, reminderEnabled: true, followUpMinutes: 60 }
+/** A new time: an hour after the latest one, 09:00 for the first. Label and period are set on save. */
+function newSlot(after?: number): RoutineSlot {
+  const minutes = after === undefined ? 9 * 60 : Math.min(after + 60, 23 * 60 + 59)
+  return { id: newId(), label: '', period: 'MORNING', reminderMinutes: minutes, reminderEnabled: true, followUpMinutes: 0 }
 }
 
-function emptyDraft(kind: RoutineKind = 'HEALTH'): RoutineDraft {
+function emptyDraft(): RoutineDraft {
   const today = localDateString()
   return {
     name: '',
-    kind,
-    healthSubtype: kind === 'HEALTH' ? 'SUPPLEMENT' : null,
-    amount: '',
-    unit: '',
-    iconName: kind === 'HEALTH' ? 'pill' : 'home',
-    color: kind === 'HEALTH' ? STORED_ROUTINE_COLORS[0] : STORED_ROUTINE_COLORS[2],
-    schedule: { type: 'calendar', weekdays: kind === 'HEALTH' ? [] : [isoWeekday(today)], weekInterval: 1, anchorDate: today },
-    slots: [defaultSlot(kind)],
+    iconName: '',
+    color: STORED_ROUTINE_COLORS[0],
+    schedule: { type: 'calendar', weekdays: [], weekInterval: 1, anchorDate: today },
+    slots: [newSlot()],
   }
 }
 
@@ -83,10 +69,6 @@ function draftFor(carrier: RoutineCarrier<Task>): RoutineDraft {
   const { definition } = carrier.payload
   return {
     name: definition.name,
-    kind: definition.kind,
-    healthSubtype: definition.healthSubtype,
-    amount: definition.amount,
-    unit: definition.unit,
     iconName: definition.iconName,
     color: definition.color,
     schedule: definition.schedule,
@@ -128,11 +110,6 @@ function RoutineEditor({
     ...current,
     slots: current.slots.map((slot) => slot.id === id ? { ...slot, ...patch } : slot),
   }))
-  const setKind = (kind: RoutineKind) => setDraft((current) => {
-    if (current.kind === kind) return current
-    const fresh = emptyDraft(kind)
-    return { ...fresh, name: current.name, color: fresh.color }
-  })
   const calendar = draft.schedule.type === 'calendar' ? draft.schedule : null
   const afterCompletion = draft.schedule.type === 'after_completion' ? draft.schedule : null
 
@@ -140,44 +117,10 @@ function RoutineEditor({
     <DialogFrame title={carrier ? 'Edit routine' : 'New routine'} onClose={onClose}>
       <form className="overflow-y-auto" onSubmit={(event) => { event.preventDefault(); onSave(draft) }}>
         <div className="space-y-5 p-5">
-          <div className="grid grid-cols-2 gap-2 rounded-card bg-[var(--bg-secondary)] p-1">
-            {(['HEALTH', 'CHORE'] as RoutineKind[]).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => setKind(kind)}
-                className={cn('flex h-9 items-center justify-center gap-2 rounded-control text-sm font-medium transition', draft.kind === kind ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)]')}
-              >
-                {kind === 'HEALTH' ? <Pill className="h-4 w-4" /> : <Home className="h-4 w-4" />}
-                {kind === 'HEALTH' ? 'Health' : 'Chore'}
-              </button>
-            ))}
-          </div>
-
           <div>
             <label className={LABEL}>Name</label>
-            <input data-autofocus className={FIELD} value={draft.name} placeholder={draft.kind === 'HEALTH' ? 'Creatine' : 'Take out the trash'} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+            <input data-autofocus className={FIELD} value={draft.name} placeholder="Take vitamins" onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
           </div>
-
-          {draft.kind === 'HEALTH' && (
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className={LABEL}>Type</label>
-                <select className={FIELD} value={draft.healthSubtype ?? 'SUPPLEMENT'} onChange={(event) => setDraft({ ...draft, healthSubtype: event.target.value as 'SUPPLEMENT' | 'MEDICATION' })}>
-                  <option value="SUPPLEMENT">Supplement</option>
-                  <option value="MEDICATION">Medication</option>
-                </select>
-              </div>
-              <div>
-                <label className={LABEL}>Amount</label>
-                <input className={FIELD} value={draft.amount} placeholder="5" onChange={(event) => setDraft({ ...draft, amount: event.target.value })} />
-              </div>
-              <div>
-                <label className={LABEL}>Unit</label>
-                <input className={FIELD} value={draft.unit} placeholder="g" onChange={(event) => setDraft({ ...draft, unit: event.target.value })} />
-              </div>
-            </div>
-          )}
 
           <div>
             <label className={LABEL}>Color</label>
@@ -190,12 +133,17 @@ function RoutineEditor({
 
           <div>
             <label className={LABEL}>Schedule</label>
-            {draft.kind === 'CHORE' && (
-              <div className="mb-3 flex gap-2">
-                <button type="button" onClick={() => setDraft({ ...draft, schedule: { type: 'calendar', weekdays: [isoWeekday(localDateString())], weekInterval: 1, anchorDate: localDateString() } })} className={cn('rounded-control border px-3 py-1.5 text-xs font-medium', calendar ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-[var(--border-color)] text-[var(--text-secondary)]')}>On a schedule</button>
+            {(
+              <div className="mb-2 flex gap-2">
+                <button type="button" onClick={() => setDraft({ ...draft, schedule: { type: 'calendar', weekdays: [], weekInterval: 1, anchorDate: localDateString() } })} className={cn('rounded-control border px-3 py-1.5 text-xs font-medium', calendar ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-[var(--border-color)] text-[var(--text-secondary)]')}>On a schedule</button>
                 <button type="button" onClick={() => setDraft({ ...draft, schedule: { type: 'after_completion', intervalDays: 14, firstDueDate: localDateString() } })} className={cn('rounded-control border px-3 py-1.5 text-xs font-medium', !calendar ? 'border-accent-blue bg-accent-blue/10 text-accent-blue' : 'border-[var(--border-color)] text-[var(--text-secondary)]')}>After completion</button>
               </div>
             )}
+            <p className="mb-3 text-xs text-[var(--text-secondary)]">
+              {calendar
+                ? 'Repeats on the days you pick, whether or not you did it last time.'
+                : 'Comes back a set number of days after you complete it.'}
+            </p>
             {calendar ? (
               <div className="space-y-3 rounded-card border border-[var(--border-color)] p-3">
                 <div className="flex gap-1.5">
@@ -229,15 +177,15 @@ function RoutineEditor({
           <div>
             <div className="mb-2 flex items-center">
               <label className="flex-1 text-caption uppercase tracking-wide text-[var(--text-secondary)]">Times & reminders</label>
-              {draft.kind === 'HEALTH' && <button type="button" onClick={() => setDraft({ ...draft, slots: [...draft.slots, defaultSlot('HEALTH', draft.slots.length)] })} className="flex items-center gap-1 text-xs font-medium text-accent-blue"><Plus className="h-3.5 w-3.5" /> Add time</button>}
+              {draft.slots.length < MAX_ROUTINE_TIMES && <button type="button" onClick={() => setDraft({ ...draft, slots: [...draft.slots, newSlot(Math.max(...draft.slots.map((slot) => slot.reminderMinutes)))] })} className="flex items-center gap-1 text-xs font-medium text-accent-blue"><Plus className="h-3.5 w-3.5" /> Add time</button>}
             </div>
             <div className="space-y-2">
               {draft.slots.map((slot) => (
                 <div key={slot.id} className="rounded-card border border-[var(--border-color)] p-3">
                   <div className="flex items-center gap-2">
-                    <input className="h-8 min-w-0 flex-1 rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 text-xs text-[var(--text-primary)]" value={slot.label} onChange={(event) => updateSlot(slot.id, { label: event.target.value })} />
-                    <input type="time" className="h-8 rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 text-xs text-[var(--text-primary)]" value={timeLabel(slot.reminderMinutes)} onChange={(event) => { const [hours, minutes] = event.target.value.split(':').map(Number); updateSlot(slot.id, { reminderMinutes: hours * 60 + minutes }) }} />
-                    {draft.slots.length > 1 && <button type="button" onClick={() => setDraft({ ...draft, slots: draft.slots.filter((item) => item.id !== slot.id) })} className="p-1 text-[var(--text-secondary)] hover:text-danger"><X className="h-4 w-4" /></button>}
+ <input type="time" aria-label="Time" className="h-8 rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 text-xs text-[var(--text-primary)]" value={timeLabel(slot.reminderMinutes)} onChange={(event) => { const [hours, minutes] = event.target.value.split(':').map(Number); updateSlot(slot.id, { reminderMinutes: hours * 60 + minutes }) }} />
+                    <span className="flex-1" />
+                    {draft.slots.length > 1 && <button type="button" aria-label="Remove time" onClick={() => setDraft({ ...draft, slots: draft.slots.filter((item) => item.id !== slot.id) })} className="p-1 text-[var(--text-secondary)] hover:text-danger"><X className="h-4 w-4" /></button>}
                   </div>
                   <div className="mt-2 flex items-center gap-4">
                     <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]"><Checkbox checked={slot.reminderEnabled} onChange={(event) => updateSlot(slot.id, { reminderEnabled: event.target.checked })} /><Bell className="h-3.5 w-3.5" /> Remind me</label>
@@ -300,7 +248,7 @@ export function RoutinesView() {
       <div className="flex h-full flex-1 flex-col items-center justify-center gap-2 bg-[var(--bg-primary)] px-6 text-center">
         <HeartPulse className="h-8 w-8 text-[var(--text-tertiary)]" />
         <p className="text-sm font-medium text-[var(--text-primary)]">Routines are turned off</p>
-        <p className="text-xs text-[var(--text-secondary)]">Turn them on in Settings to track health and home routines.</p>
+        <p className="text-xs text-[var(--text-secondary)]">Turn them on in Settings to keep track of what you do regularly.</p>
       </div>
     )
   }
@@ -337,7 +285,7 @@ function RoutinesContent() {
     <div className="flex h-full min-w-0 flex-1 flex-col bg-[var(--bg-primary)]">
       <PageHeader
         title="Routines"
-        subtitle="Daily health and recurring home rhythms"
+        subtitle="What you do regularly, day by day"
         icon={<SmartListIcon list="routines" className="h-5 w-5" />}
         actions={
           <>
@@ -359,7 +307,7 @@ function RoutinesContent() {
                 icon={Plus}
                 identity="routines"
                 title="Create your first routine"
-                subtitle="Track supplements, medication, or chores without turning them into an endless pile of recurring tasks."
+                subtitle="Track what you do regularly, like taking vitamins or watering the plants, without turning it into an endless pile of recurring tasks."
                 className="py-10"
                 action={<Button variant="secondary" onClick={() => setEditor('new')}><Plus className="h-4 w-4" /> Create routine</Button>}
               />
@@ -367,11 +315,10 @@ function RoutinesContent() {
             <div className="space-y-2">
               {active.map((carrier) => {
                 const definition = carrier.payload.definition
-                const Icon = definition.kind === 'HEALTH' ? Pill : Home
                 return (
                   <article key={definition.id} className="group flex items-center gap-3 rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-3.5 transition hover:border-[var(--text-tertiary)] hover:shadow-sm">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card text-white" style={{ backgroundColor: definition.color || STORED_ROUTINE_COLORS[0] }}><Icon className="h-5 w-5" /></div>
-                    <button type="button" onClick={() => setHistory(carrier)} className="min-w-0 flex-1 text-left"><div className="truncate text-sm font-semibold text-[var(--text-primary)]">{definition.name}</div><div className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">{[definition.amount, definition.unit, scheduleSummary(definition)].filter(Boolean).join(' / ')}</div></button>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card text-white" style={{ backgroundColor: definition.color || STORED_ROUTINE_COLORS[0] }}><HeartPulse className="h-5 w-5" /></div>
+                    <button type="button" onClick={() => setHistory(carrier)} className="min-w-0 flex-1 text-left"><div className="truncate text-sm font-semibold text-[var(--text-primary)]">{definition.name}</div><div className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">{[scheduleSummary(definition), [...definition.slots].sort((left, right) => left.reminderMinutes - right.reminderMinutes).map((slot) => formatMinutesOfDay(slot.reminderMinutes)).join(', ')].filter(Boolean).join(' · ')}</div></button>
                     <button type="button" title="History" onClick={() => setHistory(carrier)} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><History className="h-4 w-4" /></button>
                     <button type="button" title="Edit" onClick={() => setEditor(carrier)} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><ChevronRight className="h-4 w-4" /></button>
                     <button type="button" title="Archive" onClick={() => routines.archiveRoutine.mutate({ carrier, archived: true })} className="rounded-control p-2 text-[var(--text-secondary)] opacity-0 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] group-hover:opacity-100"><Archive className="h-4 w-4" /></button>

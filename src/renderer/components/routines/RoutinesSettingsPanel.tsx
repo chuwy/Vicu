@@ -15,7 +15,7 @@ export function RoutinesSettingsPanel({ config, onChange }: RoutinesSettingsPane
     <div className="rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-5">
       <h2 className="mb-1 text-sm font-semibold text-[var(--text-primary)]">Routines</h2>
       <p className="mb-4 text-xs text-[var(--text-secondary)]">
-        Daily health and home routines. Turning them off hides them and stops their reminders; your routines and their history are kept.
+        What you do regularly. Turning them off hides them and stops their reminders; your routines and their history are kept.
       </p>
 
       <div className="space-y-3">

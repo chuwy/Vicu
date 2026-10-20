@@ -336,6 +336,38 @@ Android 1.8.x kept pruned history in a phone-only table. On first launch of 1.9.
 uploads that table into archive parts (merged with any existing parts), then treats the table
 as a cache.
 
+### 6.7 Routine definition fields
+
+Routines have one type for the user: a name, one to five times and a schedule. There is no
+health or chore choice, no subtype, no amount or unit and no named periods. Older app versions
+still read these fields (mobile up to 2.2 fails to decode a routine without `kind` or a slot
+without `label` and `period`; desktop up to 2.2 trims `amount` and `unit`), so every write keeps
+them with these values:
+
+- `kind`: `"CHORE"` when the schedule is `after_completion`. Otherwise `"HEALTH"` for a new
+  routine; an edit keeps the stored kind unless the schedule changes to `after_completion`.
+- `healthSubtype`: `null`. `amount` and `unit`: `""`.
+- Each slot keeps its `id`, its `followUpMinutes` and any unknown fields across edits (history
+  is keyed by slot id).
+- A slot's `label` is its time as `HH:MM` (24-hour, two-digit hours).
+- A slot's `period` follows its time and is unique within the routine: before 12:00
+  `"MORNING"`, before 17:00 `"AFTERNOON"`, otherwise `"EVENING"`; when that period is taken by an
+  earlier slot (slots in time order), the first free one of `"MORNING"`, `"AFTERNOON"`,
+  `"EVENING"`, `"ANYTIME"`, `"HOME"`. Older editors key slots by period, so a routine has at
+  most five slots.
+
+Neither app shows `kind`, `healthSubtype`, `amount`, `unit`, `label` or `period`, and none of
+them changes what is shown. (The mobile app still writes explicit `NOT_LOGGED` records for the
+missed days of a `HEALTH` calendar routine, which older versions expect; it changes nothing on
+screen.) Status of an occurrence on a past date:
+
+- `calendar` schedule: an occurrence without a record (or still `PENDING`) on a date before
+  today is shown as **Not logged**.
+- `after_completion` schedule: the due occurrence stays due (`PENDING`) until it is completed
+  or skipped, and is shown on today when its due date has passed (section 6.5). It is never
+  marked Not logged.
+- Routines have no overdue state.
+
 ---
 
 ## 7. Completion hold
