@@ -6,6 +6,8 @@ A personal task manager for your desktop, powered by [Vikunja](https://vikunja.i
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Built with](https://img.shields.io/badge/electron%20+%20react%20+%20typescript-47848F)
 
+> **Vicu is also on your phone.** [Vicu Mobile](https://github.com/rendyhd/Vicu-Mobile) for Android, iPhone and iPad works with the same Vikunja server, so your tasks, custom lists, routines and settings follow you. Get it: [iPhone and iPad (TestFlight)](https://testflight.apple.com/join/c6wuvXrH) · [Android (Google Play beta)](https://github.com/rendyhd/Vicu-Mobile#download) · [Android APK](https://github.com/rendyhd/Vicu-Mobile/releases/latest)
+
 <p align="center">
   <img width="2260" height="1000" src="https://github.com/user-attachments/assets/6d70e449-0339-45cd-8616-42524476ee86">
 </p>
@@ -68,7 +70,7 @@ Two syntax modes are available in Settings: **Todoist** (default — `@` for lab
 ## Features
 
 - **Smart lists** — Inbox, Today, Upcoming, Anytime, Logbook
-- **Custom lists** — User-defined filtered views by project, due date window (overdue, today, this week, this month, with or without a date; today, this week, and this month have an **Include overdue tasks** option), priority, labels, and sort order; they are stored on your Vikunja server, so Vicu Android shows the same lists
+- **Custom lists** — User-defined filtered views by project, due date window (overdue, today, this week, this month, with or without a date; today, this week, and this month have an **Include overdue tasks** option), priority, labels, and sort order; they are stored on your Vikunja server, so Vicu Mobile shows the same lists
 - **Subtasks** — Parent-child task relationships
 - **Tags and labels** — With custom colors, drag a task to a sidebar label to apply it
 - **Recurring tasks** — Daily, weekly, monthly, or custom intervals
@@ -76,7 +78,7 @@ Two syntax modes are available in Settings: **Todoist** (default — `@` for lab
 - **Reminders** — Per-task reminders (absolute or relative to due/start/end date), configurable daily and secondary reminders, overdue and upcoming notifications
 - **Drag-and-drop** — Reorder tasks, projects, and custom lists; drag tasks to labels
 - **Dark / light / system themes**
-- **Same data on desktop and Android** — due dates, custom lists, review status, routines, and quick-add parsing follow one shared specification ([`docs/cross-app-semantics-v1.md`](docs/cross-app-semantics-v1.md)), so the same task means the same thing on both
+- **Same data on desktop and mobile** — due dates, custom lists, review status, routines, and quick-add parsing follow one shared specification ([`docs/cross-app-semantics-v1.md`](docs/cross-app-semantics-v1.md)), so the same task means the same thing on both
 - **Offline editing** — When the server is unreachable you can keep working: changes made in the main window, Quick Entry, and Quick View are queued and sent automatically when it is back, and the last task lists stay available. A sync panel in the sidebar shows pending and failed changes, with retry and discard
 - **System tray** — Launch on startup (Windows, macOS, and Linux), optionally **Start hidden** so the main window stays closed at login, quick access to all windows
 - **Authentication** — API token, username/password with TOTP two-factor and JWT auto-renewal, or OpenID Connect (OIDC/SSO) with provider discovery and silent re-auth
