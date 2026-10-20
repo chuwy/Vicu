@@ -55,17 +55,24 @@ describe('routine scheduling', () => {
     expect(isCalendarScheduled(schedule, '2026-08-17')).toBe(true)
   })
 
-  it('keeps completion-based chores visible when overdue', () => {
+  it('keeps a completion-based routine due on today until it is done', () => {
     const source = payload()
-    source.definition.kind = 'CHORE'
-    source.definition.healthSubtype = null
     source.definition.schedule = { type: 'after_completion', intervalDays: 14, firstDueDate: '2026-08-01' }
     expect(routineDueDate(source)).toBe('2026-08-01')
     const carrier = { task: { id: 10, description: '' }, payload: source }
     const occurrences = occurrencesForDate(carrier, '2026-08-11', '2026-08-11')
     expect(occurrences).toHaveLength(1)
     expect(occurrences[0].scheduledDate).toBe('2026-08-01')
-    expect(occurrences[0].overdue).toBe(true)
+    expect(occurrences[0].status).toBe('PENDING')
+  })
+
+  it('shows a missed day of a schedule as not logged, whatever the kind', () => {
+    const source = payload()
+    source.definition.kind = 'CHORE'
+    source.definition.schedule = { type: 'calendar', weekdays: [], weekInterval: 1, anchorDate: '2026-08-01' }
+    const carrier = { task: { id: 10, description: '' }, payload: source }
+    expect(occurrencesForDate(carrier, '2026-08-10', '2026-08-11')[0].status).toBe('NOT_LOGGED')
+    expect(occurrencesForDate(carrier, '2026-08-11', '2026-08-11')[0].status).toBe('PENDING')
   })
 })
 

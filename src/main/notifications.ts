@@ -116,9 +116,9 @@ export async function refreshRoutineReminders(): Promise<void> {
         const status = payload.occurrences[key]?.status ?? 'PENDING'
         if (status !== 'PENDING') continue
         const base = localDateAtMinutes(candidate, slot.reminderMinutes).getTime()
-        scheduleRoutineTimer(`${key}:primary`, base, now, payload, slot.label, false, config)
+        scheduleRoutineTimer(`${key}:primary`, base, now, payload, false, config)
         if (slot.followUpMinutes > 0) {
-          scheduleRoutineTimer(`${key}:followup`, base + slot.followUpMinutes * 60_000, now, payload, slot.label, true, config)
+          scheduleRoutineTimer(`${key}:followup`, base + slot.followUpMinutes * 60_000, now, payload, true, config)
         }
       }
     }
@@ -196,14 +196,13 @@ function scheduleRoutineTimer(
   triggerAt: number,
   now: number,
   payload: RoutinePayload,
-  slotLabel: string,
   followUp: boolean,
   config: AppConfig,
 ): void {
   const delay = triggerAt - now
   if (delay <= 0 || delay > 2_147_483_647 || routineReminderTimers.has(key)) return
   const timerId = setTimeout(() => {
-    fireRoutineReminder(payload, slotLabel, followUp, config)
+    fireRoutineReminder(payload, followUp, config)
     routineReminderTimers.delete(key)
   }, delay)
   routineReminderTimers.set(key, timerId)
@@ -211,17 +210,15 @@ function scheduleRoutineTimer(
 
 function fireRoutineReminder(
   payload: RoutinePayload,
-  slotLabel: string,
   followUp: boolean,
   configSnapshot: AppConfig,
 ): void {
   const config = loadConfig() || configSnapshot
   if (!config.notifications_enabled || !isRoutinesEnabled(config)) return
   const definition = payload.definition
-  const amount = [definition.amount, definition.unit].filter(Boolean).join(' ')
   const notification = new Notification({
     title: followUp ? `Still pending: ${definition.name}` : definition.name,
-    body: [amount, slotLabel, followUp ? 'A gentle follow-up' : definition.kind === 'CHORE' ? 'Chore reminder' : 'Routine reminder'].filter(Boolean).join(' / '),
+    body: followUp ? 'A gentle follow-up' : 'Routine reminder',
     silent: !(config.notifications_task_reminder_sound ?? config.notifications_sound),
     timeoutType: (config.notifications_task_reminder_persistent ?? config.notifications_persistent) ? 'never' : 'default',
     icon: getIcon(),

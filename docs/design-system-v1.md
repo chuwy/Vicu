@@ -108,7 +108,7 @@ A task row, left to right:
   least 24 px on desktop and 48 dp on Android);
 - the body: the title (`taskTitle`) on line 1, level with the checkbox, and under it the meta line
   (`meta`, `text.secondary`) holding the project when the list or group does not imply it, label
-  chips, the checklist count ("1 of 3"), a notes icon, the repeat icon, the attachment icon and,
+  chips, the subtask count ("1 of 3"), a notes icon, the repeat icon, the attachment icon and,
   last, the comment count;
 - the trailing cluster: the assignee avatars, the due phrase (a time or the overdue age), the
   reminder bell, and the priority mark last.
@@ -137,7 +137,7 @@ project looks exactly like a task in a private project.
 ### 4.1 Open task properties
 
 The open task (the desktop card bar, the Android editor) lists its properties in one order on both
-apps: Date, Priority, Label, Checklist, Reminder, Repeat, Project, **Assign**, Attachments,
+apps: Date, Priority, Label, Subtasks, Reminder, Repeat, Project, **Assign**, Attachments,
 **Comments**, More. A set property is a chip with a border, an unset one a quiet "+ Name".
 
 - **Assign** exists only on shared projects. Unset: "+ Assign". Set: a stack of up to three avatars

@@ -12,7 +12,9 @@ import type { Task } from '@/lib/vikunja-types'
 import {
   deviceId,
   localDateString,
+  MAX_ROUTINE_TIMES,
   newId,
+  normalizeRoutineSlots,
   parseRoutineEnvelope,
   readRoutineHistory,
   routineDay,
@@ -23,10 +25,25 @@ import {
   type RoutineDefinition,
   type RoutineOccurrenceRecord,
   type RoutinePayload,
+  routineKindFor,
   type RoutineSlot,
 } from '@/lib/routines'
 
-export interface RoutineDraft extends Omit<RoutineDefinition, 'id' | 'activeFrom' | 'archived' | 'createdAt' | 'updatedAt' | 'updatedBy'> {}
+/**
+ * What the editor sets. The kind, subtype, amount, unit and each time's label and period are no
+ * longer chosen; they are written with the values older app versions read (contract 6.7).
+ */
+export type RoutineDraft = Pick<RoutineDefinition, 'name' | 'iconName' | 'color' | 'schedule' | 'slots'>
+
+function checkDraft(draft: RoutineDraft) {
+  if (!draft.name.trim()) throw new Error('Give this routine a name')
+  if (draft.slots.length === 0) throw new Error('Add at least one time')
+  if (draft.slots.length > MAX_ROUTINE_TIMES) throw new Error(`A routine has at most ${MAX_ROUTINE_TIMES} times`)
+}
+
+function draftSlots(draft: RoutineDraft): RoutineSlot[] {
+  return normalizeRoutineSlots(draft.slots.map((slot) => ({ ...slot, id: slot.id || newId() })))
+}
 
 interface RoutineLoad {
   carriers: RoutineCarrier<Task>[]
@@ -107,15 +124,16 @@ export function useRoutines({ enabled = true }: { enabled?: boolean } = {}) {
     mutationFn: async (draft: RoutineDraft) => {
       const config = await api.getConfig()
       if (!config?.inbox_project_id) throw new Error('Choose an inbox project before creating routines')
-      if (!draft.name.trim()) throw new Error('Give this routine a name')
-      if (draft.slots.length === 0) throw new Error('Add at least one time')
+      checkDraft(draft)
       const now = new Date().toISOString()
       const definition: RoutineDefinition = {
         ...draft,
         name: draft.name.trim(),
-        amount: draft.amount.trim(),
-        unit: draft.unit.trim(),
-        slots: draft.slots.map((slot) => ({ ...slot, id: slot.id || newId() })),
+        kind: routineKindFor(draft.schedule),
+        healthSubtype: null,
+        amount: '',
+        unit: '',
+        slots: draftSlots(draft),
         id: newId(),
         activeFrom: localDateString(),
         archived: false,
@@ -132,17 +150,20 @@ export function useRoutines({ enabled = true }: { enabled?: boolean } = {}) {
 
   const updateMutation = useMutation({
     mutationFn: async ({ carrier, draft }: { carrier: RoutineCarrier<Task>; draft: RoutineDraft }) => {
+      checkDraft(draft)
       const now = new Date().toISOString()
+      const stored = carrier.payload.definition
       const payload: RoutinePayload = {
         ...carrier.payload,
         definition: {
-          ...carrier.payload.definition,
+          ...stored,
           ...draft,
           name: draft.name.trim(),
-          amount: draft.amount.trim(),
-          unit: draft.unit.trim(),
-          healthSubtype: draft.kind === 'HEALTH' ? draft.healthSubtype : null,
-          slots: draft.slots.map((slot) => ({ ...slot, id: slot.id || newId() })),
+          kind: routineKindFor(draft.schedule, stored.kind),
+          healthSubtype: null,
+          amount: '',
+          unit: '',
+          slots: draftSlots(draft),
           updatedAt: now,
           updatedBy: deviceId(),
         },

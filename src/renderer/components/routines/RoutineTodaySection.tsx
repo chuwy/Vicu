@@ -20,7 +20,6 @@ function RoutineCheck({
   const completed = occurrence.status === 'COMPLETED'
   const skipped = occurrence.status === 'SKIPPED'
   const definition = occurrence.carrier.payload.definition
-  const detail = [definition.amount, definition.unit].filter(Boolean).join(' ')
 
   return (
     <div className={cn(
@@ -47,18 +46,13 @@ function RoutineCheck({
           <span className={cn('truncate text-section text-[var(--text-primary)]', completed && 'line-through')}>
             {definition.name}
           </span>
-          {definition.slots.length > 1 && (
-            <span className="shrink-0 text-meta text-[var(--text-secondary)]">{occurrence.slot.label}</span>
-          )}
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-meta text-[var(--text-secondary)]">
-          {detail && <span>{detail}</span>}
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-3 w-3" />
             {formatMinutesOfDay(occurrence.slot.reminderMinutes, dateFormat)}
           </span>
           {occurrence.slot.reminderEnabled && <Bell className="h-3 w-3" />}
-          {occurrence.overdue && <span className="font-medium text-status-overdue">Overdue</span>}
           {occurrence.status === 'NOT_LOGGED' && <span>Not logged</span>}
           {skipped && <span>Skipped</span>}
         </div>
