@@ -9,7 +9,7 @@ import type { OfflineQueueResult, OfflineQueueSnapshot, OfflineReplayEvent } fro
 export interface UnsyncedWork {
   queuedChanges: number
   customListsUnsynced: boolean
-  /** Synced settings (the Inbox, the task order) that have not reached the server. */
+  /** Synced settings (the Inbox, the task order, location reminders) that have not reached the server. */
   preferencesUnsynced?: boolean
 }
 
@@ -22,7 +22,7 @@ export function signOutWarning(work: UnsyncedWork): string | null {
     lines.push('Changes to your custom lists have not reached the server yet. Signing out deletes them.')
   }
   if (work.preferencesUnsynced) {
-    lines.push('Changes to your synced settings (the Inbox, the task order) have not reached the server yet. Signing out deletes them.')
+    lines.push('Changes to your synced settings (the Inbox, the task order, location reminders) have not reached the server yet. Signing out deletes them.')
   }
   if (work.queuedChanges > 0) {
     const one = work.queuedChanges === 1

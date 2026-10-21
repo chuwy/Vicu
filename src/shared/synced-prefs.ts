@@ -149,6 +149,98 @@ export function readTaskOrderPref(value: unknown): TaskOrderKey {
   return parseTaskOrder(value)
 }
 
+// Places and location reminders (section 11.7): a place's id and name, and a task's reminder at
+// it. Where a place is never syncs; only phones know it, and only phones remind.
+
+export const PLACE_KEY_PREFIX = 'place.'
+export const LOCATION_REMINDER_KEY_PREFIX = 'location_reminder.'
+export const LOCATION_RADIUS_MIN = 100
+export const LOCATION_RADIUS_MAX = 1000
+export const LOCATION_RADIUS_OPTIONS = [100, 200, 500] as const
+export const DEFAULT_LOCATION_RADIUS = 200
+
+const PLACE_ID = /^[A-Za-z0-9_-]{1,64}$/
+
+export type LocationTrigger = 'arrive' | 'leave'
+
+export interface PlacePref {
+  name: string
+}
+
+export interface LocationReminderPref {
+  place: string
+  trigger: LocationTrigger
+  radius_m: number
+}
+
+export interface SyncedPlace {
+  id: string
+  name: string
+}
+
+export function placeKey(placeId: string): string {
+  return `${PLACE_KEY_PREFIX}${placeId}`
+}
+
+export function locationReminderKey(taskId: number): string {
+  return `${LOCATION_REMINDER_KEY_PREFIX}${taskId}`
+}
+
+export function isPlaceId(id: unknown): id is string {
+  return typeof id === 'string' && PLACE_ID.test(id)
+}
+
+/** The place id of a `place.<id>` key, or null. */
+export function placeIdOfKey(key: string): string | null {
+  if (!key.startsWith(PLACE_KEY_PREFIX)) return null
+  const id = key.slice(PLACE_KEY_PREFIX.length)
+  return isPlaceId(id) ? id : null
+}
+
+/** The task id of a `location_reminder.<id>` key (a server id, above 0), or null. */
+export function taskIdOfLocationReminderKey(key: string): number | null {
+  if (!key.startsWith(LOCATION_REMINDER_KEY_PREFIX)) return null
+  const raw = key.slice(LOCATION_REMINDER_KEY_PREFIX.length)
+  if (!/^\d+$/.test(raw)) return null
+  const id = Number(raw)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+/** A place value: `{ name }` with a name that is not blank, or null. Unknown fields are left out. */
+export function readPlacePref(value: unknown): PlacePref | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const name = (value as Record<string, unknown>).name
+  return typeof name === 'string' && name.trim() !== '' ? { name } : null
+}
+
+/** A reminder value with a place id, arrive or leave, and a whole radius of 100 to 1000 m, or null. */
+export function readLocationReminderPref(value: unknown): LocationReminderPref | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const { place, trigger, radius_m: radius } = value as Record<string, unknown>
+  if (!isPlaceId(place)) return null
+  if (trigger !== 'arrive' && trigger !== 'leave') return null
+  if (typeof radius !== 'number' || !Number.isInteger(radius) || radius < LOCATION_RADIUS_MIN || radius > LOCATION_RADIUS_MAX) {
+    return null
+  }
+  return { place, trigger, radius_m: radius }
+}
+
+/** The places in the entries' values (deleted and malformed ones left out), by name. */
+export function readSyncedPlaces(values: Readonly<Record<string, unknown>>): SyncedPlace[] {
+  const places: SyncedPlace[] = []
+  for (const [key, value] of Object.entries(values)) {
+    const id = placeIdOfKey(key)
+    const place = id ? readPlacePref(value) : null
+    if (id && place) places.push({ id, name: place.name })
+  }
+  return places.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+}
+
+/** "Arrive: Home" or "Leave: Work". */
+export function locationReminderLabel(trigger: LocationTrigger, placeName: string): string {
+  return trigger === 'arrive' ? `Arrive: ${placeName}` : `Leave: ${placeName}`
+}
+
 /**
  * The value an app uses for `key`, given the entries' values (absent, `null`, an unknown value or a
  * wrong type read as the default). A per-project order reads as null when it has no entry, which
@@ -159,6 +251,9 @@ export function readSyncedPref(values: Readonly<Record<string, unknown>>, key: s
   if (key === INBOX_PROJECT_ID_KEY) return readInboxProjectId(value)
   if (key === GLOBAL_TASK_ORDER_KEY) return readTaskOrderPref(value)
   if (/^task_order\.project\.\d+$/.test(key)) return value === undefined || value === null ? null : parseTaskOrder(value)
+  if (placeIdOfKey(key) !== null) return readPlacePref(value)
+  if (taskIdOfLocationReminderKey(key) !== null) return readLocationReminderPref(value)
+  if (key.startsWith(PLACE_KEY_PREFIX) || key.startsWith(LOCATION_REMINDER_KEY_PREFIX)) return null
   return undefined
 }
 

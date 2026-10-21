@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import type { AppConfig } from '@/lib/vikunja-types'
+import { useLocationReminders } from '@/hooks/use-location-reminders'
+import { MapPin } from 'lucide-react'
 
 interface NotificationSettingsProps {
   config: AppConfig
@@ -236,6 +238,8 @@ export function NotificationSettings({ config, onChange }: NotificationSettingsP
         </div>
       </div>
 
+      <PlacesCard />
+
       {/* Test */}
       <div className="flex items-center gap-3">
         <Button variant="secondary" onClick={handleTestNotification}>
@@ -245,6 +249,36 @@ export function NotificationSettings({ config, onChange }: NotificationSettingsP
           <span className="text-xs text-status-done">Notification sent</span>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * The places saved on a phone (cross-app semantics section 11.7), read only: only the phone knows
+ * where they are, so it saves them and reminds there. A task's reminder picker offers them.
+ */
+function PlacesCard() {
+  const { places } = useLocationReminders()
+  return (
+    <div className="rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-5">
+      <h2 className="text-sm font-semibold text-[var(--text-primary)]">Places</h2>
+      <p className="mb-3 mt-1 text-xs text-[var(--text-secondary)]">
+        Remind yourself when you arrive at or leave a place: choose it in a task&apos;s reminders. Your phone reminds you there.
+      </p>
+      {places.length === 0 ? (
+        <p className="text-xs text-[var(--text-secondary)]">
+          Save places in Vicu on your phone: Settings &gt; Notifications &gt; Places.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {places.map((place) => (
+            <li key={place.id} className="flex items-center gap-2 text-sm text-[var(--text-primary)]">
+              <MapPin className="h-3.5 w-3.5 text-[var(--text-secondary)]" aria-hidden="true" />
+              {place.name}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

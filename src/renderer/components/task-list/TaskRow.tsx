@@ -37,6 +37,7 @@ import { useProjects } from '@/hooks/use-projects'
 import { extractBangToday, recurrenceToVikunja } from '@/lib/task-parser'
 import { TaskInputParser } from '@/components/task-input/TaskInputParser'
 import { useAppConfig } from '@/hooks/use-app-config'
+import { useHasLocationReminder } from '@/hooks/use-location-reminders'
 import {
   parentTitle,
   subtaskProgress,
@@ -341,6 +342,7 @@ function TaskRowInner({
   // Per-field subscriptions: each row re-renders only when *its own* derived
   // state flips, not on every focus/selection change anywhere in the list.
   const isExpanded = useSelectionStore((s) => s.expandedTaskId === task.id)
+  const hasPlaceReminder = useHasLocationReminder(task.id)
   const isFocused = useSelectionStore((s) => s.focusedTaskId === task.id)
   const isSelected = useSelectionStore((s) => s.selectedTaskIds.has(task.id))
   // Main asked for this task to be shown (a clicked reminder): expand once the row is on screen.
@@ -790,7 +792,7 @@ function TaskRowInner({
           <TaskSyncIcon taskId={task.id} />
           <TaskLinkIcon description={task.description} />
           <TaskDueBadge dueDate={task.due_date} />
-          {(task.reminders?.length ?? 0) > 0 && (
+          {((task.reminders?.length ?? 0) > 0 || hasPlaceReminder) && (
             <Bell className="h-3 w-3 text-text-secondary" aria-label="Has a reminder" />
           )}
           <PriorityMark priority={task.priority} />

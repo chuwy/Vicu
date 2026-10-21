@@ -15,7 +15,7 @@ export interface UnsyncedDocumentItem {
 
 const LABELS: Record<keyof UnsyncedDocuments, string> = {
   customLists: 'Custom list changes',
-  preferences: 'Settings changes (the Inbox, the task order)',
+  preferences: 'Settings changes (the Inbox, the task order, location reminders)',
 }
 
 function statusNote(status: CustomListSyncStatus): string {

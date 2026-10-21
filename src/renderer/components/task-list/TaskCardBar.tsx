@@ -10,11 +10,13 @@ import { useDateFormat } from '@/hooks/use-date-format'
 import { subtaskProgress } from '@/lib/task-hierarchy'
 import { useIsDark } from '@/hooks/use-is-dark'
 import { useProjects } from '@/hooks/use-projects'
+import { useLocationReminders } from '@/hooks/use-location-reminders'
 import { assignChipLabel, nameList, orderPeople } from '@/lib/collaboration'
 import type { ProjectAccess } from '@/hooks/use-project-access'
 import { commentsButtonId } from '@/stores/comments-pane-store'
 import type { PersonRef, Task, TaskReminder } from '@/lib/vikunja-types'
 import { priorityMark } from '../../../shared/priority-mark-svg'
+import { locationReminderLabel } from '../../../shared/synced-prefs'
 import { PriorityMark } from '../shared/PriorityMark'
 import { Popover } from '../overlay/Popover'
 import { Tooltip } from '../overlay/Tooltip'
@@ -158,6 +160,7 @@ export function TaskCardBar({
   const isDark = useIsDark()
   const dateFormat = useDateFormat()
   const { data: projects } = useProjects()
+  const { reminderFor } = useLocationReminders()
   const dateRef = useRef<HTMLButtonElement>(null)
   const priorityRef = useRef<HTMLButtonElement>(null)
   const labelRef = useRef<HTMLButtonElement>(null)
@@ -173,13 +176,17 @@ export function TaskCardBar({
   const hasDate = !isNullDate(task.due_date)
   const mark = priorityMark(task.priority)
   const progress = subtaskProgress(task)
-  const reminderCount = task.reminders?.length ?? 0
+  const placeReminder = reminderFor(task.id)
+  const reminderCount = (task.reminders?.length ?? 0) + (placeReminder ? 1 : 0)
   const repeats = (task.repeat_after ?? 0) > 0 || (task.repeat_mode ?? 0) > 0
   const attachmentCount = task.attachments?.length ?? 0
   const project = projects?.flat.find((p) => p.id === task.project_id)
   const dueText = hasDate ? (formatDueDate(task.due_date, new Date(), dateFormat, 'row') ?? '') : ''
   const repeatText = formatRecurrenceLabel(task.repeat_after ?? 0, task.repeat_mode ?? 0)
-  const reminderText = reminderCount === 1 ? '1 reminder' : `${reminderCount} reminders`
+  // A location reminder alone reads as its place ("Arrive: Home"), as on the phone.
+  const reminderText = placeReminder && reminderCount === 1
+    ? locationReminderLabel(placeReminder.trigger, placeReminder.placeName)
+    : reminderCount === 1 ? '1 reminder' : `${reminderCount} reminders`
   const is = (p: OpenPopover) => active === p
   const shared = !!collab?.access.shared
   const me = collab?.me ?? null
