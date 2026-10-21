@@ -24,6 +24,9 @@ import { useDateFormat } from '@/hooks/use-date-format'
 import { buildCreateExtras, withLabels } from '@/lib/composer-queue'
 import { isTempTaskId } from '@/lib/pending-cache'
 import { useTaskParser } from '@/hooks/use-task-parser'
+import { useLocationReminders } from '@/hooks/use-location-reminders'
+import { toast } from '@/stores/toast-store'
+import { DEFAULT_LOCATION_RADIUS } from '../../../shared/synced-prefs'
 import { useLabels } from '@/hooks/use-labels'
 import { useProjects } from '@/hooks/use-projects'
 import {
@@ -119,7 +122,10 @@ export function NewTaskComposer({
   onBlurOutside,
   className,
 }: NewTaskComposerProps) {
-  const parser = useTaskParser()
+  // "Call mom when I get home": a phrase that names a place saved on a phone sets the task's
+  // location reminder (contract section 5.3).
+  const locations = useLocationReminders()
+  const parser = useTaskParser(locations.places)
   const dateFormat = useDateFormat()
   const { data: labels = [] } = useLabels()
   const { data: projects } = useProjects()
@@ -368,12 +374,16 @@ export function NewTaskComposer({
         description: draftDescription,
       })
       const task = await createTask.mutateAsync({ projectId: targetProjectId, task: payload, extras })
+      const place = parsed?.place
       if (isTempTaskId(task.id)) {
+        // A location reminder is written for a server id only (section 11.7).
+        if (place) toast.info(`Saved offline, so no reminder at ${place.place.name}: add it once the task has synced.`)
         closeAndReset()
         onCreated?.(task)
         return
       }
       createdTask = task
+      if (place) locations.setReminder(task.id, place.place.id, place.trigger, DEFAULT_LOCATION_RADIUS)
       const failedLabels: PartialFailure['labels'] = []
       // The create answers before the labels are added; the task handed to onCreated carries the
       // ones that were, so a list filtered by label (a custom list, a tag) judges the real task.

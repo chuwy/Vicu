@@ -70,6 +70,8 @@ import {
   setSyncedPreference,
   syncSyncedPrefs,
 } from './synced-preferences'
+import { readSyncedPlaces } from '../shared/synced-prefs'
+import { quickEntryLocationReminder } from './quick-entry/location-reminder'
 import type { CustomListWire } from './custom-list-protocol'
 import type { UnsyncedDocuments } from '../shared/config-types'
 import { hasVicuMetadataMarker } from './custom-list-protocol'
@@ -597,7 +599,7 @@ export function registerIpcHandlers(): void {
   })
 
   // --- Quick Entry IPC ---
-  handleTrusted('qe:save-task', async (_event, title: string, description: string | null, dueDate: string | null, projectId: number | null, priority?: number, repeatAfter?: number, repeatMode?: number, extras?: { labels?: unknown; images?: unknown }) => {
+  handleTrusted('qe:save-task', async (_event, title: string, description: string | null, dueDate: string | null, projectId: number | null, priority?: number, repeatAfter?: number, repeatMode?: number, extras?: { labels?: unknown; images?: unknown; location?: unknown }) => {
     const config = loadConfig()
     if (!config) return { success: false, error: 'Configuration not loaded' }
 
@@ -619,9 +621,17 @@ export function registerIpcHandlers(): void {
     // The create is queued with everything the user set when the server cannot be reached; see
     // createFromQuickEntry for what may be queued and why.
     const result = await createFromQuickEntry(quickActionDeps(), targetProjectId, taskPayload, extras)
-    if (result.success && !('cached' in result)) notifyViewerSync()
+    if (result.success && !('cached' in result)) {
+      notifyViewerSync()
+      // "When I get home" for a saved place: the reminder goes on the server id (contract 5.3).
+      const reminder = quickEntryLocationReminder(('data' in result ? result.data as { id?: unknown } | undefined : undefined)?.id, extras?.location)
+      if (reminder) setSyncedPreference(reminder.key, reminder.value)
+    }
     return result
   })
+
+  // The places saved on a phone, by name, for "when I get home" in Quick Entry.
+  handleTrusted('qe:get-places', () => readSyncedPlaces(getSyncedPrefs().values))
 
   handleTrusted('qe:close-window', () => {
     hideQuickEntry()

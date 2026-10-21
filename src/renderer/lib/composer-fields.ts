@@ -4,7 +4,7 @@ import { formatDateChip } from './date-utils'
 import { detectRecurrencePreset, formatRecurrenceLabel } from './recurrence'
 import { recurrenceToVikunja, type ParseResult } from './task-parser'
 import type { DateFormat } from './date-display'
-import { priorityChipName, recurrenceChipName, type ChipData, type ChipSource } from './parse-chips'
+import { placeChipName, priorityChipName, recurrenceChipName, type ChipData, type ChipSource } from './parse-chips'
 
 // One source of truth for the new-task composer (card 3.5). A field shows, and saves, what the
 // parser read from the typed text unless the user set that field with its own control (a picker),
@@ -125,8 +125,8 @@ export interface ComposerChipInput {
 
 /**
  * The chips of the composer: the date (weekday and date, with the time when there is one), the
- * priority name, the labels, the project and the repeat, each from the text or from the control
- * that was used. A default date from the list is not a chip here (the composer shows it apart).
+ * priority name, the labels, the project, the repeat and the place ("when I get home"), each from
+ * the text or from the control that was used. A default date from the list is not a chip here (the composer shows it apart).
  */
 export function composerChips({ fields, parsed, chipLabels, projectTitle, fmt, now = new Date(), text }: ComposerChipInput): ChipData[] {
   const chips: ChipData[] = []
@@ -171,6 +171,9 @@ export function composerChips({ fields, parsed, chipLabels, projectTitle, fmt, n
         ? formatRecurrenceLabel(fields.repeat.repeat_after, fields.repeat.repeat_mode)
         : recurrenceChipName(text.interval, text.unit)
     if (label) chips.push({ type: 'recurrence', key: 'recurrence', source: source(fields.repeatSource), label })
+  }
+  if (parsed?.place) {
+    chips.push({ type: 'place', key: 'place', source: 'text', label: placeChipName(parsed.place.trigger, parsed.place.place.name) })
   }
   return chips
 }

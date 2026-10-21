@@ -11,7 +11,12 @@ declare global {
         repeatAfter?: number,
         repeatMode?: number,
         // Kept with the create when it has to be queued offline; unused when the server answers.
-        extras?: { labels?: Array<{ id?: number; title?: string }>; images?: Array<{ name: string; mime: string; bytes: Uint8Array }> },
+        // `location` ("when I get home") is set only when the server answers.
+        extras?: {
+          labels?: Array<{ id?: number; title?: string }>
+          images?: Array<{ name: string; mime: string; bytes: Uint8Array }>
+          location?: { place: string; trigger: 'arrive' | 'leave' }
+        },
       ): Promise<{ success: boolean; cached?: boolean; error?: string; mayExist?: boolean; data?: { id: number } }>
       uploadAttachment(taskId: number, fileData: Uint8Array, fileName: string, mimeType: string): Promise<{ success: boolean; error?: string; statusCode?: number }>
       fetchTaskAttachments(taskId: number): Promise<{ success: boolean; data?: Array<{ id: number }>; error?: string; statusCode?: number }>
@@ -34,6 +39,8 @@ declare global {
       ): Promise<{ success: boolean; error?: string }>
       fetchLabels(): Promise<{ success: boolean; data?: Array<{ id: number; title: string }> }>
       fetchProjects(): Promise<{ success: boolean; data?: Array<{ id: number; title: string }> }>
+      // The places saved on a phone (synced preferences), for "when I get home".
+      fetchPlaces(): Promise<Array<{ id: string; name: string }>>
       addLabelToTask(taskId: number, labelId: number): Promise<{ success: boolean; error?: string; statusCode?: number }>
       createLabel(label: { title: string; hex_color?: string }): Promise<{ success: boolean; error?: string; statusCode?: number; data?: { id: number; title: string } }>
       onShowWindow(callback: () => void): void
@@ -116,6 +123,7 @@ let browserLinked = false
 let parserConfig: ParserConfig = { enabled: true, syntaxMode: 'todoist' }
 let cachedLabels: Array<{ id: number; title: string }> = []
 let cachedProjects: Array<{ id: number; title: string }> = []
+let cachedPlaces: Array<{ id: string; name: string }> = []
 let lastParseResult: ParseResult | null = null
 let isComposing = false
 let suppressedTypes: Map<TokenType, string[]> = new Map()
@@ -390,6 +398,11 @@ function refreshLabelsAndProjects(): void {
   }).catch(() => {
     // Offline or standalone — keep existing cache
   })
+  window.quickEntryApi.fetchPlaces().then((places) => {
+    cachedPlaces = places
+  }).catch(() => {
+    // Keep the places already read
+  })
 }
 
 function renderHighlights(inputValue: string, tokens: ParsedToken[]): void {
@@ -595,6 +608,7 @@ async function saveTask(): Promise<void> {
   let repeatMode: number | undefined
   let projectId = projectCycle.length > 0 ? projectCycle[currentProjectIndex].id : null
   let parsedLabels: string[] = []
+  let location: { place: string; trigger: 'arrive' | 'leave' } | undefined
 
   if (parserConfig.enabled && lastParseResult) {
     title = lastParseResult.title
@@ -624,6 +638,7 @@ async function saveTask(): Promise<void> {
     }
 
     parsedLabels = lastParseResult.labels
+    if (lastParseResult.place) location = { place: lastParseResult.place.place.id, trigger: lastParseResult.place.trigger }
   } else {
     // Parser off: only the `!` → today shortcut applies, with the same rule as the other entry
     // points (standalone, leading or trailing `!`; a `!` inside the text is not a date).
@@ -648,7 +663,7 @@ async function saveTask(): Promise<void> {
     return match ? { id: match.id, title: match.title } : { title: name }
   })
   const imageInputs = pendingImages.map((img) => ({ name: img.name, mime: img.mime, bytes: img.bytes }))
-  const result = await window.quickEntryApi.saveTask(title, description || null, dueDate, projectId, priority, repeatAfter, repeatMode, { labels: labelRefs, images: imageInputs })
+  const result = await window.quickEntryApi.saveTask(title, description || null, dueDate, projectId, priority, repeatAfter, repeatMode, { labels: labelRefs, images: imageInputs, location })
 
   if (result.success) {
     const createdTask = result.data as (Record<string, unknown> & { id?: number }) | undefined
@@ -838,7 +853,7 @@ function handleInputChange(): void {
   const configWithSuppress: ParserConfig = suppressedTypes.size > 0
     ? { ...parserConfig, suppressTypes: [...suppressedTypes.keys()] }
     : parserConfig
-  const result = parse(raw, configWithSuppress)
+  const result = parse(raw, configWithSuppress, new Date(), cachedPlaces)
   lastParseResult = result
   renderHighlights(raw, result.tokens)
   renderParsePreview(result)
