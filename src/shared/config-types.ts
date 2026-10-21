@@ -239,6 +239,11 @@ export interface AppConfig {
   quick_view_enabled?: boolean
   quick_entry_hotkey?: string
   quick_view_hotkey?: string
+  /**
+   * The in-app voice shortcut (an Electron accelerator such as `Command+Shift+D`; '' is off): hold
+   * it in the main window to say a task, or tap it to start and stop (docs/voice-input.md).
+   */
+  voice_hotkey?: string
   quick_entry_default_project_id?: number
   exclamation_today?: boolean
   project_cycle_modifier?: 'ctrl' | 'alt' | 'ctrl+alt'

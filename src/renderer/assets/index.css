@@ -245,6 +245,50 @@ html[data-platform="win32"],
 }
 
 /*
+ * The voice card (docs/voice-input.md) rises in like a toast, and the ring behind its microphone
+ * pulses outwards while it listens. Reduced motion: the card fades in, and the ring only fades in
+ * and out (no scaling).
+ */
+@keyframes vicu-voice-ring {
+  from {
+    opacity: 0.9;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 1.7;
+  }
+}
+
+.vicu-voice-card {
+  animation: vicu-toast-in var(--dur-fade-base) var(--ease-enter);
+}
+
+.vicu-voice-pulse {
+  animation: vicu-voice-ring calc(var(--dur-move-expressive) * 3) var(--ease-standard) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vicu-voice-card {
+    animation: vicu-bar-fade var(--dur-fade-base) var(--ease-enter);
+  }
+
+  .vicu-voice-pulse {
+    animation: vicu-fade-pulse calc(var(--dur-move-expressive) * 3) var(--ease-standard) infinite;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-voice-card] {
+    border: 1px solid CanvasText;
+  }
+
+  [data-voice-card][data-cancel-armed] {
+    border: 2px solid Highlight;
+  }
+}
+
+/*
  * The comments pane (design system 4.1, collaboration D3) enters from the right: a fade and a 12 px
  * slide with the move spring. It has no exit animation (it is removed when it closes). Reduced
  * motion: a fade over fade.fast.

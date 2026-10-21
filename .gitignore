@@ -6,6 +6,9 @@ dist/
 *.tsbuildinfo
 config.json
 
+# Built by scripts/build-voice-helper.mjs (npm run voice:helper)
+resources/voice/vicu-speech-macos
+
 # Local files
 .DS_Store
 .claude/settings.local.json

@@ -23,6 +23,8 @@ export type {
 // Platform-aware hotkey defaults
 export const DEFAULT_QUICK_ENTRY_HOTKEY = isMac ? 'Command+Shift+Space' : 'Alt+Shift+V'
 export const DEFAULT_QUICK_VIEW_HOTKEY = isMac ? 'Command+Shift+B' : 'Alt+Shift+B'
+/** In the main window only (keydown and keyup, not a global shortcut): docs/voice-input.md. */
+export const DEFAULT_VOICE_HOTKEY = isMac ? 'Command+Shift+D' : 'Ctrl+Shift+D'
 
 const CONFIG_FILENAME = 'config.json'
 
@@ -145,6 +147,7 @@ export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
     quick_view_enabled: raw.quick_view_enabled === true,
     quick_entry_hotkey: typeof raw.quick_entry_hotkey === 'string' ? raw.quick_entry_hotkey : DEFAULT_QUICK_ENTRY_HOTKEY,
     quick_view_hotkey: typeof raw.quick_view_hotkey === 'string' ? raw.quick_view_hotkey : DEFAULT_QUICK_VIEW_HOTKEY,
+    voice_hotkey: typeof raw.voice_hotkey === 'string' ? raw.voice_hotkey : DEFAULT_VOICE_HOTKEY,
     quick_entry_default_project_id: typeof raw.quick_entry_default_project_id === 'number'
       ? raw.quick_entry_default_project_id : undefined,
     exclamation_today: raw.exclamation_today !== false,

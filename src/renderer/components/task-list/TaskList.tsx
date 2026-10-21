@@ -27,6 +27,7 @@ import { taskDescendants, unfinishedDescendants } from '@/lib/task-hierarchy'
 import { confirmTaskCompletion } from '@/lib/task-completion'
 import { SmartListIcon } from '@/components/shared/SmartListIcon'
 import { ReadingScroll } from '@/components/layout/ReadingScroll'
+import { useHoldToTalk } from '@/hooks/use-hold-to-talk'
 import type { SmartListId } from '@/lib/smart-list-identity'
 
 interface TaskListProps {
@@ -97,6 +98,8 @@ export function TaskList({
   newTaskPlacement = 'after-children',
 }: TaskListProps) {
   const [isAdding, setIsAdding] = useState(false)
+  // Holding the header + says a task instead of typing it (docs/voice-input.md).
+  const holdToTalk = useHoldToTalk()
   const [addPosition, setAddPosition] = useState<'top' | 'bottom'>('top')
   const inputRef = useRef<HTMLInputElement>(null)
   const creationRef = useRef<HTMLDivElement>(null)
@@ -549,8 +552,10 @@ export function TaskList({
             <button
               type="button"
               onClick={startAdding}
-              className="flex h-7 w-7 items-center justify-center rounded-control text-[var(--text-secondary)] transition-colors duration-fade-fast hover:bg-[var(--bg-hover)] hover:text-[var(--accent-blue)]"
+              {...holdToTalk}
+              className="flex h-7 w-7 select-none items-center justify-center rounded-control text-[var(--text-secondary)] transition-colors duration-fade-fast hover:bg-[var(--bg-hover)] hover:text-[var(--accent-blue)]"
               aria-label="New task"
+              title="Click to type a task, hold to say it"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -575,7 +580,7 @@ export function TaskList({
             extra={emptyExtra}
             action={
               showNewTask && projectId ? (
-                <Button variant="secondary" onClick={startAdding}>
+                <Button variant="secondary" onClick={startAdding} {...holdToTalk} title="Click to type a task, hold to say it">
                   <Plus className="h-4 w-4" />
                   Add task
                 </Button>

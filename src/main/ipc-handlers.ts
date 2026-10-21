@@ -116,6 +116,7 @@ import { uploadStandaloneTasks } from './standalone-upload'
 import { getOfflineQueue, knownUserIdFor, rememberKnownUser } from './offline/service'
 import { registerOfflineQueueIpc } from './offline/ipc'
 import { registerCollaborationIpc } from './collab-ipc'
+import { registerVoiceIpc } from './voice/service'
 import { accountChanged, refreshKnownUser, replayPendingActions } from './sync'
 import { claimAccountData, ensureKnownUserId } from './known-user'
 import {
@@ -244,6 +245,7 @@ function projectIdOf(task: unknown): number | undefined {
 export function registerIpcHandlers(): void {
   registerOfflineQueueIpc()
   registerCollaborationIpc()
+  registerVoiceIpc()
 
   // Tasks
   handleTrusted('fetch-tasks', (_event, params: Record<string, unknown>) => {

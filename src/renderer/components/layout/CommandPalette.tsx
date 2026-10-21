@@ -1,7 +1,9 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Circle, Folder, Plus, RefreshCw, Settings, SunMoon, Tag } from 'lucide-react'
+import { CheckCircle2, Circle, Folder, Mic, Plus, RefreshCw, Settings, SunMoon, Tag } from 'lucide-react'
+import { useAppConfig } from '@/hooks/use-app-config'
+import { formatAcceleratorForDisplay } from '@/lib/accelerator'
 import { Dialog } from '@/components/overlay/Dialog'
 import { nextOptionIndex } from '@/components/overlay/popover-logic'
 import { useSmartLists } from '@/components/sidebar/SmartListNav'
@@ -20,6 +22,7 @@ import { buildPaletteItems, rankPalette, type PaletteCommand, type PaletteItem, 
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { useUIStore } from '@/stores/ui-store'
 import { useNewTaskRequestStore } from '@/stores/new-task-request-store'
+import { useVoiceStore } from '@/stores/voice-store'
 
 const ICONS: Record<PaletteKind, typeof Circle> = {
   Action: Plus,
@@ -66,6 +69,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const smartLists = useSmartLists()
   const { data: projects } = useProjects()
   const { data: labels } = useLabels()
+  const { data: appConfig } = useAppConfig()
   const { tasks } = useQuickFindTasks(query, 20)
   const listId = useId()
   const isDark = useIsDark()
@@ -86,6 +90,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const runCommand = (command: PaletteCommand) => {
     if (command === 'settings') {
       void navigate({ to: '/settings' })
+    } else if (command === 'voice') {
+      useVoiceStore.getState().begin('command', 'latched')
     } else if (command === 'refresh') {
       refreshNow(queryClient)
     } else if (command === 'toggle-theme') {
@@ -140,6 +146,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     if (action.type === 'task') return projects?.all.find((p) => p.id === action.task.project_id)?.title ?? kind
     if (action.type === 'command' && action.command === 'new-task') return shortcutHint('Mod+N', window.api.platform === 'darwin')
     if (action.type === 'command' && action.command === 'refresh') return window.api.platform === 'darwin' ? shortcutHint('Mod+R', true) : 'F5'
+    if (action.type === 'command' && action.command === 'voice' && appConfig?.voice_hotkey) return formatAcceleratorForDisplay(appConfig.voice_hotkey, window.api.platform === 'darwin')
     return kind
   }
 
@@ -148,6 +155,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     if (action.type === 'command' && action.command === 'settings') return Settings
     if (action.type === 'command' && action.command === 'toggle-theme') return SunMoon
     if (action.type === 'command' && action.command === 'refresh') return RefreshCw
+    if (action.type === 'command' && action.command === 'voice') return Mic
     return ICONS[kind]
   }
 

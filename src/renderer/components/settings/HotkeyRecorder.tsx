@@ -1,81 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-
-/**
- * Maps KeyboardEvent.code to Electron accelerator key name.
- * Uses e.code (physical key) instead of e.key (character) to avoid
- * macOS character composition issues with Alt/Option key.
- */
-function codeToAcceleratorKey(code: string): string | null {
-  if (code.startsWith('Key') && code.length === 4) return code.slice(3)
-  if (code.startsWith('Digit') && code.length === 6) return code.slice(5)
-  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) return code
-  if (code.startsWith('Arrow')) return code.slice(5)
-  if (code.startsWith('Numpad') && code.length === 7 && /\d$/.test(code)) return 'num' + code.slice(6)
-
-  const numpadMap: Record<string, string> = {
-    NumpadAdd: 'numadd',
-    NumpadSubtract: 'numsub',
-    NumpadMultiply: 'nummult',
-    NumpadDivide: 'numdiv',
-    NumpadDecimal: 'numdec',
-    NumpadEnter: 'Enter',
-  }
-  if (numpadMap[code]) return numpadMap[code]
-
-  const directMap: Record<string, string> = {
-    Space: 'Space', Enter: 'Enter', Tab: 'Tab', Escape: 'Escape',
-    Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert',
-    Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
-  }
-  if (directMap[code]) return directMap[code]
-
-  const punctuationMap: Record<string, string> = {
-    Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']',
-    Backslash: '\\', Semicolon: ';', Quote: "'", Backquote: '`',
-    Comma: ',', Period: '.', Slash: '/',
-  }
-  if (punctuationMap[code]) return punctuationMap[code]
-
-  return null
-}
-
-const MODIFIER_CODES = new Set([
-  'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight',
-  'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight',
-])
+import { formatAcceleratorForDisplay, keyEventToAccelerator } from '@/lib/accelerator'
 
 const isMacRenderer = window.api.platform === 'darwin'
-
-function keyEventToAccelerator(e: KeyboardEvent): string | null {
-  const parts: string[] = []
-  if (isMacRenderer) {
-    if (e.metaKey) parts.push('Command')
-    if (e.ctrlKey) parts.push('Ctrl')
-  } else {
-    if (e.ctrlKey) parts.push('Ctrl')
-  }
-  if (e.altKey) parts.push('Alt')
-  if (e.shiftKey) parts.push('Shift')
-
-  if (MODIFIER_CODES.has(e.code)) return null
-  if (parts.length === 0) return null
-
-  const key = codeToAcceleratorKey(e.code)
-  if (!key) return null
-
-  parts.push(key)
-  return parts.join('+')
-}
-
-/** Convert Electron accelerator strings to macOS symbols for display */
-function formatAcceleratorForDisplay(accelerator: string): string {
-  if (!isMacRenderer) return accelerator
-  return accelerator
-    .replace(/Command\+?/g, '\u2318')
-    .replace(/Ctrl\+?/g, '\u2303')
-    .replace(/Alt\+?/g, '\u2325')
-    .replace(/Shift\+?/g, '\u21E7')
-}
 
 interface HotkeyRecorderProps {
   value: string
@@ -84,9 +10,13 @@ interface HotkeyRecorderProps {
   warning?: boolean
   /** The accessible name of the field. */
   label?: string
+  /** What the field says when no hotkey is set. */
+  emptyText?: string
+  /** When given, a Clear button sets the hotkey to '' (off). */
+  onClear?: () => void
 }
 
-export function HotkeyRecorder({ value, onChange, defaultValue, warning, label = 'Hotkey' }: HotkeyRecorderProps) {
+export function HotkeyRecorder({ value, onChange, defaultValue, warning, label = 'Hotkey', emptyText = '', onClear }: HotkeyRecorderProps) {
   const [recording, setRecording] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const prevValueRef = useRef(value)
@@ -101,9 +31,10 @@ export function HotkeyRecorder({ value, onChange, defaultValue, warning, label =
   const stopRecording = useCallback((revert: boolean) => {
     setRecording(false)
     if (revert) {
-      onChange(prevValueRef.current || defaultValue)
+      // A hotkey that can be off goes back to off; the others never end up empty.
+      onChange(onClear ? prevValueRef.current : prevValueRef.current || defaultValue)
     }
-  }, [onChange, defaultValue])
+  }, [onChange, defaultValue, onClear])
 
   useEffect(() => {
     if (!recording) return
@@ -113,7 +44,7 @@ export function HotkeyRecorder({ value, onChange, defaultValue, warning, label =
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault()
       e.stopPropagation()
-      const accelerator = keyEventToAccelerator(e)
+      const accelerator = keyEventToAccelerator(e, isMacRenderer)
       if (!accelerator) return
       onChange(accelerator)
       setRecording(false)
@@ -136,9 +67,10 @@ export function HotkeyRecorder({ value, onChange, defaultValue, warning, label =
       <input
         ref={inputRef}
         type="text"
+        data-hotkey-recorder=""
         aria-label={label}
         readOnly
-        value={recording ? '' : formatAcceleratorForDisplay(value)}
+        value={recording ? '' : value ? formatAcceleratorForDisplay(value, isMacRenderer) : emptyText}
         placeholder={recording ? 'Press keys...' : undefined}
         className={`flex-1 rounded-control border px-3 py-2 text-sm ${
           warning
@@ -157,6 +89,15 @@ export function HotkeyRecorder({ value, onChange, defaultValue, warning, label =
       >
         {recording ? 'Press keys...' : 'Record'}
       </button>
+      {onClear && value && !recording && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="shrink-0 rounded-control border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+        >
+          Clear
+        </button>
+      )}
     </div>
   )
 }
