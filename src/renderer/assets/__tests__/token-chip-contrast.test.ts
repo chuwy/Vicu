@@ -4,12 +4,13 @@ import {
   TOKEN_CHIP_ALPHA,
   TOKEN_CHIP_CLASSES,
   TOKEN_CHIP_ROLE,
+  TOKEN_CHIP_TEXT_SHARE,
   TOKEN_HIGHLIGHT_ALPHA,
   tokenHighlightBackground,
 } from '../../lib/token-chip-colors'
 
 /**
- * The parse chips (date, label, project, recurrence) draw their fill as a role at 12% (20% in dark)
+ * The parse chips (date, label, project, recurrence, place) draw their fill as a role at 12% (20% in dark)
  * and their text as that role mixed half and half with `text`. This asserts the text passes 4.5:1
  * on the fill over every surface in both themes, with the same arithmetic as contrast.test.ts
  * (WCAG 2.x, tint rounded half up to 8 bits); the sRGB mix is what `color-mix(in srgb, a, b)` does.
@@ -29,7 +30,8 @@ const contrast = (a: Rgb, b: Rgb) => {
   return (hi + 0.05) / (lo + 0.05)
 }
 const composite = (fg: Rgb, alpha: number, bg: Rgb) => fg.map((c, i) => Math.floor(alpha * c + (1 - alpha) * bg[i] + 0.5 + 1e-9)) as Rgb
-const mix = (a: Rgb, b: Rgb) => a.map((c, i) => Math.round((c + b[i]) / 2)) as Rgb
+const mix = (a: Rgb, b: Rgb, share = 0.5) => a.map((c, i) => Math.round(share * c + (1 - share) * b[i])) as Rgb
+const shareOf = (type: string) => TOKEN_CHIP_TEXT_SHARE[type as keyof typeof TOKEN_CHIP_TEXT_SHARE] ?? 0.5
 
 const role = (name: string, theme: Theme) => toRgb(tokens.roles[name][theme])
 // accent-blue is the text-safe accent role, the others are palette colours.
@@ -39,6 +41,7 @@ const ROLE_OF: Record<string, string> = {
   'accent-orange': 'palette.orange',
   'accent-purple': 'palette.purple',
   'accent-red': 'palette.red',
+  'accent-teal': 'palette.teal',
 }
 const SURFACES = ['bg.page', 'bg.card', 'bg.selected', 'bg.hover']
 
@@ -48,10 +51,11 @@ describe('the parse chip colours', () => {
       const name = TOKEN_CHIP_ROLE[type as keyof typeof TOKEN_CHIP_ROLE]
       expect(classes, type).toContain(`bg-${name}/12`)
       expect(classes, type).toContain(`dark:bg-${name}/20`)
-      expect(classes, type).toContain(`rgb(var(--${name}-rgb))`)
+      const share = shareOf(type)
+      expect(classes, type).toContain(share === 0.5 ? `rgb(var(--${name}-rgb)),` : `rgb(var(--${name}-rgb))_${share * 100}%,`)
       expect(classes, type).toContain('var(--text-primary)')
     }
-    expect(new Set(Object.values(TOKEN_CHIP_ROLE)).size).toBe(5)
+    expect(new Set(Object.values(TOKEN_CHIP_ROLE)).size).toBe(6)
   })
 
   it('has the alphas the classes spell', () => {
@@ -67,7 +71,7 @@ describe('the parse chip colours', () => {
         it(`${type} text on its fill over ${surface} is at least 4.5:1`, () => {
           const fill = role(ROLE_OF[name], theme)
           const tint = composite(fill, TOKEN_CHIP_ALPHA[theme], role(surface, theme))
-          const text = mix(fill, role('text', theme))
+          const text = mix(fill, role('text', theme), shareOf(type))
           expect(contrast(text, tint)).toBeGreaterThanOrEqual(4.5)
         })
       }

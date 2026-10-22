@@ -2,7 +2,7 @@
 
 This document defines the exact parser behavior that BOTH Vicu (desktop) and Vicu Android must implement identically. Both apps must produce the same `ParseResult` for the same input string and the same `ParserConfig`.
 
-The date and recurrence rules are the contract in `docs/cross-app-semantics-v1.md` section 5, and the test is the shared corpus `test-fixtures/nlp-corpus-v1.json` (91 cases, reference time Tue 2026-10-06 10:00 local; both apps run the same file). If this document and the corpus disagree, the corpus wins. The desktop implementation is `src/renderer/lib/task-parser/`: there is one parser (the main window, the task title editor and Quick Entry all call it), and the date work is done by chrono-node plus the rules below.
+The date and recurrence rules are the contract in `docs/cross-app-semantics-v1.md` section 5, and the test is the shared corpus `test-fixtures/nlp-corpus-v1.json` (113 cases, reference time Tue 2026-10-06 10:00 local; both apps run the same file). If this document and the corpus disagree, the corpus wins. The desktop implementation is `src/renderer/lib/task-parser/`: there is one parser (the main window, the task title editor and Quick Entry all call it), and the date work is done by chrono-node plus the rules below.
 
 ---
 
@@ -89,6 +89,10 @@ interface ParseResult {
     interval: number
     unit: 'day' | 'week' | 'month' | 'year'   // singular, as in the corpus
   } | null
+  place: {                   // "when I get home" for a saved place (contract section 5.3)
+    place: { id: string; name: string }
+    trigger: 'arrive' | 'leave'
+  } | null
   rawInput: string           // Original input for debugging
   tokens: ParsedToken[]      // All detected tokens with positions (for highlighting)
 }
@@ -110,7 +114,8 @@ interface ParsedToken {
 export function parse(
   input: string,
   config: ParserConfig = DEFAULT_PARSER_CONFIG,
-  reference: Date = new Date()   // "now": relative dates and the `!` shortcut; tests pass the corpus reference
+  reference: Date = new Date(),  // "now": relative dates and the `!` shortcut; tests pass the corpus reference
+  places: { id: string; name: string }[] = []   // saved places a place phrase may name; none reads no place
 ): ParseResult
 ```
 
@@ -198,6 +203,7 @@ function buildPriorityPatterns(mode: SyntaxMode): Array<{ regex: RegExp; value: 
 
 The parser MUST extract tokens in this exact order:
 
+0. **Place** ("when I get home" for a saved place, contract section 5.3) — only when places are passed
 1. **Labels** (prefix-based: `@` or `*`) — extract and remove first
 2. **Projects** (prefix-based: `#` or `+`) — extract and remove
 3. **Priority** (mode-dependent short form + shared word form) — extract and remove
@@ -211,6 +217,7 @@ This order matters because:
 - In Vikunja mode, `!3` (priority) must be extracted BEFORE the date extractor sees `!`
 - Recurrence must be extracted BEFORE dates because "every monday" contains "monday" (the weekday is then used as the due date, see Recurrence)
 - Dates run after the other tokens so their text can't produce false dates
+- The place phrase goes first so none of its words ("when I'm at work") is read as anything else
 
 ---
 

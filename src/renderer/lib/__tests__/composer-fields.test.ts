@@ -136,6 +136,26 @@ describe('chips show what is saved', () => {
   it('has no chips for plain text', () => {
     expect(chipsFor('Call Ana')).toEqual([])
   })
+
+  it('shows the place a phrase names, after the other chips', () => {
+    const places = [{ id: 'home', name: 'Home' }, { id: 'work', name: 'Work' }]
+    const parsed = parse('Buy milk when I leave work saturday', config, NOW, places)
+    const fields = resolveComposerFields({ ...input(''), parsed })
+    const chips = composerChips({ fields, parsed, chipLabels: [], projectTitle: 'Personal', fmt: GB, now: NOW })
+    expect(parsed.title).toBe('Buy milk')
+    expect(chips.map((c) => [c.type, c.label, c.source])).toEqual([
+      ['date', 'Sat 10 Oct', 'text'],
+      ['place', 'Leave: Work', 'text'],
+    ])
+    expect(parseChips(parsed, GB, NOW).map((c) => c.label)).toEqual(['Sat 10 Oct', 'Leave: Work'])
+  })
+
+  it('has no place chip once the place is dismissed, and the words stay in the title', () => {
+    const places = [{ id: 'home', name: 'Home' }]
+    const parsed = parse('Call mom when I get home', { ...config, suppressTypes: ['place'] }, NOW, places)
+    expect(parsed.place).toBeNull()
+    expect(parsed.title).toBe('Call mom when I get home')
+  })
 })
 
 describe('parse chips', () => {

@@ -5,6 +5,8 @@ import type { OfflineImageInput, OfflineLabelRef } from '../shared/offline-queue
 interface QueuedCreateExtras {
   labels?: OfflineLabelRef[]
   images?: OfflineImageInput[]
+  /** "When I get home": set on the server id once the create reaches the server, never queued. */
+  location?: { place: string; trigger: 'arrive' | 'leave' }
 }
 
 // Page callbacks only ever receive the payload. The IpcRendererEvent carries
@@ -31,6 +33,7 @@ contextBridge.exposeInMainWorld('quickEntryApi', {
   resolveObsidianLink: () => ipcRenderer.invoke('qe:resolve-obsidian-link'),
   fetchLabels: () => ipcRenderer.invoke('fetch-labels'),
   fetchProjects: () => ipcRenderer.invoke('fetch-projects', false),
+  fetchPlaces: () => ipcRenderer.invoke('qe:get-places'),
   addLabelToTask: (taskId: number, labelId: number) => ipcRenderer.invoke('add-label-to-task', taskId, labelId),
   createLabel: (label: { title: string; hex_color?: string }) => ipcRenderer.invoke('create-label', label),
   getDateFormat: () => ipcRenderer.invoke('get-date-format'),

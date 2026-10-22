@@ -131,6 +131,10 @@ body {
   background: rgba(168, 85, 247, 0.15);
   border-radius: 3px;
 }
+.token-place {
+  background: rgba(20, 184, 166, 0.15);
+  border-radius: 3px;
+}
 
 /* Task input */
 #task-input {
@@ -462,6 +466,10 @@ body {
   background: rgba(168, 85, 247, 0.12);
   color: #9333ea;
 }
+.parse-chip-place {
+  background: rgba(20, 184, 166, 0.12);
+  color: #0d9488;
+}
 
 .parse-chip-dismiss {
   background: none;
@@ -529,11 +537,13 @@ button:focus-visible {
   .token-label { background: rgba(249, 115, 22, 0.25); }
   .token-project { background: rgba(59, 130, 246, 0.25); }
   .token-recurrence { background: rgba(168, 85, 247, 0.25); }
+  .token-place { background: rgba(20, 184, 166, 0.25); }
 
   .parse-chip-date { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
   .parse-chip-label { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
   .parse-chip-project { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
   .parse-chip-recurrence { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+  .parse-chip-place { background: rgba(20, 184, 166, 0.2); color: #2dd4bf; }
 
   .autocomplete-container { border-top-color: rgba(255, 255, 255, 0.06); }
   .autocomplete-item.active { background: rgba(59, 130, 246, 0.20); }

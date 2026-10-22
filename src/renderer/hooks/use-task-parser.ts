@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { useParserConfig } from './use-parser-config'
 import { parse, getPrefixes } from '@/lib/task-parser'
-import type { ParseResult, ParserConfig, TokenType, SyntaxPrefixes } from '@/lib/task-parser'
+import type { ParseResult, ParserConfig, PlaceRef, TokenType, SyntaxPrefixes } from '@/lib/task-parser'
 
 export interface UseTaskParserReturn {
   inputValue: string
@@ -25,7 +25,10 @@ export interface UseTaskParserReturn {
  */
 type SuppressionMap = Map<TokenType, string[] | null>
 
-export function useTaskParser(): UseTaskParserReturn {
+const NO_PLACES: readonly PlaceRef[] = []
+
+/** @param places The saved places "when I get home" may name (section 5.3 of the contract). */
+export function useTaskParser(places: readonly PlaceRef[] = NO_PLACES): UseTaskParserReturn {
   const parserConfig = useParserConfig()
   const [inputValue, setInputValueRaw] = useState('')
   const [suppressions, setSuppressions] = useState<SuppressionMap>(new Map())
@@ -80,8 +83,8 @@ export function useTaskParser(): UseTaskParserReturn {
     const config: ParserConfig = suppressTypes.length > 0
       ? { ...parserConfig, suppressTypes }
       : parserConfig
-    return parse(inputValue, config)
-  }, [inputValue, parserConfig, suppressTypes])
+    return parse(inputValue, config, new Date(), places)
+  }, [inputValue, parserConfig, suppressTypes, places])
 
   // Keep ref in sync
   parseResultRef.current = parseResult

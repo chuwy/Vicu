@@ -1,7 +1,14 @@
 {
   "contractVersion": 1,
-  "about": "Quick-add parser corpus for docs/cross-app-semantics-v1.md section 5 and shared-parser-spec.md. reference is a local wall-clock time (Tuesday). due is a local wall-clock time; date-only results are 23:59:59. Defaults per case: mode todoist, locale en-US, parserEnabled true, due null, priority null, labels [], project null, recurrence null. Keep this file identical in vicu and vicu-android.",
+  "about": "Quick-add parser corpus for docs/cross-app-semantics-v1.md section 5 and shared-parser-spec.md. reference is a local wall-clock time (Tuesday). due is a local wall-clock time; date-only results are 23:59:59. Defaults per case: mode todoist, locale en-US, parserEnabled true, due null, priority null, labels [], project null, recurrence null, place null. Every case is parsed with the saved places in places (section 5.3); place is the id and trigger of the place read. Keep this file identical in vicu and vicu-android.",
   "reference": "2026-10-06T10:00:00",
+  "places": [
+    { "id": "z-home", "name": "HOME" },
+    { "id": "home", "name": "Home" },
+    { "id": "work", "name": "Work" },
+    { "id": "office", "name": "Office" },
+    { "id": "moms", "name": "Mom's" }
+  ],
   "cases": [
     { "input": "buy groceries", "title": "buy groceries" },
     { "input": "buy groceries tomorrow 3pm #shopping @errands p3", "title": "buy groceries", "due": "2026-10-07T15:00:00", "priority": 2, "labels": ["errands"], "project": "shopping" },
@@ -103,6 +110,29 @@
     { "mode": "vikunja", "input": "call dentist !", "title": "call dentist", "due": "2026-10-06T23:59:59" },
 
     { "parserEnabled": false, "input": "buy groceries tomorrow 3pm #shopping @errands p3", "title": "buy groceries tomorrow 3pm #shopping @errands p3" },
-    { "parserEnabled": false, "input": "call dentist !", "title": "call dentist", "due": "2026-10-06T23:59:59" }
+    { "parserEnabled": false, "input": "call dentist !", "title": "call dentist", "due": "2026-10-06T23:59:59" },
+
+    { "input": "Call mom when I get home", "title": "Call mom", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Water the plants when I'm home", "title": "Water the plants", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Water the plants once I get home.", "title": "Water the plants", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Print the report when I arrive at work", "title": "Print the report", "place": { "id": "work", "trigger": "arrive" } },
+    { "input": "Print the report when I get to the office", "title": "Print the report", "place": { "id": "office", "trigger": "arrive" } },
+    { "input": "Bring the cake when I’m at Mom’s", "title": "Bring the cake", "place": { "id": "moms", "trigger": "arrive" } },
+    { "input": "Take the laptop when I leave work", "title": "Take the laptop", "place": { "id": "work", "trigger": "leave" } },
+    { "input": "Lock the door when I'm leaving home", "title": "Lock the door", "place": { "id": "home", "trigger": "leave" } },
+    { "input": "When I get home, call mom", "title": "call mom", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Arriving at work: check the mail", "title": "check the mail", "place": { "id": "work", "trigger": "arrive" } },
+    { "input": "Call mom, when I get home.", "title": "Call mom", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Buy milk, when I get home, and bread", "title": "Buy milk, and bread", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Buy milk when I leave work tomorrow #errands", "title": "Buy milk", "due": "2026-10-07T23:59:59", "project": "errands", "place": { "id": "work", "trigger": "leave" } },
+    { "input": "Call mom when I get home tomorrow 3pm", "title": "Call mom", "due": "2026-10-07T15:00:00", "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Call when I get home @phone", "title": "Call", "labels": ["phone"], "place": { "id": "home", "trigger": "arrive" } },
+    { "input": "Take the keys leaving home", "title": "Take the keys", "place": { "id": "home", "trigger": "leave" } },
+    { "input": "Stop leaving work late", "title": "Stop leaving work late" },
+    { "input": "Finish when I get homework done", "title": "Finish when I get homework done" },
+    { "input": "Buy milk when I get to the supermarket", "title": "Buy milk when I get to the supermarket" },
+    { "input": "Clean the home office", "title": "Clean the home office" },
+    { "input": "When I get home", "title": "When I get home" },
+    { "parserEnabled": false, "input": "Call mom when I get home", "title": "Call mom when I get home" }
   ]
 }

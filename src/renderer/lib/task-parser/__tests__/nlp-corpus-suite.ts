@@ -28,11 +28,14 @@ interface CorpusCase {
   labels?: string[]
   project?: string | null
   recurrence?: { interval: number; unit: string } | null
+  place?: { id: string; trigger: string } | null
 }
 
 interface Corpus {
   contractVersion: number
   reference: string
+  /** The saved places every case is parsed with (section 5.3). */
+  places: Array<{ id: string; name: string }>
   cases: CorpusCase[]
 }
 
@@ -62,7 +65,7 @@ export function runNlpCorpusSuite(options: { zone: string; expectedOffsetMinutes
   describe(`nlp corpus v1 in ${options.zone}`, () => {
     it('is running in the requested time zone', () => {
       expect(corpus.contractVersion).toBe(1)
-      expect(corpus.cases.length).toBe(91)
+      expect(corpus.cases.length).toBe(113)
       if (options.expectedOffsetMinutesInOctober !== undefined) {
         expect(new Date(2026, 9, 6).getTimezoneOffset()).toBe(options.expectedOffsetMinutesInOctober)
       }
@@ -84,7 +87,7 @@ export function runNlpCorpusSuite(options: { zone: string; expectedOffsetMinutes
           bangToday: true,
           locale: testCase.locale ?? 'en-US',
         }
-        const result = parse(testCase.input, config, local(corpus.reference))
+        const result = parse(testCase.input, config, local(corpus.reference), corpus.places)
 
         // The stored value, as the composer, title editor and Quick Entry build it.
         const due = result.dueDate ? wall(parsedDue(result.dueDate, result.dueHasTime)) : null
@@ -96,6 +99,7 @@ export function runNlpCorpusSuite(options: { zone: string; expectedOffsetMinutes
           labels: result.labels,
           project: result.project,
           recurrence: result.recurrence,
+          place: result.place ? { id: result.place.place.id, trigger: result.place.trigger } : null,
         }).toEqual({
           title: testCase.title,
           due: testCase.due ?? null,
@@ -103,6 +107,7 @@ export function runNlpCorpusSuite(options: { zone: string; expectedOffsetMinutes
           labels: testCase.labels ?? [],
           project: testCase.project ?? null,
           recurrence: testCase.recurrence ?? null,
+          place: testCase.place ?? null,
         })
       })
     }

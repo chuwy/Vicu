@@ -262,6 +262,42 @@ the date and recurrence rules.
 - The API mapping is unchanged (monthly is `repeat_mode` 1; `every N months` for N > 1 and
   yearly use day approximations, as today).
 
+### 5.3 Places
+
+A phrase that names a saved place (section 11.7) asks for a location reminder: "Call mom when I
+get home" is the title "Call mom" with a reminder on arriving at Home. The parser reads it only
+when the app gives it the saved places (their ids and names); without places, or with the parser
+off, the words stay in the title. The corpus parses every case with its `places`.
+
+- The phrase is a lead-in and a place name. Arriving: `when I get`, `when I get to`, `when I get
+  back`, `when I get back to`, `when I arrive`, `when I arrive at`, `when I arrive in`, `when I
+  arrive back at`, `when I'm`, `when I am`, `when I'm at`, `when I am at`, `when I'm back`, `when
+  I am back`, `when I'm back at`, `when I am back at`, `when I come`, `when I come to`, `when I
+  come back`, `when I come back to`, `when I reach`, `once I get`, `once I get to`, `once I'm`,
+  `once I'm at`, `arriving at`. Leaving: `when I leave`, `when I'm leaving`, `when I am leaving`,
+  `when I get out of`, `once I leave`, `leaving`. `the ` or `my ` may stand before the name.
+- Matching ignores case, and a curly apostrophe (’ or ‘) counts as a straight one, in the
+  phrase and in the place name ("when I’m at Mom’s").
+- The phrase is made of whole words: no letter, digit or apostrophe directly before it or after
+  it. "when I get homework done" names no place.
+- A phrase that starts with `when` or `once` counts anywhere in the text. `leaving` and
+  `arriving at` count only at the start of the text or at its end (where only spaces and
+  `. ! ?` follow): "Take the keys leaving home" is a reminder, "Stop leaving work late" is not.
+- When several phrases match, the longest wins, and between equally long ones the earliest.
+  Only one place is read. Two saved places with the same name (ignoring case): the one whose id
+  comes first in character-code order.
+- The phrase leaves the title together with what joined it to the rest: at the start, the
+  spaces and `, ; : -` after it ("When I get home, call mom" is "call mom"); at the end, the
+  spaces and `, ; : -` before it and the `. ! ?` after it ("Call mom, when I get home." is "Call
+  mom"); in the middle, a `,` or `;` right after it (spaces between allowed): "Buy milk, when I
+  get home, and bread" is "Buy milk, and bread".
+- A phrase that would leave no title is not read: "When I get home" stays the title.
+- The place is read before labels, projects, priority, recurrence and dates, so no word of the
+  phrase is read as anything else; the rest of the text is parsed as usual ("Buy milk when I
+  leave work tomorrow #errands").
+- The reminder uses the default radius (200 m). It is written as `location_reminder.<taskId>`
+  once the task has its server id (section 11.7).
+
 ---
 
 ## 6. Routine history

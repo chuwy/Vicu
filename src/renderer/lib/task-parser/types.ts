@@ -1,6 +1,9 @@
+import type { PlaceMatch } from './place-phrases'
+
 export type SyntaxMode = 'todoist' | 'vikunja'
 
-export type TokenType = 'label' | 'project' | 'priority' | 'recurrence' | 'date'
+/** `place` is "when I get home" for a saved place (section 5.3), read only when the caller passes places. */
+export type TokenType = 'label' | 'project' | 'priority' | 'recurrence' | 'date' | 'place'
 
 export interface ParsedToken {
   type: TokenType
@@ -28,6 +31,8 @@ export interface ParseResult {
   labels: string[]
   project: string | null
   recurrence: ParsedRecurrence | null
+  /** A saved place the text names with "when I get home", for a location reminder. */
+  place: PlaceMatch | null
   tokens: ParsedToken[]
 }
 

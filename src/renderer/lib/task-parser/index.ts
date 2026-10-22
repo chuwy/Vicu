@@ -6,18 +6,20 @@ import { extractPriority } from './extract-priority'
 import { extractRecurrence } from './extract-recurrence'
 import type { WeekdayAnchor } from './extract-recurrence'
 import { extractDate, extractBangToday } from './extract-dates'
+import { matchPlacePhrase, type PlaceRef } from './place-phrases'
 
 export type { ParseResult, ParserConfig, ParsedToken, ParsedRecurrence, SyntaxMode, TokenType, SyntaxPrefixes } from './types'
 export { DEFAULT_PARSER_CONFIG, getPrefixes } from './types'
 export { recurrenceToVikunja } from './recurrence-map'
 export { getParserConfig } from './config-bridge'
 export { extractBangToday } from './extract-dates'
+export type { PlaceMatch, PlaceRef } from './place-phrases'
 
 /**
  * Parse free-form task input into structured fields. Implements shared-parser-spec.md and
  * section 5 of docs/cross-app-semantics-v1.md; test-fixtures/nlp-corpus-v1.json is the test.
  *
- * Extraction order: Labels → Projects → Priority → Recurrence → Dates → Title
+ * Extraction order: Place → Labels → Projects → Priority → Recurrence → Dates → Title
  *
  * The `!` → today shortcut (standalone, leading or trailing `!`) is controlled by
  * `config.bangToday` and has one rule, `extractBangToday`: `parse()` applies it whether the
@@ -26,11 +28,13 @@ export { extractBangToday } from './extract-dates'
  * @param rawInput - The raw user input string
  * @param config - Parser configuration (enabled, syntax mode, suppress types, locale)
  * @param reference - "Now" for relative dates; the current time unless a test passes one
+ * @param places - The saved places "when I get home" may name (section 5.3); none means no place is read
  */
 export function parse(
   rawInput: string,
   config: ParserConfig = DEFAULT_PARSER_CONFIG,
   reference: Date = new Date(),
+  places: readonly PlaceRef[] = [],
 ): ParseResult {
   const result: ParseResult = {
     title: rawInput,
@@ -40,6 +44,7 @@ export function parse(
     labels: [],
     project: null,
     recurrence: null,
+    place: null,
     tokens: [],
   }
 
@@ -60,6 +65,16 @@ export function parse(
   const prefixes = getPrefixes(config.syntaxMode)
   const consumed: Array<{ start: number; end: number }> = []
   const suppress = new Set(config.suppressTypes ?? [])
+
+  // 0. A saved place ("when I get home"), first, so no word of the phrase is read as a date.
+  if (!suppress.has('place')) {
+    const match = matchPlacePhrase(rawInput, places)
+    if (match) {
+      consumed.push(match.consumed)
+      result.place = match
+      result.tokens.push({ type: 'place', start: match.start, end: match.end, value: match, raw: rawInput.slice(match.start, match.end) })
+    }
+  }
 
   // 1. Labels
   if (!suppress.has('label')) {

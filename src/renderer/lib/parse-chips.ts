@@ -2,6 +2,7 @@ import type { ParseResult, TokenType } from './task-parser'
 import { formatDateChip } from './date-utils'
 import type { DateFormat } from './date-display'
 import { getDateFormat } from './date-format'
+import { locationReminderLabel, type LocationTrigger } from '../../shared/synced-prefs'
 
 // The chips under a quick-add input: one builder for the composer, the title editor and Quick
 // Entry, so the same parse gives the same words everywhere. Pure: no React, no DOM.
@@ -30,7 +31,12 @@ export function recurrenceChipName(interval: number, unit: string): string {
   return interval === 1 ? `Every ${unit}` : `Every ${interval} ${unit}s`
 }
 
-/** A ParseResult as chips, in the order date, priority, labels, project, repeat. */
+/** The word on a place chip: "Arrive: Home" or "Leave: Work", as the reminder chip says it. */
+export function placeChipName(trigger: LocationTrigger, placeName: string): string {
+  return locationReminderLabel(trigger, placeName)
+}
+
+/** A ParseResult as chips, in the order date, priority, labels, project, repeat, place. */
 export function parseChips(result: ParseResult, fmt: DateFormat = getDateFormat(), now: Date = new Date()): ChipData[] {
   const chips: ChipData[] = []
   if (result.dueDate) {
@@ -47,6 +53,9 @@ export function parseChips(result: ParseResult, fmt: DateFormat = getDateFormat(
   }
   if (result.recurrence) {
     chips.push({ type: 'recurrence', label: recurrenceChipName(result.recurrence.interval, result.recurrence.unit), key: 'recurrence', source: 'text' })
+  }
+  if (result.place) {
+    chips.push({ type: 'place', label: placeChipName(result.place.trigger, result.place.place.name), key: 'place', source: 'text' })
   }
   return chips
 }
