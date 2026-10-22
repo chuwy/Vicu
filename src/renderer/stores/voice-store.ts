@@ -3,6 +3,8 @@ import { createRecognizer, type VoiceRecognizer } from '@/lib/voice/recognizer'
 import { toast } from '@/stores/toast-store'
 import { announce } from '@/stores/announcer-store'
 import type { VoiceErrorCode } from '../../shared/voice-types'
+import type { VoiceListDefaults } from '@/lib/voice/voice-task'
+import { useVoiceListStore } from '@/stores/voice-list-store'
 
 // One voice capture at a time (docs/voice-input.md): who started it, what has been heard, and
 // whether letting go adds or cancels. The + button, the voice shortcut and the command palette
@@ -20,6 +22,8 @@ interface VoiceState {
   mode: VoiceMode
   /** The words so far. */
   text: string
+  /** The composer defaults of the list on screen when the capture started (null: the Inbox). */
+  list: VoiceListDefaults | null
   /** The pointer moved away while holding +: letting go now cancels. */
   cancelArmed: boolean
   /** The final text, waiting for VoiceHost to add it (phase `adding`). */
@@ -62,11 +66,13 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   ...IDLE,
   source: 'button',
   mode: 'hold',
+  list: null,
   fallbackRequest: 0,
 
   begin: (source, mode) => {
     if (get().phase !== 'idle') return
-    set({ ...IDLE, phase: 'starting', source, mode })
+    // The list is read once: navigating while talking does not move the task.
+    set({ ...IDLE, phase: 'starting', source, mode, list: useVoiceListStore.getState().defaults })
     announce('Listening. Say the task.')
     void getRecognizer().start({
       onReady: () => {

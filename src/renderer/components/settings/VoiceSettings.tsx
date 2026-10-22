@@ -5,8 +5,6 @@ import { voiceHotkeyConflict } from '@/lib/voice/shortcut-conflicts'
 import type { VoiceAvailability } from '../../../shared/voice-types'
 
 const isMac = window.api.platform === 'darwin'
-/** The same as DEFAULT_VOICE_HOTKEY in src/main/config.ts. */
-const DEFAULT_VOICE_HOTKEY = isMac ? 'Command+Shift+D' : 'Ctrl+Shift+D'
 
 interface VoiceSettingsProps {
   config: AppConfig
@@ -33,14 +31,15 @@ export function VoiceSettings({ config, onChange }: VoiceSettingsProps) {
     return () => { live = false }
   }, [])
 
-  const hotkey = config.voice_hotkey ?? DEFAULT_VOICE_HOTKEY
+  // No default: the shortcut is off until the user records one.
+  const hotkey = config.voice_hotkey ?? ''
   const conflict = voiceHotkeyConflict(hotkey, config, isMac)
 
   return (
     <div className="rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-5">
       <h2 className="text-sm font-semibold text-[var(--text-primary)]">Voice input</h2>
       <p className="mt-1 text-xs text-[var(--text-secondary)]">
-        Hold the + button, or hold the shortcut below, and say a task such as “Call mom tomorrow 3pm”. Let go to add it, press Esc to cancel. Tap the shortcut instead to keep listening until you press it again or Enter. “Say a task” in the command palette does the same.
+        Hold the + button and say a task such as “Call mom tomorrow 3pm”. Let go to add it, press Esc to cancel. It goes where the list you are looking at puts new tasks, unless you name a project or date. With a shortcut set below, hold it the same way, or tap it to keep listening until you press it again or Enter. “Say a task” in the command palette works without holding anything.
       </p>
       <p className="mt-2 text-xs text-[var(--text-secondary)]" data-voice-engine="">{engineText(availability)}</p>
 
@@ -50,8 +49,8 @@ export function VoiceSettings({ config, onChange }: VoiceSettingsProps) {
           value={hotkey}
           onChange={(value) => onChange({ voice_hotkey: value })}
           onClear={() => onChange({ voice_hotkey: '' })}
-          defaultValue={DEFAULT_VOICE_HOTKEY}
-          emptyText="Off"
+          defaultValue=""
+          emptyText="Not set"
           label="Voice input shortcut"
           warning={conflict !== null}
         />

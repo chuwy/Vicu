@@ -28,6 +28,7 @@ import { confirmTaskCompletion } from '@/lib/task-completion'
 import { SmartListIcon } from '@/components/shared/SmartListIcon'
 import { ReadingScroll } from '@/components/layout/ReadingScroll'
 import { useHoldToTalk } from '@/hooks/use-hold-to-talk'
+import { useVoiceListStore } from '@/stores/voice-list-store'
 import type { SmartListId } from '@/lib/smart-list-identity'
 
 interface TaskListProps {
@@ -98,8 +99,19 @@ export function TaskList({
   newTaskPlacement = 'after-children',
 }: TaskListProps) {
   const [isAdding, setIsAdding] = useState(false)
-  // Holding the header + says a task instead of typing it (docs/voice-input.md).
+  // Holding the header + says a task instead of typing it (docs/voice-input.md). A voice task gets
+  // the defaults this list gives its composer, from wherever the capture is started.
   const holdToTalk = useHoldToTalk()
+  const defaultDueTime = defaultDueDate?.getTime()
+  useEffect(() => {
+    if (!showNewTask || !projectId) return
+    const owner = {}
+    useVoiceListStore.getState().register(owner, {
+      projectId,
+      defaultDueDate: defaultDueTime === undefined ? null : new Date(defaultDueTime),
+    })
+    return () => useVoiceListStore.getState().unregister(owner)
+  }, [showNewTask, projectId, defaultDueTime])
   const [addPosition, setAddPosition] = useState<'top' | 'bottom'>('top')
   const inputRef = useRef<HTMLInputElement>(null)
   const creationRef = useRef<HTMLDivElement>(null)

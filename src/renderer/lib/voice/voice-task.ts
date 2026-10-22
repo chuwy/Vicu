@@ -1,18 +1,30 @@
 import { parse, type ParseResult, type ParserConfig } from '../task-parser'
-import { resolveComposerFields } from '../composer-fields'
-import { isDateOnly } from '../due-dates'
+import { composerChips, resolveComposerFields, type ComposerFields } from '../composer-fields'
+import { dateOnlyDue, isDateOnly, toLocalDate } from '../due-dates'
 import { formatDateDisplay, type DateFormat } from '../date-display'
+import { formatDateChip } from '../date-utils'
+import type { ChipData } from '../parse-chips'
 import type { CreateTaskPayload, TaskReminder } from '../vikunja-types'
 
 // One spoken sentence as a new task, read like quick add (docs/voice-input.md): the quick-add
-// parser with the user's settings and the composer's field rules with nothing picked by hand, the
-// project the text names or else the Inbox, the labels it names, and the default reminder for a
-// due date. The same rules as Android's TextTaskCreator. Pure: the caller creates the task.
+// parser with the user's settings and the composer's field rules with nothing picked by hand. The
+// list on screen gives the same defaults as its composer (its project, Today's date), the words
+// win over them (a project or date they name), and without a list the task goes to the Inbox. Then
+// the labels it names and the default reminder for a due date. Pure: the caller creates the task.
+
+/** What the list on screen gives its composer (TaskList's `projectId` and `defaultDueDate`). */
+export interface VoiceListDefaults {
+  projectId: number | null
+  defaultDueDate: Date | null
+}
 
 export interface VoiceTaskContext {
   parserConfig: ParserConfig
+  /** The active projects (an archived or deleted one is not in it). */
   projects: readonly { id: number; title: string }[]
   inboxProjectId: number
+  /** The composer defaults of the list on screen when the capture started; none: the Inbox, no date. */
+  list?: VoiceListDefaults | null
   /** Settings, Notifications, Default reminder: 0 none, -1 at the due time, else seconds before. */
   reminderOffset?: number
   reminderRelativeTo?: TaskReminder['relative_to']
@@ -55,6 +67,36 @@ export function cleanTranscript(text: string): string {
   return text.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '').trim()
 }
 
+/** The project a new task starts in: the list's own when it still exists, else the Inbox. */
+function startProject(ctx: VoiceTaskContext): number {
+  const listProject = ctx.list?.projectId
+  return listProject && ctx.projects.some((project) => project.id === listProject) ? listProject : ctx.inboxProjectId
+}
+
+/** The fields the task gets: the composer's rules over what was said, with the list's defaults. */
+export function voiceFields(parsed: ParseResult | null, ctx: VoiceTaskContext): ComposerFields {
+  const listDue = ctx.list?.defaultDueDate
+  return resolveComposerFields({
+    parsed,
+    dueTouched: false,
+    dueValue: null,
+    // The same date-only due date the composer gives a task from this list.
+    contextDue: listDue ? dateOnlyDue(toLocalDate(listDue)) : null,
+    contextDueDismissed: false,
+    priority: null,
+    projectTouched: false,
+    selectedProjectId: startProject(ctx),
+    findProjectId: (title) => ctx.projects.find((project) => project.title.toLowerCase() === title.toLowerCase())?.id,
+    recurrenceTouched: false,
+    repeatAfter: 0,
+    repeatMode: 0,
+  })
+}
+
+function projectTitleOf(projectId: number, ctx: VoiceTaskContext): string | null {
+  return projectId === ctx.inboxProjectId ? null : ctx.projects.find((project) => project.id === projectId)?.title ?? null
+}
+
 export function voiceTaskDraft(text: string, ctx: VoiceTaskContext): VoiceTaskDraft {
   const input = cleanTranscript(text)
   if (!input) return { ok: false, reason: 'empty', message: 'Nothing was heard.' }
@@ -62,20 +104,7 @@ export function voiceTaskDraft(text: string, ctx: VoiceTaskContext): VoiceTaskDr
 
   // parse() also applies the `!` today shortcut when the parser is off.
   const parsed = parse(input, ctx.parserConfig, ctx.now ?? new Date())
-  const fields = resolveComposerFields({
-    parsed,
-    dueTouched: false,
-    dueValue: null,
-    contextDue: null,
-    contextDueDismissed: false,
-    priority: null,
-    projectTouched: false,
-    selectedProjectId: ctx.inboxProjectId,
-    findProjectId: (title) => ctx.projects.find((project) => project.title.toLowerCase() === title.toLowerCase())?.id,
-    recurrenceTouched: false,
-    repeatAfter: 0,
-    repeatMode: 0,
-  })
+  const fields = voiceFields(parsed, ctx)
   const title = parsed.title.trim()
   if (!title) return { ok: false, reason: 'empty', message: 'Say what the task is.' }
 
@@ -86,18 +115,34 @@ export function voiceTaskDraft(text: string, ctx: VoiceTaskContext): VoiceTaskDr
   const reminder = defaultReminder(fields.dueDate, ctx.reminderOffset, ctx.reminderRelativeTo)
   if (reminder) payload.reminders = [reminder]
 
-  const projectTitle = fields.projectId === ctx.inboxProjectId
-    ? null
-    : ctx.projects.find((project) => project.id === fields.projectId)?.title ?? null
   return {
     ok: true,
     title,
     projectId: fields.projectId,
-    projectTitle,
+    projectTitle: projectTitleOf(fields.projectId, ctx),
     payload,
     labelNames: [...new Set(parsed.labels)],
     parsed,
   }
+}
+
+/**
+ * The chips of the voice card: what the words say (the composer's chips) plus, before and while
+ * anything is said, the list's own date and project, so the card shows where the task will go.
+ * The Inbox gets no chip. `parsed` is null while nothing has been heard.
+ */
+export function voiceCardChips(parsed: ParseResult | null, text: string, ctx: VoiceTaskContext, fmt: DateFormat): ChipData[] {
+  const fields = voiceFields(parsed, ctx)
+  const now = ctx.now ?? new Date()
+  const projectTitle = projectTitleOf(fields.projectId, ctx)
+  const chips = composerChips({ fields, parsed, chipLabels: [], projectTitle: projectTitle ?? '', fmt, now, text })
+  if (fields.dueSource === 'default' && fields.dueDate) {
+    chips.unshift({ type: 'date', key: 'list-date', label: formatDateChip(new Date(fields.dueDate), isDateOnly(fields.dueDate), now, fmt) })
+  }
+  if (fields.projectSource === 'default' && projectTitle && !chips.some((chip) => chip.type === 'project')) {
+    chips.push({ type: 'project', key: 'list-project', label: projectTitle })
+  }
+  return chips
 }
 
 /**

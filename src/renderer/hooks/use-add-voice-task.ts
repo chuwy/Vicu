@@ -7,16 +7,17 @@ import { useAddLabel, useCreateLabel, useCreateTask } from './use-task-mutations
 import { getParserConfig } from '@/lib/task-parser'
 import { buildCreateExtras } from '@/lib/composer-queue'
 import { isTempTaskId } from '@/lib/pending-cache'
-import { voiceConfirmation, voiceTaskDraft } from '@/lib/voice/voice-task'
+import { voiceConfirmation, voiceTaskDraft, type VoiceListDefaults } from '@/lib/voice/voice-task'
 import { toast } from '@/stores/toast-store'
 import type { Label } from '@/lib/vikunja-types'
 
 /**
- * Adds a spoken sentence as a task, the way quick add reads it (lib/voice/voice-task.ts), through
+ * Adds a spoken sentence as a task, the way quick add reads it with the list's composer defaults
+ * (lib/voice/voice-task.ts), through
  * the same create as the composer: queued with its labels when the server cannot be reached.
  * Says what was added in a toast. Resolves true when a task was made.
  */
-export function useAddVoiceTask(): (text: string) => Promise<boolean> {
+export function useAddVoiceTask(): (text: string, list?: VoiceListDefaults | null) => Promise<boolean> {
   const { data: config } = useAppConfig()
   const { data: projects } = useProjects()
   const { data: labels = [] } = useLabels()
@@ -26,11 +27,12 @@ export function useAddVoiceTask(): (text: string) => Promise<boolean> {
   const addLabel = useAddLabel({ silent: true })
   const createLabel = useCreateLabel({ silent: true })
 
-  return useCallback(async (text: string) => {
+  return useCallback(async (text: string, list?: VoiceListDefaults | null) => {
     const draft = voiceTaskDraft(text, {
       parserConfig: getParserConfig(config ?? {}),
       projects: projects?.flat ?? [],
       inboxProjectId: config?.inbox_project_id ?? 0,
+      list,
       reminderOffset: config?.notifications_default_reminder_offset,
       reminderRelativeTo: config?.notifications_default_reminder_relative_to,
     })

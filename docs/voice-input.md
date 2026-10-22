@@ -17,15 +17,15 @@ text is the same.
   direction) and let go there to cancel; moving back undoes that. A plain click on + opens the
   composer exactly as before: the hold is decided by `lib/voice/press-gesture.ts` (a press that
   moves more than 8 px before 400 ms stays a click; the click after a hold is swallowed).
-- **The voice shortcut.** Settings, Keyboard Shortcuts, Voice input (config `voice_hotkey`,
-  default Command+Shift+D on macOS and Ctrl+Shift+D elsewhere; Clear turns it off). Hold it while
-  Vicu is in front to talk and let go to add (push to talk). Tap it instead (released within
-  300 ms) and listening stays on until the shortcut is pressed again, Enter, or the card's Add
-  button; Esc cancels. Letting go of any key of the combination ends a hold, because macOS does
-  not send the key-up of a letter while Command is down. `lib/voice/shortcut-hold.ts` is the
-  state machine, `hooks/use-voice-shortcut.ts` feeds it window key events. Settings warns when
-  the combination is also an enabled Quick Entry or Quick View hotkey or one of the app's own
-  shortcuts (`lib/voice/shortcut-conflicts.ts`).
+- **The voice shortcut.** Settings, Keyboard Shortcuts, Voice input (config `voice_hotkey`). It is
+  off until the user records one: there is no default combination, the field says "Not set", and
+  Clear turns it off again. Hold it while Vicu is in front to talk and let go to add (push to
+  talk). Tap it instead (released within 300 ms) and listening stays on until the shortcut is
+  pressed again, Enter, or the card's Add button; Esc cancels. Letting go of any key of the
+  combination ends a hold, because macOS does not send the key-up of a letter while Command is
+  down. `lib/voice/shortcut-hold.ts` is the state machine, `hooks/use-voice-shortcut.ts` feeds it
+  window key events. Settings warns when the combination is also an enabled Quick Entry or Quick
+  View hotkey or one of the app's own shortcuts (`lib/voice/shortcut-conflicts.ts`).
 - **"Say a task"** in the command palette starts listening without holding anything (the same as
   a tapped shortcut). Together with the tap this is the accessible way in: nothing needs a held
   pointer or held keys, and the + keeps its name "New task".
@@ -37,11 +37,20 @@ later step.
 
 ## Adding the task
 
-`lib/voice/voice-task.ts` turns the final words into a task, with the same rules as Android's
-`TextTaskCreator`: the parser with the user's settings, the composer's `resolveComposerFields`
-with nothing picked by hand, the project the text names or else the Inbox (not the list on
-screen), labels matched by name or created, and the default reminder (Settings, Notifications,
-Default reminder) when there is a due date. A trailing full stop from the recognizer is dropped.
+`lib/voice/voice-task.ts` turns the final words into a task: the parser with the user's settings
+and the composer's `resolveComposerFields` with nothing picked by hand. The task gets the same
+defaults as the composer of the list on screen, however the capture was started (+, the shortcut
+or the palette): the `TaskList` that shows a composer registers the `projectId` and
+`defaultDueDate` its view already gives the composer (`stores/voice-list-store.ts`), and the
+capture reads them once when it starts. So a project view puts the task in that project, Today
+gives it today's date, a custom list uses its add-to project, and Inbox, Upcoming, Anytime and a
+tag add to the Inbox without a date (the same as Android). The words win over those defaults (a
+project or date they name), as in the composer. A list project that is gone or archived falls back
+to the Inbox, and so does a screen without a composer (Search, Settings). The card shows the
+list's project and date as chips before anything is said (no chip for the Inbox), replaced by what
+the words name. Labels are matched by name or created, and the default reminder (Settings,
+Notifications, Default reminder) is added when there is a due date. A trailing full stop from the
+recognizer is dropped.
 `hooks/use-add-voice-task.ts` creates it through the composer's create (`useCreateTask`), so it
 is queued with its labels when the server cannot be reached, and a toast says what was added:
 `Added “Call mom”, tomorrow, 15:00` or `Added “Report” to Work` (the date is the row phrase of

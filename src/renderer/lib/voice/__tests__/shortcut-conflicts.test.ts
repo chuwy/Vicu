@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { voiceHotkeyConflict } from '../shortcut-conflicts'
 
 describe('voiceHotkeyConflict', () => {
-  it('accepts the defaults next to the default Quick Entry and Quick View hotkeys', () => {
+  it('accepts a free combination next to the default Quick Entry and Quick View hotkeys', () => {
     const mac = { quick_entry_enabled: true, quick_entry_hotkey: 'Command+Shift+Space', quick_view_enabled: true, quick_view_hotkey: 'Command+Shift+B' }
     expect(voiceHotkeyConflict('Command+Shift+D', mac, true)).toBeNull()
     const win = { quick_entry_enabled: true, quick_entry_hotkey: 'Alt+Shift+V', quick_view_enabled: true, quick_view_hotkey: 'Alt+Shift+B' }

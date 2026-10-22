@@ -8,10 +8,10 @@ import { useIsDark } from '@/hooks/use-is-dark'
 import { useVoiceShortcut } from '@/hooks/use-voice-shortcut'
 import { formatAcceleratorForDisplay } from '@/lib/accelerator'
 import { cn } from '@/lib/cn'
-import { parseChips } from '@/lib/parse-chips'
-import { getParserConfig, parse, type ParsedToken, type ParserConfig } from '@/lib/task-parser'
+import { getParserConfig, parse, type ParsedToken } from '@/lib/task-parser'
 import { tokenHighlightBackground } from '@/lib/token-chip-colors'
-import { cleanTranscript } from '@/lib/voice/voice-task'
+import { cleanTranscript, voiceCardChips, type VoiceTaskContext } from '@/lib/voice/voice-task'
+import { useProjects } from '@/hooks/use-projects'
 import { useNewTaskRequestStore } from '@/stores/new-task-request-store'
 import { useVoiceStore } from '@/stores/voice-store'
 import { Button } from '@/components/shared/Button'
@@ -38,7 +38,7 @@ export function VoiceHost() {
   useEffect(() => {
     if (phase !== 'adding' || finalText === null || adding.current === finalText) return
     adding.current = finalText
-    void addVoiceTask(finalText).finally(() => {
+    void addVoiceTask(finalText, useVoiceStore.getState().list).finally(() => {
       adding.current = null
       useVoiceStore.getState().done()
     })
@@ -76,8 +76,17 @@ export function VoiceHost() {
   }, [phase])
 
   const parserConfig = useMemo(() => getParserConfig(config ?? {}), [config])
+  const { data: projects } = useProjects()
+  const list = useVoiceStore((s) => s.list)
+  // What the card reads chips with: the same context the add uses.
+  const context = useMemo<VoiceTaskContext>(() => ({
+    parserConfig,
+    projects: projects?.flat ?? [],
+    inboxProjectId: config?.inbox_project_id ?? 0,
+    list,
+  }), [parserConfig, projects?.flat, config?.inbox_project_id, list])
   if (phase === 'idle') return null
-  return <VoiceCard hotkey={config?.voice_hotkey} parserConfig={parserConfig} />
+  return <VoiceCard hotkey={config?.voice_hotkey} context={context} />
 }
 
 interface Segment {
@@ -99,7 +108,7 @@ function segmentsOf(text: string, tokens: readonly ParsedToken[]): Segment[] {
   return out
 }
 
-function VoiceCard({ hotkey, parserConfig }: { hotkey?: string; parserConfig: ParserConfig }) {
+function VoiceCard({ hotkey, context }: { hotkey?: string; context: VoiceTaskContext }) {
   const phase = useVoiceStore((s) => s.phase)
   const source = useVoiceStore((s) => s.source)
   const mode = useVoiceStore((s) => s.mode)
@@ -109,8 +118,9 @@ function VoiceCard({ hotkey, parserConfig }: { hotkey?: string; parserConfig: Pa
   const dateFormat = useDateFormat()
 
   const text = cleanTranscript(rawText)
-  const parsed = useMemo(() => (text ? parse(text, parserConfig) : null), [text, parserConfig])
-  const chips = useMemo(() => (parsed ? parseChips(parsed, dateFormat) : []), [parsed, dateFormat])
+  const parsed = useMemo(() => (text ? parse(text, context.parserConfig) : null), [text, context.parserConfig])
+  // The list's date and project show before anything is said: where the task will go.
+  const chips = useMemo(() => voiceCardChips(parsed, text, { ...context, now: new Date() }, dateFormat), [parsed, text, context, dateFormat])
   const segments = parsed ? segmentsOf(text, parsed.tokens) : []
 
   const listening = phase === 'starting' || phase === 'listening'

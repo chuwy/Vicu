@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARSER_CONFIG } from '../../task-parser'
 import { dateOnlyDue } from '../../due-dates'
-import { cleanTranscript, defaultReminder, voiceConfirmation, voiceTaskDraft, type VoiceTaskContext } from '../voice-task'
+import { cleanTranscript, defaultReminder, voiceCardChips, voiceConfirmation, voiceTaskDraft, type VoiceTaskContext } from '../voice-task'
+import { parse } from '../../task-parser'
 
 // Wednesday 21 October 2026, 10:00 local.
 const now = new Date(2026, 9, 21, 10, 0, 0)
@@ -82,6 +83,67 @@ describe('voiceTaskDraft', () => {
     expect(voiceTaskDraft('   ', ctx)).toMatchObject({ ok: false, reason: 'empty' })
     expect(voiceTaskDraft('tomorrow 3pm', ctx)).toMatchObject({ ok: false, reason: 'empty' })
     expect(voiceTaskDraft('Call mom', { ...ctx, inboxProjectId: 0 })).toMatchObject({ ok: false, reason: 'no-inbox' })
+  })
+})
+
+describe('voiceTaskDraft with the list on screen', () => {
+  const today = new Date(2026, 9, 21, 0, 0, 0)
+  const onToday = { projectId: 1, defaultDueDate: today }
+  const onWork = { projectId: 7, defaultDueDate: null }
+
+  it('uses the list default: Today gives today, a project view gives its project', () => {
+    const fromToday = ok('Buy milk', { list: onToday })
+    expect(fromToday.projectId).toBe(1)
+    expect(fromToday.payload.due_date).toBe(dateOnlyDue('2026-10-21'))
+    const fromWork = ok('Quarterly report', { list: onWork })
+    expect(fromWork.projectId).toBe(7)
+    expect(fromWork.projectTitle).toBe('Work')
+    expect(fromWork.payload.due_date).toBeUndefined()
+  })
+
+  it('the words win over the list default', () => {
+    const named = ok('Plan holiday #Family tomorrow 9am', { list: { projectId: 7, defaultDueDate: today } })
+    expect(named.projectId).toBe(9)
+    expect(new Date(named.payload.due_date!)).toEqual(new Date(2026, 9, 22, 9, 0, 0))
+    // A project the words name that does not exist leaves the list's.
+    expect(ok('Plan holiday #Nowhere', { list: onWork }).projectId).toBe(7)
+  })
+
+  it('falls back to the Inbox when the list project is gone or archived', () => {
+    const draft = ok('Buy milk', { list: { projectId: 42, defaultDueDate: null } })
+    expect(draft.projectId).toBe(1)
+    expect(draft.projectTitle).toBeNull()
+  })
+
+  it('without a list goes to the Inbox, undated', () => {
+    const draft = ok('Buy milk', { list: null })
+    expect(draft.projectId).toBe(1)
+    expect(draft.payload.due_date).toBeUndefined()
+  })
+
+  it('confirms the list project by name', () => {
+    expect(voiceConfirmation(ok('Quarterly report', { list: onWork }), now, gb24)).toBe('Added “Quarterly report” to Work')
+    expect(voiceConfirmation(ok('Buy milk', { list: onToday }), now, gb24)).toBe('Added “Buy milk”, today')
+  })
+})
+
+describe('voiceCardChips', () => {
+  const chipsFor = (text: string, list: VoiceTaskContext['list']) => {
+    const c = { ...ctx, list }
+    return voiceCardChips(text ? parse(text, c.parserConfig, now) : null, text, c, gb24).map((chip) => `${chip.type}:${chip.label}`)
+  }
+
+  it('shows the list date and project before anything is said, never the Inbox', () => {
+    expect(chipsFor('', { projectId: 7, defaultDueDate: null })).toEqual(['project:Work'])
+    expect(chipsFor('', { projectId: 1, defaultDueDate: new Date(2026, 9, 21) })).toEqual(['date:Wed 21 Oct'])
+    expect(chipsFor('', null)).toEqual([])
+  })
+
+  it('replaces them with what the words say', () => {
+    expect(chipsFor('Call mom tomorrow 3pm #Family', { projectId: 7, defaultDueDate: new Date(2026, 9, 21) })).toEqual([
+      'date:Thu 22 Oct, 15:00',
+      'project:Family',
+    ])
   })
 })
 
