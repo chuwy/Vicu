@@ -33,8 +33,7 @@ export function useAddVoiceTask(): (text: string, list?: VoiceListDefaults | nul
       projects: projects?.flat ?? [],
       inboxProjectId: config?.inbox_project_id ?? 0,
       list,
-      reminderOffset: config?.notifications_default_reminder_offset,
-      reminderRelativeTo: config?.notifications_default_reminder_relative_to,
+      defaultReminder: config,
     })
     if (!draft.ok) {
       toast.info(draft.message)

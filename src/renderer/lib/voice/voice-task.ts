@@ -4,7 +4,8 @@ import { dateOnlyDue, isDateOnly, toLocalDate } from '../due-dates'
 import { formatDateDisplay, type DateFormat } from '../date-display'
 import { formatDateChip } from '../date-utils'
 import type { ChipData } from '../parse-chips'
-import type { CreateTaskPayload, TaskReminder } from '../vikunja-types'
+import type { CreateTaskPayload } from '../vikunja-types'
+import { withDefaultReminder, type DefaultReminderSettings } from '../../../shared/default-reminder'
 
 // One spoken sentence as a new task, read like quick add (docs/voice-input.md): the quick-add
 // parser with the user's settings and the composer's field rules with nothing picked by hand. The
@@ -25,9 +26,8 @@ export interface VoiceTaskContext {
   inboxProjectId: number
   /** The composer defaults of the list on screen when the capture started; none: the Inbox, no date. */
   list?: VoiceListDefaults | null
-  /** Settings, Notifications, Default reminder: 0 none, -1 at the due time, else seconds before. */
-  reminderOffset?: number
-  reminderRelativeTo?: TaskReminder['relative_to']
+  /** The default reminder settings (src/shared/default-reminder.ts, the same rule as typing). */
+  defaultReminder?: DefaultReminderSettings | null
   now?: Date
 }
 
@@ -43,24 +43,6 @@ export type VoiceTaskDraft =
       parsed: ParseResult
     }
   | { ok: false; reason: 'empty' | 'no-inbox'; message: string }
-
-/** The reminder the "Default reminder" setting adds to a task with a due date, or null. */
-export function defaultReminder(
-  dueDate: string | null | undefined,
-  offsetSeconds: number | undefined,
-  relativeTo: TaskReminder['relative_to'] = 'due_date',
-): TaskReminder | null {
-  if (!dueDate || !offsetSeconds) return null
-  const due = new Date(dueDate)
-  if (Number.isNaN(due.getTime())) return null
-  if (offsetSeconds === -1) return { reminder: due.toISOString(), relative_period: 0, relative_to: relativeTo }
-  if (offsetSeconds < 0) return null
-  return {
-    reminder: new Date(due.getTime() - offsetSeconds * 1000).toISOString(),
-    relative_period: -offsetSeconds,
-    relative_to: relativeTo,
-  }
-}
 
 /** Speech recognizers end a sentence with a full stop or capitalise oddly; quick add does not expect either. */
 export function cleanTranscript(text: string): string {
@@ -108,12 +90,11 @@ export function voiceTaskDraft(text: string, ctx: VoiceTaskContext): VoiceTaskDr
   const title = parsed.title.trim()
   if (!title) return { ok: false, reason: 'empty', message: 'Say what the task is.' }
 
-  const payload: CreateTaskPayload = { title }
+  let payload: CreateTaskPayload = { title }
   if (fields.dueDate) payload.due_date = fields.dueDate
   if (fields.priority > 0) payload.priority = fields.priority
   if (fields.repeat) Object.assign(payload, fields.repeat)
-  const reminder = defaultReminder(fields.dueDate, ctx.reminderOffset, ctx.reminderRelativeTo)
-  if (reminder) payload.reminders = [reminder]
+  payload = withDefaultReminder(payload, ctx.defaultReminder)
 
   return {
     ok: true,

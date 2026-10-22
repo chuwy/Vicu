@@ -49,7 +49,8 @@ project or date they name), as in the composer. A list project that is gone or a
 to the Inbox, and so does a screen without a composer (Search, Settings). The card shows the
 list's project and date as chips before anything is said (no chip for the Inbox), replaced by what
 the words name. Labels are matched by name or created, and the default reminder (Settings,
-Notifications, Default reminder) is added when there is a due date. A trailing full stop from the
+Notifications, Default reminder) is added when there is a due date, by the same rule as every
+other new task (`src/shared/default-reminder.ts`). A trailing full stop from the
 recognizer is dropped.
 `hooks/use-add-voice-task.ts` creates it through the composer's create (`useCreateTask`), so it
 is queued with its labels when the server cannot be reached, and a toast says what was added:

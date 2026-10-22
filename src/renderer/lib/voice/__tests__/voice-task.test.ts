@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PARSER_CONFIG } from '../../task-parser'
 import { dateOnlyDue } from '../../due-dates'
-import { cleanTranscript, defaultReminder, voiceCardChips, voiceConfirmation, voiceTaskDraft, type VoiceTaskContext } from '../voice-task'
+import { cleanTranscript, voiceCardChips, voiceConfirmation, voiceTaskDraft, type VoiceTaskContext } from '../voice-task'
 import { parse } from '../../task-parser'
 
 // Wednesday 21 October 2026, 10:00 local.
@@ -72,11 +72,14 @@ describe('voiceTaskDraft', () => {
   })
 
   it('adds the default reminder to a task with a due date', () => {
-    const draft = ok('Call mom tomorrow 3pm', { reminderOffset: 900, reminderRelativeTo: 'due_date' })
+    const draft = ok('Call mom tomorrow 3pm', { defaultReminder: { notifications_default_reminder_offset: 900, notifications_default_reminder_relative_to: 'due_date' } })
     expect(draft.payload.reminders).toEqual([
       { reminder: new Date(2026, 9, 22, 14, 45, 0).toISOString(), relative_period: -900, relative_to: 'due_date' },
     ])
-    expect(ok('Call mom', { reminderOffset: 900 }).payload.reminders).toBeUndefined()
+    expect(ok('Call mom', { defaultReminder: { notifications_default_reminder_offset: 900 } }).payload.reminders).toBeUndefined()
+    // The list's date counts as the due date, as in the composer.
+    expect(ok('Buy milk', { list: { projectId: 1, defaultDueDate: new Date(2026, 9, 21) }, defaultReminder: { notifications_default_reminder_offset: -1 } }).payload.reminders)
+      .toEqual([{ reminder: dateOnlyDue('2026-10-21'), relative_period: 0, relative_to: 'due_date' }])
   })
 
   it('says why nothing can be added', () => {
@@ -144,21 +147,6 @@ describe('voiceCardChips', () => {
       'date:Thu 22 Oct, 15:00',
       'project:Family',
     ])
-  })
-})
-
-describe('defaultReminder', () => {
-  const due = new Date(2026, 9, 22, 15, 0, 0).toISOString()
-  it('follows the setting: none, at the due time, or seconds before', () => {
-    expect(defaultReminder(due, 0)).toBeNull()
-    expect(defaultReminder(due, undefined)).toBeNull()
-    expect(defaultReminder(null, 900)).toBeNull()
-    expect(defaultReminder(due, -1)).toEqual({ reminder: due, relative_period: 0, relative_to: 'due_date' })
-    expect(defaultReminder(due, 3600, 'start_date')).toEqual({
-      reminder: new Date(2026, 9, 22, 14, 0, 0).toISOString(),
-      relative_period: -3600,
-      relative_to: 'start_date',
-    })
   })
 })
 
