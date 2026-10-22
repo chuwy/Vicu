@@ -323,6 +323,8 @@ export const api = {
     window.api.fetchTaskAttachmentBytes(taskId, attachmentId) as Promise<ApiResult<Uint8Array>>,
   openTaskAttachment: (taskId: number, attachmentId: number, fileName: string) =>
     window.api.openTaskAttachment(taskId, attachmentId, fileName) as Promise<ApiResult<void>>,
+  saveTaskAttachment: (taskId: number, attachmentId: number, fileName: string) =>
+    window.api.saveTaskAttachment(taskId, attachmentId, fileName) as Promise<ApiResult<{ saved: boolean; path?: string }>>,
   pickAndUploadAttachment: (taskId: number) =>
     window.api.pickAndUploadAttachment(taskId) as Promise<ApiResult<{ count: number }>>,
 

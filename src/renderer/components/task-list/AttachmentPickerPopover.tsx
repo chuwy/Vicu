@@ -1,5 +1,5 @@
-import type { RefObject } from 'react'
-import { X, FileText, Image, File, Loader2 } from 'lucide-react'
+import { useState, type RefObject } from 'react'
+import { X, FileText, Image, File, Loader2, Download } from 'lucide-react'
 import { useTaskAttachments, useUploadAttachment, useDeleteAttachment } from '@/hooks/use-task-mutations'
 import { api } from '@/lib/api'
 import { Popover, type PopoverCloseReason } from '../overlay/Popover'
@@ -28,9 +28,30 @@ export function AttachmentPickerPopover({ anchorRef, invokedBy, taskId, onClose 
   const { data: attachments, isLoading } = useTaskAttachments(taskId, true)
   const uploadAttachment = useUploadAttachment()
   const deleteAttachment = useDeleteAttachment()
+  // What the last Open or Save did, shown under the list; and the attachment being saved.
+  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null)
+  const [savingId, setSavingId] = useState<number | null>(null)
 
-  const handleOpen = (attachmentId: number, fileName: string) => {
-    api.openTaskAttachment(taskId, attachmentId, fileName)
+  const handleOpen = async (attachmentId: number, fileName: string) => {
+    setNotice(null)
+    const result = await api.openTaskAttachment(taskId, attachmentId, fileName)
+    if (!result.success) setNotice({ text: `Could not open ${fileName}: ${result.error}`, error: true })
+  }
+
+  const handleSave = async (attachmentId: number, fileName: string) => {
+    setNotice(null)
+    setSavingId(attachmentId)
+    try {
+      const result = await api.saveTaskAttachment(taskId, attachmentId, fileName)
+      if (!result.success) {
+        setNotice({ text: `Could not save ${fileName}: ${result.error}`, error: true })
+      } else if (result.data.saved) {
+        const where = result.data.path?.split(/[\\/]/).slice(-2, -1)[0]
+        setNotice({ text: where ? `Saved to ${where}` : 'Saved', error: false })
+      }
+    } finally {
+      setSavingId(null)
+    }
   }
 
   const handleDelete = (attachmentId: number) => {
@@ -60,6 +81,7 @@ export function AttachmentPickerPopover({ anchorRef, invokedBy, taskId, onClose 
                 <button
                   type="button"
                   onClick={() => handleOpen(att.id, att.file.name)}
+                  title="Open"
                   className="min-w-0 flex-1 text-left"
                 >
                   <div className="truncate text-xs text-[var(--text-primary)]">
@@ -68,6 +90,19 @@ export function AttachmentPickerPopover({ anchorRef, invokedBy, taskId, onClose 
                   <div className="text-caption text-[var(--text-secondary)]">
                     {formatFileSize(att.file.size)}
                   </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleSave(att.id, att.file.name)
+                  }}
+                  disabled={savingId === att.id}
+                  aria-label={`Save ${att.file.name}`}
+                  title="Save to…"
+                  className="shrink-0 rounded-control p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                >
+                  {savingId === att.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                 </button>
                 <button
                   type="button"
@@ -98,6 +133,11 @@ export function AttachmentPickerPopover({ anchorRef, invokedBy, taskId, onClose 
         {uploadAttachment.isPending ? 'Uploading...' : 'Browse files'}
       </button>
 
+      {notice && (
+        <p role="status" className={`mt-1.5 text-caption ${notice.error ? 'text-danger' : 'text-[var(--text-secondary)]'}`}>
+          {notice.text}
+        </p>
+      )}
       {uploadAttachment.isError && (
         <p className="mt-1.5 text-caption text-danger">
           {uploadAttachment.error?.message || 'Upload failed'}
