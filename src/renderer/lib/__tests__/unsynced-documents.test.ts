@@ -9,7 +9,7 @@ describe('unsynced custom-list and settings changes in the sync panel', () => {
     expect(unsyncedDocumentItems({ customLists: null, preferences: null })).toEqual([])
     expect(unsyncedDocumentItems({ customLists: offline, preferences: { state: 'update_required', message: 'Update Vicu to sync preferences' } })).toEqual([
       { key: 'customLists', label: 'Custom list changes', note: 'Sent when the server can be reached.' },
-      { key: 'preferences', label: 'Settings changes (the Inbox, the task order)', note: 'Update Vicu to sync preferences' },
+      { key: 'preferences', label: 'Settings changes (the Inbox, the task order, location reminders)', note: 'Update Vicu to sync preferences' },
     ])
   })
 

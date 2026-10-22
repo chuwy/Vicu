@@ -181,6 +181,29 @@ describe('synced preferences', () => {
     await vi.waitFor(() => expect(documentOf(7).entries.task_order.value).toBeNull())
   })
 
+  it('writes a location reminder at a saved place and never a place', async () => {
+    writeConfig({ inbox_project_id: 0 })
+    putCarrier(7, { version: 1, entries: { 'place.home': entry({ name: 'Home' }) } })
+    const service = await loadService()
+    await service.syncSyncedPrefs()
+
+    service.setSyncedPreference('location_reminder.42', { place: 'home', trigger: 'leave', radius_m: 500 })
+    await vi.waitFor(() => expect(documentOf(7).entries['location_reminder.42']?.value).toEqual({ place: 'home', trigger: 'leave', radius_m: 500 }))
+    expect(documentOf(7).entries['place.home'].value).toEqual({ name: 'Home' })
+
+    // Positions stay on the phone: the desktop cannot create, rename or delete a place.
+    expect(() => service.setSyncedPreference('place.office', { name: 'Office' })).toThrow()
+    expect(() => service.setSyncedPreference('place.home', null)).toThrow()
+    // A temporary id, a value of the wrong shape or with more fields is refused.
+    expect(() => service.setSyncedPreference('location_reminder.-3', { place: 'home', trigger: 'arrive', radius_m: 200 })).toThrow()
+    expect(() => service.setSyncedPreference('location_reminder.42', { place: 'home', trigger: 'nearby', radius_m: 200 })).toThrow()
+    expect(() => service.setSyncedPreference('location_reminder.42', { place: 'home', trigger: 'arrive', radius_m: 50 })).toThrow()
+    expect(() => service.setSyncedPreference('location_reminder.42', { place: 'home', trigger: 'arrive', radius_m: 200, lat: 52.3 })).toThrow()
+
+    service.setSyncedPreference('location_reminder.42', null)
+    await vi.waitFor(() => expect(documentOf(7).entries['location_reminder.42'].value).toBeNull())
+  })
+
   it("never reads or writes another user's carrier", async () => {
     writeConfig({ inbox_project_id: 5 })
     putCarrier(7, { version: 1, entries: { inbox_project_id: entry(42) } }, 2)

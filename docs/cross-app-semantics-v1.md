@@ -827,6 +827,8 @@ A key is added here, in both repos, in the release that starts writing it.
 | `inbox_project_id` | the Inbox project id, a whole number above 0 | none: the app asks during setup |
 | `task_order` | a task order key (section 12.1) | `due_date_first` |
 | `task_order.project.<id>` | a task order key, or `null` | follows the parent project, then `task_order` (section 12.3) |
+| `place.<placeId>` | a saved place's name, `{"name": "Home"}`, or `null` (deleted); section 11.7 | none |
+| `location_reminder.<taskId>` | a task's location reminder, `{"place", "trigger", "radius_m"}`, or `null`; section 11.7 | none |
 
 ### 11.4 The Inbox
 
@@ -850,6 +852,32 @@ default, the first device to update decides for every device of the account.
 `syncedPrefs.merge` gives `local`, `server` and the merged document. `syncedPrefs.read` gives
 entries, a key and the value an app uses. `syncedPrefs.move` gives a key, the local value, the
 carrier's entry (absent when not given) and whether the device writes.
+
+### 11.7 Places and location reminders
+
+A task can remind the user when they arrive at or leave a place they saved on a phone. The place's
+**name** and the reminder sync; where the place is never does.
+
+- `place.<placeId>`: `{"name": "<name>"}`. `<placeId>` is 1 to 64 letters, digits, `-` and `_`
+  (phones use a random UUID). The name is the user's own text, not blank after trimming. `null`
+  deletes the place.
+- `location_reminder.<taskId>`: `{"place": "<placeId>", "trigger": "arrive" | "leave", "radius_m":
+  <whole number 100 to 1000>}`, at most one per task. `<taskId>` is the server's task id, a whole
+  number above 0: a key is never written for a task created offline (a temporary id); the phone
+  holds that reminder until the task has its server id. `null` means the task has no location
+  reminder.
+- A value that does not have that shape reads as none and is kept unchanged (section 11.2), so a
+  later version can add fields.
+- **Positions stay on the phone.** Each phone keeps the latitude, longitude and address of the
+  places it located, by place id; they are never sent anywhere. A phone that has a place's name but
+  not its position shows it as not set on that phone and lets the user locate it there.
+- **Only phones remind.** A phone watches a reminder when it knows the place's position, and
+  notifies once on arriving or leaving (no notification for being there already when the reminder
+  is set). Desktop shows and sets reminders at synced places but never creates a place.
+- A reminder ends with `null`: when it fires, when the task is completed, deleted or no longer on
+  the server, when the user removes it, and for every reminder at a place that is deleted.
+- A reminder at a spot that is not a saved place (a searched address, the current position) stays
+  on the phone that set it and is not synced.
 
 ---
 

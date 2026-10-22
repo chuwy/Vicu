@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { X } from 'lucide-react'
+import { MapPin, X } from 'lucide-react'
 import type { Task, TaskReminder } from '@/lib/vikunja-types'
 import { NULL_DATE } from '@/lib/constants'
 import { formatDateChip } from '@/lib/date-utils'
 import { DEFAULT_REMINDER_TIME, EMPTY_WHEN, instantOf, whenText, type WhenValue } from '@/lib/when-logic'
 import { useDateFormat } from '@/hooks/use-date-format'
+import { useLocationReminders } from '@/hooks/use-location-reminders'
+import {
+  DEFAULT_LOCATION_RADIUS,
+  LOCATION_RADIUS_OPTIONS,
+  locationReminderLabel,
+  type LocationTrigger,
+} from '../../../shared/synced-prefs'
 import { Button } from '../shared/Button'
 import { Popover, type PopoverCloseReason } from '../overlay/Popover'
 import { WhenPanel } from './WhenPanel'
@@ -149,7 +156,87 @@ export function ReminderPickerPopover({ anchorRef, task, dueDate, reminders: con
           Add reminder
         </Button>
       )}
+      {/* A new task has no id yet: a location reminder is set once it exists. */}
+      {task && task.id > 0 && <PlaceReminderSection taskId={task.id} />}
     </Popover>
+  )
+}
+
+/**
+ * "At a place" (cross-app semantics section 11.7): arrive at or leave a place saved on a phone.
+ * The phone reminds there; the desktop only chooses the place, the trigger and the distance.
+ */
+function PlaceReminderSection({ taskId }: { taskId: number }) {
+  const { places, reminderFor, setReminder, removeReminder } = useLocationReminders()
+  const current = reminderFor(taskId)
+  const [trigger, setTrigger] = useState<LocationTrigger>(current?.trigger ?? 'arrive')
+  const [radius, setRadius] = useState<number>(current?.radius_m ?? DEFAULT_LOCATION_RADIUS)
+  const choice = 'rounded-control px-2 py-1 text-xs'
+  const chosen = (on: boolean) => (on
+    ? `${choice} bg-[var(--bg-selected)] font-medium text-[var(--text-primary)]`
+    : `${choice} text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]`)
+
+  return (
+    <div className="mt-3 flex flex-col gap-1 border-t border-[var(--border-color)] pt-2">
+      <span className="px-2 text-caption font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+        At a place
+      </span>
+      {current && (
+        <div className="flex items-center justify-between rounded-control bg-[var(--bg-hover)] px-2 py-1 text-xs text-[var(--text-primary)]">
+          <span className="flex items-center gap-1.5">
+            <MapPin className="h-3 w-3" aria-hidden="true" />
+            {locationReminderLabel(current.trigger, current.placeName)}, {current.radius_m} m
+          </span>
+          <button
+            type="button"
+            onClick={() => removeReminder(taskId)}
+            aria-label={`Remove location reminder ${locationReminderLabel(current.trigger, current.placeName)}`}
+            title="Remove location reminder"
+            className="ml-2 text-[var(--text-secondary)] hover:text-danger"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+      {places.length === 0 ? (
+        <p className="px-2 text-xs text-[var(--text-secondary)]">
+          Save places in Vicu on your phone: Settings &gt; Notifications &gt; Places. The phone reminds you there.
+        </p>
+      ) : (
+        <>
+          <div className="flex gap-1 px-1" role="group" aria-label="Remind me">
+            {(['arrive', 'leave'] as const).map((value) => (
+              <button key={value} type="button" aria-pressed={trigger === value} onClick={() => setTrigger(value)} className={chosen(trigger === value)}>
+                {value === 'arrive' ? 'When I arrive' : 'When I leave'}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 px-1" role="group" aria-label="Distance">
+            {LOCATION_RADIUS_OPTIONS.map((meters) => (
+              <button key={meters} type="button" aria-pressed={radius === meters} onClick={() => setRadius(meters)} className={chosen(radius === meters)}>
+                {meters} m
+              </button>
+            ))}
+          </div>
+          {places.map((place) => {
+            const isCurrent = current?.place === place.id && current.trigger === trigger && current.radius_m === radius
+            return (
+              <button
+                key={place.id}
+                type="button"
+                disabled={isCurrent}
+                onClick={() => setReminder(taskId, place.id, trigger, radius)}
+                className="flex items-center gap-1.5 rounded-control px-2 py-1.5 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-60"
+              >
+                <MapPin className="h-3 w-3 text-[var(--text-secondary)]" aria-hidden="true" />
+                {locationReminderLabel(trigger, place.name)}
+              </button>
+            )
+          })}
+          <p className="px-2 text-caption text-[var(--text-secondary)]">Your phone reminds you there.</p>
+        </>
+      )}
+    </div>
   )
 }
 

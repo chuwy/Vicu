@@ -16,10 +16,12 @@ import {
   mergeSyncedPrefs,
   pruneSyncedPrefs,
   readInboxProjectId,
+  readLocationReminderPref,
   sameSyncedPrefs,
   setSyncedPref,
   shouldMoveLocalPref,
   syncedPrefValues,
+  taskIdOfLocationReminderKey,
   validateSyncedPrefs,
   type SyncedPrefsDocument,
   type SyncedPrefsSnapshot,
@@ -221,6 +223,13 @@ export function isWritablePref(key: unknown, value: unknown): key is string {
   if (typeof key !== 'string') return false
   if (key === INBOX_PROJECT_ID_KEY) return readInboxProjectId(value) !== null
   if (key === GLOBAL_TASK_ORDER_KEY || /^task_order\.project\.[1-9]\d*$/.test(key)) return value === null || isTaskOrderKey(value)
+  // A task's location reminder at a place a phone saved (section 11.7). The desktop never creates,
+  // renames or deletes a place: that needs its position, which only the phone has.
+  if (taskIdOfLocationReminderKey(key) !== null) {
+    if (value === null) return true
+    const reminder = readLocationReminderPref(value)
+    return reminder !== null && canonicalJson(reminder) === canonicalJson(value)
+  }
   return false
 }
 
