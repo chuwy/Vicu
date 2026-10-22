@@ -482,3 +482,17 @@ describe('connectionKeysIn (F3)', () => {
     expect(CONNECTION_KEYS).not.toContain('inbox_project_id')
   })
 })
+
+describe('voice shortcut', () => {
+  it('is off until the user records one', () => {
+    expect(normalizeConfig({}).voice_hotkey).toBe('')
+    expect(normalizeConfig({ voice_hotkey: 42 }).voice_hotkey).toBe('')
+  })
+
+  it('keeps a recorded shortcut, and a cleared one stays off', () => {
+    expect(normalizeConfig({ voice_hotkey: 'Alt+Shift+M' }).voice_hotkey).toBe('Alt+Shift+M')
+    const recorded = applyConfigPatch(userConfig(), { voice_hotkey: 'Alt+Shift+M' })
+    expect(recorded.voice_hotkey).toBe('Alt+Shift+M')
+    expect(applyConfigPatch(recorded, { voice_hotkey: '' }).voice_hotkey).toBe('')
+  })
+})

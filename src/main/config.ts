@@ -145,6 +145,8 @@ export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
     quick_view_enabled: raw.quick_view_enabled === true,
     quick_entry_hotkey: typeof raw.quick_entry_hotkey === 'string' ? raw.quick_entry_hotkey : DEFAULT_QUICK_ENTRY_HOTKEY,
     quick_view_hotkey: typeof raw.quick_view_hotkey === 'string' ? raw.quick_view_hotkey : DEFAULT_QUICK_VIEW_HOTKEY,
+    // Off until the user records one (docs/voice-input.md).
+    voice_hotkey: typeof raw.voice_hotkey === 'string' ? raw.voice_hotkey : '',
     quick_entry_default_project_id: typeof raw.quick_entry_default_project_id === 'number'
       ? raw.quick_entry_default_project_id : undefined,
     exclamation_today: raw.exclamation_today !== false,

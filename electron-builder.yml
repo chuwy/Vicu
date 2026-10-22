@@ -59,6 +59,9 @@ mac:
         - arm64
   extendInfo:
     NSAppleEventsUsageDescription: "Vicu needs automation access to detect the active browser tab for quick task entry."
+    # Voice input (docs/voice-input.md): asked for on the first hold of + or the voice shortcut.
+    NSMicrophoneUsageDescription: "Vicu listens while you hold + or the voice shortcut, to turn what you say into a task."
+    NSSpeechRecognitionUsageDescription: "Vicu turns what you say into a task. Speech is recognized on this Mac when your language allows it."
 
 linux:
   icon: build/icon.png

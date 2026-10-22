@@ -6,6 +6,7 @@ import type {
   OfflineReplayEvent,
   TaskWriteOptions,
 } from '../shared/offline-queue-types'
+import type { VoiceEventEnvelope } from '../shared/voice-types'
 
 const api = {
   platform: process.platform as 'darwin' | 'win32' | 'linux',
@@ -266,6 +267,19 @@ const api = {
       const handler = (_: unknown, problem: { error: string }) => cb(problem)
       ipcRenderer.on('offline-queue:auth-problem', handler)
       return () => { ipcRenderer.removeListener('offline-queue:auth-problem', handler) }
+    },
+  },
+
+  // Voice input (docs/voice-input.md): one listening session at a time, run in main.
+  voice: {
+    availability: (force?: boolean) => ipcRenderer.invoke('voice:availability', force),
+    start: (options?: { locale?: string }) => ipcRenderer.invoke('voice:start', options),
+    stop: (sessionId?: number) => ipcRenderer.invoke('voice:stop', sessionId),
+    cancel: (sessionId?: number) => ipcRenderer.invoke('voice:cancel', sessionId),
+    onEvent: (cb: (envelope: VoiceEventEnvelope) => void) => {
+      const handler = (_: unknown, envelope: VoiceEventEnvelope) => cb(envelope)
+      ipcRenderer.on('voice:event', handler)
+      return () => { ipcRenderer.removeListener('voice:event', handler) }
     },
   },
 

@@ -42,6 +42,7 @@ import type {
   QueuedWriteReply,
   TaskWriteOptions,
 } from '../shared/offline-queue-types'
+import type { VoiceAvailability, VoiceEventEnvelope, VoiceStartResult } from '../shared/voice-types'
 
 type OidcLoginResult =
   | { success: true }
@@ -197,6 +198,17 @@ export interface ElectronAPI {
     onChanged(cb: (change: OfflineQueueChange) => void): () => void
     onReplayed(cb: (event: OfflineReplayEvent) => void): () => void
     onAuthProblem(cb: (problem: { error: string }) => void): () => void
+  }
+
+  // Voice input (docs/voice-input.md)
+  voice: {
+    availability(force?: boolean): Promise<VoiceAvailability>
+    /** Starts listening; on macOS the first call asks for the microphone. */
+    start(options?: { locale?: string }): Promise<VoiceStartResult>
+    /** Finish; the final text follows as an event. Without an id: the session still starting. */
+    stop(sessionId?: number): Promise<boolean>
+    cancel(sessionId?: number): Promise<boolean>
+    onEvent(cb: (envelope: VoiceEventEnvelope) => void): () => void
   }
 
   // Standalone mode

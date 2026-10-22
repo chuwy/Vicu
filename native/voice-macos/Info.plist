@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.rendyhd.vicu.speech</string>
+    <key>CFBundleName</key>
+    <string>Vicu Speech</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Vicu listens while you hold + or the voice shortcut, to turn what you say into a task.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Vicu turns what you say into a task. Speech is recognized on this Mac when your language allows it.</string>
+</dict>
+</plist>

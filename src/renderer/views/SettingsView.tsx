@@ -15,6 +15,7 @@ import { ObsidianSettings } from '@/components/settings/ObsidianSettings'
 import { BrowserSettings } from '@/components/settings/BrowserSettings'
 import { SecretStorageNotice } from '@/components/settings/SecretStorageNotice'
 import { KeyboardShortcuts } from '@/components/settings/KeyboardShortcuts'
+import { VoiceSettings } from '@/components/settings/VoiceSettings'
 import { NotificationSettings } from '@/components/settings/NotificationSettings'
 import { CompletionSoundSettings } from '@/components/settings/CompletionSoundSettings'
 import { RoutinesSettingsPanel } from '@/components/routines/RoutinesSettingsPanel'
@@ -248,6 +249,7 @@ export function SettingsView() {
       {/* One column width for every tab (SETTINGS_COLUMN). */}
       {activeTab === 'shortcuts' ? (
         <div className={SETTINGS_COLUMN}>
+          {fullConfig && <VoiceSettings config={fullConfig} onChange={handleQuickEntryChange} />}
           <KeyboardShortcuts />
         </div>
       ) : activeTab === 'projects' ? (

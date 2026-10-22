@@ -14,8 +14,8 @@
     "start": "electron-vite preview",
     "dist": "npm run build && electron-builder --win",
     "dist:publish": "npm run build && electron-builder --win --publish always",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:mac:publish": "npm run build && electron-builder --mac --publish always",
+    "dist:mac": "npm run build && npm run voice:helper && electron-builder --mac",
+    "dist:mac:publish": "npm run build && npm run voice:helper && electron-builder --mac --publish always",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:linux:publish": "npm run build && electron-builder --linux --publish always",
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json --pretty false && tsc --noEmit --composite false -p tsconfig.web.json --pretty false && tsc --noEmit --composite false -p tsconfig.vite.json --pretty false",
@@ -23,6 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tokens": "node scripts/gen-tokens.mjs",
+    "voice:helper": "node scripts/build-voice-helper.mjs",
     "ui:verify": "node scripts/ui-verify/desktop.mjs"
   },
   "author": "rendyhd",

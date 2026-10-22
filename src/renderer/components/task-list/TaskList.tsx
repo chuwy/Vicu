@@ -27,6 +27,8 @@ import { taskDescendants, unfinishedDescendants } from '@/lib/task-hierarchy'
 import { confirmTaskCompletion } from '@/lib/task-completion'
 import { SmartListIcon } from '@/components/shared/SmartListIcon'
 import { ReadingScroll } from '@/components/layout/ReadingScroll'
+import { useHoldToTalk } from '@/hooks/use-hold-to-talk'
+import { useVoiceListStore } from '@/stores/voice-list-store'
 import type { SmartListId } from '@/lib/smart-list-identity'
 
 interface TaskListProps {
@@ -97,6 +99,19 @@ export function TaskList({
   newTaskPlacement = 'after-children',
 }: TaskListProps) {
   const [isAdding, setIsAdding] = useState(false)
+  // Holding the header + says a task instead of typing it (docs/voice-input.md). A voice task gets
+  // the defaults this list gives its composer, from wherever the capture is started.
+  const holdToTalk = useHoldToTalk()
+  const defaultDueTime = defaultDueDate?.getTime()
+  useEffect(() => {
+    if (!showNewTask || !projectId) return
+    const owner = {}
+    useVoiceListStore.getState().register(owner, {
+      projectId,
+      defaultDueDate: defaultDueTime === undefined ? null : new Date(defaultDueTime),
+    })
+    return () => useVoiceListStore.getState().unregister(owner)
+  }, [showNewTask, projectId, defaultDueTime])
   const [addPosition, setAddPosition] = useState<'top' | 'bottom'>('top')
   const inputRef = useRef<HTMLInputElement>(null)
   const creationRef = useRef<HTMLDivElement>(null)
@@ -549,8 +564,10 @@ export function TaskList({
             <button
               type="button"
               onClick={startAdding}
-              className="flex h-7 w-7 items-center justify-center rounded-control text-[var(--text-secondary)] transition-colors duration-fade-fast hover:bg-[var(--bg-hover)] hover:text-[var(--accent-blue)]"
+              {...holdToTalk}
+              className="flex h-7 w-7 select-none items-center justify-center rounded-control text-[var(--text-secondary)] transition-colors duration-fade-fast hover:bg-[var(--bg-hover)] hover:text-[var(--accent-blue)]"
               aria-label="New task"
+              title="Click to type a task, hold to say it"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -575,7 +592,7 @@ export function TaskList({
             extra={emptyExtra}
             action={
               showNewTask && projectId ? (
-                <Button variant="secondary" onClick={startAdding}>
+                <Button variant="secondary" onClick={startAdding} {...holdToTalk} title="Click to type a task, hold to say it">
                   <Plus className="h-4 w-4" />
                   Add task
                 </Button>

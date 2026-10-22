@@ -32,6 +32,7 @@ import { handleTrusted } from './secure-ipc'
 import { cleanAttachmentTempDir } from './attachment-temp'
 import { registerWebSecurity } from './web-security'
 import { APP_ID } from './app-id'
+import { cancelVoiceSession } from './voice/service'
 
 let mainWindow: BrowserWindow | null = null
 let quickEntryWindow: BrowserWindow | null = null
@@ -862,6 +863,7 @@ if (!gotLock) {
     cleanAttachmentTempDir(app.getPath('temp'))
     stopNotifications()
     shutdownUrlReader()
+    cancelVoiceSession()
     destroyDummyWindow()
     globalShortcut.unregisterAll()
     if (dragHoverTimer) {

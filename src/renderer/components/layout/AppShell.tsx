@@ -48,6 +48,7 @@ import { CustomListDragOverlay } from '@/components/sidebar/CustomListDragOverla
 import { SectionDragOverlay } from '@/components/task-list/SectionDragOverlay'
 import { UpdateBanner } from '@/components/UpdateBanner'
 import { ToastHost } from '@/components/shared/ToastHost'
+import { VoiceHost } from '@/components/voice/VoiceHost'
 import { CommentsPaneHost } from '@/components/comments/CommentsPane'
 import { ProjectAccessProvider } from '@/hooks/use-project-access'
 import { APP_CONFIG_QUERY_KEY, useAppConfig } from '@/hooks/use-app-config'
@@ -795,6 +796,7 @@ export function AppShell() {
         <GlobalConfirm />
         <ProjectActionsHost />
         <ToastHost />
+        <VoiceHost />
         <CommandPalette />
       </div>
 
