@@ -73,7 +73,7 @@ Pure modules used by both main and renderer (the renderer re-exports several thr
 - `custom-list-filter.ts` — the one custom-list evaluator (date windows, `include_overdue`, server-filter superset, and the collaboration and activity conditions `assigned`, `comments`, `shared_only`, `changed_within_days` of contract section 3.3, which also read a `CustomListContext`: you and which projects are shared) used by the main window and Quick View; `custom-list-sort.ts` — custom-list ordering, the same as Android.
 - `routines.ts` — routine carrier and archive envelopes, merge, 400-day pruning and archive-write planning, CSV. History older than the window lives in hidden done "archive part" tasks (`vicu-routine:archive:v1`) and is read on demand.
 - `date-display.ts` — how a due date or completion time is phrased (pure: locale and clock are passed in; en-US and en-GB built from parts so ICU and java.time agree; pinned by the `dateDisplay` vectors of `cross-app-semantics-v1.json`); `completion-hold.ts` — the completion hold state machine (see Styling); `priority-mark-svg.ts` — the priority mark shapes, shared by `PriorityMark.tsx` and Quick View.
-- `merge-patches.ts` — the merge-patch builders (see Vikunja API below).
+- `merge-patches.ts` — the merge-patch builders (see Vikunja API below); `default-reminder.ts` — the default reminder of a new task (see Task reminders).
 - `config-types.ts` (config shapes), `error-classify.ts` (retriable and queueable failures), `offline-queue-types.ts` (queue types that cross IPC), `nested-subtasks.ts`.
 
 ### Cross-app contract with Vicu Android
@@ -213,6 +213,8 @@ Main window use of the queue (renderer): mutation helpers in `hooks/use-task-mut
 ### Task reminders
 
 `src/main/task-reminders.ts` (no Electron imports, fake-timer tests) schedules one timer per task reminder; `src/main/notifications.ts` wires it to the API client, config and notification windows. A refresh fetches only open tasks with a reminder in a window around now (server filter), at start-up, every 15 minutes, on window focus and resume, and after a task is completed, uncompleted or deleted. Timers beyond about 24.8 days are left to a later refresh, the task is re-read when a timer fires, and the master `notifications_enabled` switch is checked at refresh and at fire time.
+
+**Default reminder** (Settings, Notifications, Default reminder: `notifications_default_reminder_offset`, 0 off, -1 at the due time, else seconds before; `notifications_default_reminder_relative_to`). `src/shared/default-reminder.ts` (`buildDefaultReminder`, `withDefaultReminder`; the same rule as Android's `DefaultReminder.build`) adds it to every new task created with a due date and no reminder the user picked: the composer (every view), pasted lines (`lib/paste-tasks.ts`), Quick Entry (`quickEntryTaskPayload` in `offline/quick-actions.ts`, built in main) and standalone tasks uploaded to a server (`standalone-upload.ts`). A queued create carries it in its fields. Only on create: changing the date of an existing task never adds one. Hidden carriers (routines, synced documents) and the title-only creates (a subtask, the Review "Add task") never get one.
 
 ### Config
 

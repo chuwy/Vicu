@@ -1,5 +1,7 @@
 // Moves tasks created in standalone (local-only) mode to a Vikunja project.
 
+import { withDefaultReminder, type DefaultReminderSettings } from '../shared/default-reminder'
+
 const NULL_DATE = '0001-01-01T00:00:00Z'
 
 export interface UploadableTask {
@@ -17,13 +19,16 @@ export interface UploadDeps {
   /** Deletes the task from the local store. */
   remove: (id: string) => void
   isAuthError: (error: string) => boolean
+  /** The default reminder settings: an uploaded task with a due date gets that reminder. */
+  defaultReminder?: DefaultReminderSettings | null
 }
 
-export function buildStandaloneTaskPayload(task: UploadableTask): Record<string, unknown> {
+/** The create payload of an uploaded task; it is new to the server, so it gets the default reminder. */
+export function buildStandaloneTaskPayload(task: UploadableTask, settings: DefaultReminderSettings | null = null): Record<string, unknown> {
   const payload: Record<string, unknown> = { title: task.title }
   if (task.description) payload.description = task.description
   if (task.due_date && task.due_date !== NULL_DATE) payload.due_date = task.due_date
-  return payload
+  return withDefaultReminder(payload, settings)
 }
 
 /**
@@ -40,7 +45,7 @@ export async function uploadStandaloneTasks(
   const errors: string[] = []
 
   for (const task of tasks) {
-    const result = await deps.upload(buildStandaloneTaskPayload(task))
+    const result = await deps.upload(buildStandaloneTaskPayload(task, deps.defaultReminder))
     if (!result.success) {
       errors.push(`"${task.title}": ${result.error}`)
       if (result.error && deps.isAuthError(result.error)) break

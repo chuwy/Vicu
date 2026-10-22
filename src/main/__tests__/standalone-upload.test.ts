@@ -146,3 +146,30 @@ describe('uploadStandaloneTasks (D-IPC-1)', () => {
     expect(world.events).toEqual([])
   })
 })
+
+describe('buildStandaloneTaskPayload and the default reminder', () => {
+  const settings = { notifications_default_reminder_offset: -1, notifications_default_reminder_relative_to: 'due_date' as const }
+
+  it('gives an uploaded task with a due date the default reminder', () => {
+    const due = '2026-10-22T21:59:59.000Z'
+    expect(buildStandaloneTaskPayload(task('a', { due_date: due }), settings).reminders).toEqual([
+      { reminder: due, relative_period: 0, relative_to: 'due_date' },
+    ])
+  })
+
+  it('adds nothing without a due date or settings', () => {
+    expect(buildStandaloneTaskPayload(task('a'), settings).reminders).toBeUndefined()
+    expect(buildStandaloneTaskPayload(task('a', { due_date: '2026-10-22T21:59:59.000Z' })).reminders).toBeUndefined()
+  })
+
+  it('is what the upload sends', async () => {
+    const sent: Record<string, unknown>[] = []
+    await uploadStandaloneTasks([task('a', { due_date: '2026-10-22T21:59:59.000Z' })], {
+      upload: async (payload) => { sent.push(payload); return { success: true } },
+      remove: () => {},
+      isAuthError: neverAuthError,
+      defaultReminder: settings,
+    })
+    expect(sent[0].reminders).toEqual([{ reminder: '2026-10-22T21:59:59.000Z', relative_period: 0, relative_to: 'due_date' }])
+  })
+})

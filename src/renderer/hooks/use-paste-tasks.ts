@@ -12,6 +12,7 @@ import {
   type PastedTaskPlan,
 } from '@/lib/paste-tasks'
 import { toast } from '@/stores/toast-store'
+import { useAppConfig } from './use-app-config'
 import { useLabels } from './use-labels'
 import { useParserConfig } from './use-parser-config'
 import { useProjects } from './use-projects'
@@ -34,15 +35,16 @@ export function usePasteTasks({ projectId, defaultDueDate }: UsePasteTasksOption
   const parserConfig = useParserConfig()
   const { data: labels = [] } = useLabels()
   const { data: projects } = useProjects()
+  const { data: appConfig } = useAppConfig()
   // Failures are reported once, together, below; not one toast per task.
   const createTask = useCreateTask({ silent: true })
   const addLabel = useAddLabel({ silent: true })
   const createLabel = useCreateLabel({ silent: true })
 
   // The handler lives in a document listener: read the latest values when it runs.
-  const latest = useRef({ projectId, defaultDueDate, parserConfig, labels, projects, createTask, addLabel, createLabel })
+  const latest = useRef({ projectId, defaultDueDate, parserConfig, labels, projects, appConfig, createTask, addLabel, createLabel })
   useEffect(() => {
-    latest.current = { projectId, defaultDueDate, parserConfig, labels, projects, createTask, addLabel, createLabel }
+    latest.current = { projectId, defaultDueDate, parserConfig, labels, projects, appConfig, createTask, addLabel, createLabel }
   })
   const running = useRef(false)
 
@@ -64,6 +66,7 @@ export function usePasteTasks({ projectId, defaultDueDate }: UsePasteTasksOption
         projects: (current.projects?.flat ?? []).map((project) => ({ id: project.id, title: project.title })),
         parserConfig: current.parserConfig,
         defaultDueDate: current.defaultDueDate ? dateOnlyDue(toLocalDate(current.defaultDueDate)) : undefined,
+        defaultReminder: current.appConfig,
       }
       const plans = splitPastedLines(text)
         .map((line) => planPastedTask(line, context))
