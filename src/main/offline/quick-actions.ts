@@ -1,3 +1,4 @@
+import { withDefaultReminder, type DefaultReminderSettings } from '../../shared/default-reminder'
 import { isQueueableFailure, maybeCreatedMessage } from '../../shared/error-classify'
 import type { ApiResult } from '../api-result'
 import type { OfflineQueue } from './queue'
@@ -34,6 +35,31 @@ export type QuickActionResult =
   | { success: false; error: string; statusCode?: number; mayExist: true }
 
 // --- Quick Entry -------------------------------------------------------------------------
+
+/** What Quick Entry's window sends for a new task (the `qe:save-task` arguments). */
+export interface QuickEntryTaskInput {
+  title: string
+  description: string | null
+  dueDate: string | null
+  priority?: number
+  repeatAfter?: number
+  repeatMode?: number
+}
+
+/**
+ * The create payload of a Quick Entry task: the fields the window read from the text, plus the
+ * default reminder when it has a due date (src/shared/default-reminder.ts; Quick Entry has no
+ * reminder picker). A queued create keeps the reminder, because the queue stores this payload.
+ */
+export function quickEntryTaskPayload(input: QuickEntryTaskInput, settings: DefaultReminderSettings | null): Record<string, unknown> {
+  const payload: Record<string, unknown> = { title: input.title }
+  if (input.description) payload.description = input.description
+  if (input.dueDate) payload.due_date = input.dueDate
+  if (input.priority && input.priority > 0) payload.priority = input.priority
+  if (input.repeatAfter !== undefined) payload.repeat_after = input.repeatAfter
+  if (input.repeatMode !== undefined) payload.repeat_mode = input.repeatMode
+  return withDefaultReminder(payload, settings)
+}
 
 /**
  * Create a task from Quick Entry. When the request provably never created anything, the create is

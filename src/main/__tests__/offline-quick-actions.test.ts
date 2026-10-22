@@ -6,6 +6,7 @@ import { OfflineQueue } from '../offline/queue'
 import {
   AUTO_COMPLETED_SUBTASKS_KEY,
   createFromQuickEntry,
+  quickEntryTaskPayload,
   quickViewComplete,
   quickViewPatch,
   quickViewReopen,
@@ -86,6 +87,23 @@ describe('Quick Entry and Quick View with the offline queue', () => {
       expect(pending[2]).toMatchObject({ labelTitle: 'Garden' })
       expect(pending[3]).toMatchObject({ name: 'shot.png', mime: 'image/png' })
       expect(notified).toBe(0)
+    })
+
+    it('builds the payload with the default reminder for a due date, and a queued create keeps it', async () => {
+      const settings = { notifications_default_reminder_offset: 900, notifications_default_reminder_relative_to: 'due_date' as const }
+      const built = quickEntryTaskPayload({ title: 'Water plants', description: null, dueDate: '2026-10-08T14:30:00.000Z', priority: 3 }, settings)
+      expect(built).toEqual({
+        title: 'Water plants',
+        due_date: '2026-10-08T14:30:00.000Z',
+        priority: 3,
+        reminders: [{ reminder: '2026-10-08T14:15:00.000Z', relative_period: -900, relative_to: 'due_date' }],
+      })
+      expect(quickEntryTaskPayload({ title: 'Water plants', description: null, dueDate: null }, settings)).toEqual({ title: 'Water plants' })
+      expect(quickEntryTaskPayload({ title: 'Water plants', description: null, dueDate: '2026-10-08T14:30:00.000Z' }, null).reminders).toBeUndefined()
+
+      createTask.mockResolvedValue(err('net::ERR_INTERNET_DISCONNECTED'))
+      await createFromQuickEntry(deps(), 7, built)
+      expect(queue.getPending()[0]).toMatchObject({ fields: { reminders: built.reminders } })
     })
 
     it.each([

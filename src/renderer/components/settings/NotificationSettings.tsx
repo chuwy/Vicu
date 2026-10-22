@@ -198,7 +198,7 @@ export function NotificationSettings({ config, onChange }: NotificationSettingsP
           <div className="border-t border-[var(--border-color)] pt-3">
             <span className="text-xs font-medium text-[var(--text-secondary)]">Default reminder</span>
             <p className="mb-2 mt-0.5 text-xs text-[var(--text-secondary)]">
-              Automatically add a reminder when you set a due date on a task.
+              Added to every new task that has a due date and no reminder of its own (not when you change the date of an existing task).
             </p>
             <div className="flex flex-col gap-2">
               <select

@@ -123,6 +123,7 @@ import { accountChanged, refreshKnownUser, replayPendingActions } from './sync'
 import { claimAccountData, ensureKnownUserId } from './known-user'
 import {
   createFromQuickEntry,
+  quickEntryTaskPayload,
   queueQuickEntryFollowUps,
   quickViewComplete,
   quickViewPatch,
@@ -612,12 +613,7 @@ export function registerIpcHandlers(): void {
     }
 
     const targetProjectId = projectId || config.quick_entry_default_project_id || config.inbox_project_id
-    const taskPayload: Record<string, unknown> = { title }
-    if (description) taskPayload.description = description
-    if (dueDate) taskPayload.due_date = dueDate
-    if (priority && priority > 0) taskPayload.priority = priority
-    if (repeatAfter !== undefined) taskPayload.repeat_after = repeatAfter
-    if (repeatMode !== undefined) taskPayload.repeat_mode = repeatMode
+    const taskPayload = quickEntryTaskPayload({ title, description, dueDate, priority, repeatAfter, repeatMode }, config)
 
     // The create is queued with everything the user set when the server cannot be reached; see
     // createFromQuickEntry for what may be queued and why.
@@ -1090,6 +1086,8 @@ export function registerIpcHandlers(): void {
     // a partial failure only sends the ones that did not go through (D-IPC-1).
     const { uploaded, errors } = await uploadStandaloneTasks(tasks, {
       upload: (payload) => createTask(projectId, payload),
+      // A task first reaches the server here: it gets the default reminder like any new task.
+      defaultReminder: loadConfig(),
       remove: removeStandaloneTask,
       isAuthError,
     })

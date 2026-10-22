@@ -9,6 +9,7 @@ import { parsedDue } from './due-dates'
 import { parse, recurrenceToVikunja } from './task-parser'
 import type { ParserConfig } from './task-parser'
 import type { CreateTaskPayload } from './vikunja-types'
+import { withDefaultReminder, type DefaultReminderSettings } from '../../shared/default-reminder'
 
 /** The non-empty lines of the pasted text, trimmed. */
 export function splitPastedLines(text: string): string[] {
@@ -28,6 +29,8 @@ export interface PasteContext {
   defaultDueDate?: string
   /** "Now" for relative dates; the current time unless a test passes one. */
   now?: Date
+  /** The default reminder settings: a line with a due date gets that reminder. */
+  defaultReminder?: DefaultReminderSettings | null
 }
 
 export interface PastedTaskPlan {
@@ -42,7 +45,8 @@ export interface PastedTaskPlan {
 /**
  * What one pasted line becomes, with the same rules as the new-task composer: the parser takes
  * the date, priority, recurrence, labels and project out of the line, a project that does not
- * exist is ignored, a bare date is date-only, and a line without a date gets the view's default.
+ * exist is ignored, a bare date is date-only, a line without a date gets the view's default, and a
+ * task with a due date gets the default reminder (src/shared/default-reminder.ts).
  * With the parser off nothing is taken out of the line except the `!` shortcut (`parse` handles
  * both). Null for an empty line.
  */
@@ -66,7 +70,7 @@ export function planPastedTask(line: string, context: PasteContext): PastedTaskP
   if (parsed.priority && parsed.priority > 0) payload.priority = parsed.priority
   if (parsed.recurrence) Object.assign(payload, recurrenceToVikunja(parsed.recurrence))
 
-  return { line: raw, projectId, payload, labelNames: [...new Set(parsed.labels)] }
+  return { line: raw, projectId, payload: withDefaultReminder(payload, context.defaultReminder), labelNames: [...new Set(parsed.labels)] }
 }
 
 export function pasteConfirmMessage(count: number): string {

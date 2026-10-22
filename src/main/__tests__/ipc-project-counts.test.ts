@@ -58,6 +58,7 @@ vi.mock('../offline/service', () => ({ getOfflineQueue: () => hoisted.queue, rem
 // The Quick Entry / Quick View actions call the notifyMainWindow dep when their change went through.
 vi.mock('../offline/quick-actions', () => ({
   createFromQuickEntry: async (deps: { notifyMainWindow: () => void }) => { deps.notifyMainWindow(); return { success: true, data: { id: 9 } } },
+  quickEntryTaskPayload: (input: { title: string }) => ({ title: input.title }),
   quickViewComplete: async (deps: { notifyMainWindow: () => void }) => { deps.notifyMainWindow(); return { success: true } },
   quickViewReopen: async (deps: { notifyMainWindow: () => void }) => { deps.notifyMainWindow(); return { success: true } },
 }))

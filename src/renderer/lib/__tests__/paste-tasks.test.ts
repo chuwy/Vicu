@@ -206,3 +206,24 @@ describe('createPastedTasks', () => {
     expect(create).not.toHaveBeenCalled()
   })
 })
+
+describe('planPastedTask and the default reminder', () => {
+  const defaultReminder = { notifications_default_reminder_offset: 3600, notifications_default_reminder_relative_to: 'due_date' as const }
+
+  it('gives a pasted line with a due date the default reminder', () => {
+    const plan = planPastedTask('Call mom tomorrow 3pm', context({ defaultReminder }))!
+    expect(plan.payload.reminders).toEqual([
+      { reminder: new Date(2026, 9, 7, 14, 0, 0).toISOString(), relative_period: -3600, relative_to: 'due_date' },
+    ])
+  })
+
+  it('also when the date is the view default', () => {
+    const plan = planPastedTask('Buy milk', context({ defaultReminder, defaultDueDate: dateOnlyDue('2026-10-06') }))!
+    expect(plan.payload.reminders?.[0].relative_period).toBe(-3600)
+  })
+
+  it('adds nothing to an undated line or with the setting off', () => {
+    expect(planPastedTask('Buy milk', context({ defaultReminder }))!.payload.reminders).toBeUndefined()
+    expect(planPastedTask('Call mom tomorrow', context({ defaultReminder: { notifications_default_reminder_offset: 0 } }))!.payload.reminders).toBeUndefined()
+  })
+})

@@ -29,6 +29,8 @@ import { toast } from '@/stores/toast-store'
 import { DEFAULT_LOCATION_RADIUS } from '../../../shared/synced-prefs'
 import { useLabels } from '@/hooks/use-labels'
 import { useProjects } from '@/hooks/use-projects'
+import { useAppConfig } from '@/hooks/use-app-config'
+import { withDefaultReminder } from '../../../shared/default-reminder'
 import {
   useAddLabel,
   useCreateLabel,
@@ -129,6 +131,7 @@ export function NewTaskComposer({
   const dateFormat = useDateFormat()
   const { data: labels = [] } = useLabels()
   const { data: projects } = useProjects()
+  const { data: appConfig } = useAppConfig()
   // The composer reports failures inline (and keeps what the user typed), so no global toast.
   const createTask = useCreateTask({ silent: true })
   const addLabel = useAddLabel({ silent: true })
@@ -354,13 +357,16 @@ export function NewTaskComposer({
       // The same rules the buttons and chips show: the text, unless a control was used.
       const saved = parser.parserConfig.enabled ? fields : resolveWith(parsed)
       const targetProjectId = saved.projectId
-      const payload: CreateTaskPayload = { title }
+      let payload: CreateTaskPayload = { title }
       const draftDescription = description.trim()
       if (draftDescription) payload.description = draftDescription
       if (saved.dueDate) payload.due_date = saved.dueDate
       if (saved.priority > 0) payload.priority = saved.priority
       if (reminders.length) payload.reminders = reminders
       if (saved.repeat) Object.assign(payload, saved.repeat)
+      // No reminder picked: the default reminder for the due date, as every create path adds it
+      // (src/shared/default-reminder.ts). Reminders the user picked are kept as they are.
+      payload = withDefaultReminder(payload, appConfig)
 
       const labelNames = [...new Set(parsed?.labels ?? [])]
       const explicitLabels = labels.filter((label) => selectedLabelIds.includes(label.id))
