@@ -10,6 +10,7 @@
 //   --motion full|reduce       full (default) forces prefers-reduced-motion: no-preference, because
 //                              this PC reports reduce; reduce emulates it
 //   --forced-colors            emulate forced-colors: active
+//   --scale N                  device scale factor of the captures (default 1; 2 for the website)
 //   --scenario a,b             scenarios by file name or id (baseline, e4, e04-schedule-popover)
 //   --wave N                   every E scenario whose first wave is N or earlier
 //   --run NAME                 output folder name under scripts/ui-verify/out/ (default: stamp+label)
@@ -40,6 +41,7 @@ const { values: opt } = parseArgs({
     size: { type: 'string', default: '1280x820' },
     motion: { type: 'string', default: 'full' },
     'forced-colors': { type: 'boolean', default: false },
+    scale: { type: 'string', default: '1' },
     scenario: { type: 'string' },
     wave: { type: 'string' },
     run: { type: 'string' },
@@ -57,6 +59,8 @@ if (!['light', 'dark'].includes(opt.theme)) fail(`--theme must be light or dark,
 if (!['full', 'reduce'].includes(opt.motion)) fail(`--motion must be full or reduce, got "${opt.motion}"`)
 if (opt.reseed && opt['no-reseed']) fail('--reseed and --no-reseed contradict each other.')
 const SIZE = { width: Number(sizeMatch[1]), height: Number(sizeMatch[2]) }
+const SCALE = Number(opt.scale)
+if (!(SCALE >= 1 && SCALE <= 3)) fail(`--scale must be 1 to 3, got "${opt.scale}"`)
 
 function fail(message) {
   console.error(message)
@@ -191,7 +195,7 @@ const app = await electron.launch({
   executablePath: require('electron'),
   // Device scale 1 for predictable pixels; the GitHub release check is cut off so no update banner
   // or outside traffic can show up in a capture.
-  args: ['--require', requestLogModule, '.', '--force-device-scale-factor=1', '--host-resolver-rules=MAP api.github.com ~NOTFOUND'],
+  args: ['--require', requestLogModule, '.', `--force-device-scale-factor=${SCALE}`, '--host-resolver-rules=MAP api.github.com ~NOTFOUND'],
   cwd: REPO,
   env: {
     ...process.env,
@@ -440,7 +444,7 @@ const h = {
     for (const w of app.windows()) await applyMedia(w).catch(() => {})
   },
 
-  /** Saves a PNG at device scale 1: capture('today', { clip, page, transparent }). */
+  /** Saves a PNG at the device scale (--scale): capture('today', { clip, page, transparent }). */
   async capture(name, { clip, page: p = page, transparent = false } = {}) {
     const safe = String(name).replace(/[^a-zA-Z0-9._-]+/g, '-')
     const file = join(RUN_DIR, `${currentScenario}--${safe}.png`)
@@ -687,7 +691,7 @@ const env = await page.evaluate(() => ({
   height: window.innerHeight,
 }))
 emit({ t: 'env', ...env })
-await h.assert('device scale factor is 1', env.dpr === 1)
+await h.assert(`device scale factor is ${SCALE}`, env.dpr === SCALE)
 await h.assert(`prefers-reduced-motion is ${state.motion === 'reduce' ? 'reduce' : 'no-preference'}`, env.reducedMotion === (state.motion === 'reduce'))
 await h.assert(`theme is ${opt.theme}`, env.dark === (opt.theme === 'dark'))
 await h.assert(`window content is ${SIZE.width}x${SIZE.height}`, { ok: env.width === SIZE.width && env.height === SIZE.height, detail: `${env.width}x${env.height}` })
