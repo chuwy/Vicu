@@ -19,6 +19,7 @@ npm run test:watch     # vitest in watch mode
 npm run verify         # typecheck + tests + build; run before every commit
 npm run tokens         # Regenerate src/renderer/assets/tokens.css from test-fixtures/design-tokens-v1.json (--check to only verify)
 npm run ui:verify      # UI verification harness (built app + seeded local Vikunja; see Styling, scripts/ui-verify/README.md)
+npm run site           # Preview the website (site/) at http://127.0.0.1:8096/; npm run site:check checks it
 npm run dist           # Build + package Windows installer (electron-builder)
 npm run dist:publish   # Build + package + upload to GitHub release (used by CI)
 npm run dist:mac       # Build + package macOS DMG
@@ -46,6 +47,8 @@ Each build job runs `npm run typecheck` and `npm test` before packaging, then up
 **Release workflow**: bump the version in `package.json` and `package-lock.json`, write `docs/releases/vX.Y.Z.md` (plain, user-facing, grouped, no emojis), commit, then push a `v*` tag. CI creates the release, builds the installers, and publishes it. After CI completes, edit the release notes with `gh release edit` if needed.
 
 **Packaging**: `resources/` and `extensions/` ship once, as `extraResources` next to `app.asar` (not also inside it). Main-process code reads them through `process.resourcesPath` when packaged (`resources/` ends up at `<resources>/resources/`: tray icons, `done.mp3`, `get-browser-url.ps1`, the browser bridge) and from `app.getAppPath()` in dev; add new runtime files the same way. Quick check of a packaged build: `npx electron-builder --dir --win -c.directories.output=<dir>` (no signing, no publish), then run it with `VICU_USER_DATA_DIR`.
+
+**Website** (`site/`, see `site/README.md`): the vicu website for desktop and mobile, plain HTML, one stylesheet, one script, no build step and nothing loaded from other sites. `.github/workflows/site.yml` checks it (`site/tools/check-site.mjs`) and publishes it to GitHub Pages on pushes to `main` that touch `site/`. Desktop screens come from the harness scenario `site-screens` (`--scale 2`, both themes), phone screens from the `vicu-android` harness and the iOS simulator; `site/tools/screens.mjs` turns them into WebP.
 
 ## Architecture
 

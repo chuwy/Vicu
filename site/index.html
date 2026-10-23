@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Vicu · A calm, fast task manager for Vikunja</title>
+    <meta
+      name="description"
+      content="Vicu is a task manager for your own Vikunja server, on Windows, macOS, Linux, Android, iPhone and iPad. Capture from anywhere, plan your day in Today, and keep every device in step. Free and open source."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="assets/img/brand/vicu-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="assets/img/brand/vicu-192.png" sizes="192x192" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/img/brand/vicu-180.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vicu" />
+    <meta property="og:title" content="Vicu · A calm, fast task manager for Vikunja" />
+    <meta property="og:description" content="Capture from anywhere, plan your day in Today, and keep your desktop and phone in step. Windows, macOS, Linux, Android, iPhone and iPad." />
+    <meta property="og:url" content="https://vicutodo.app/" />
+    <meta property="og:image" content="https://vicutodo.app/assets/img/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://vicutodo.app/" />
+    <link rel="stylesheet" href="assets/css/site.css" />
+    <script>
+      (function () {
+        var d = document.documentElement;
+        d.className = d.className.replace('no-js', 'js');
+        try {
+          var t = localStorage.getItem('vicu-site-theme');
+          if (t === 'light' || t === 'dark') d.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
+    <script src="assets/js/site.js" defer></script>
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true" focusable="false">
+      <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3.5 13.5 6 5.5h12l2.5 8V18a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18Z" /><path d="M3.5 13.5h5l1 2.5h5l1-2.5h5" /></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" /></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z" /></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3.5 8.5 4.5L12 12.5 3.5 8Z" /><path d="m3.5 12 8.5 4.5 8.5-4.5" /><path d="m3.5 16 8.5 4.5 8.5-4.5" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="m8.2 12.2 2.6 2.6 5-5.3" /></symbol>
+      <symbol id="i-review" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 0 1-13 5.1M4.5 12a7.5 7.5 0 0 1 13-5.1" /><path d="M17.8 3.5v3.6h-3.6M6.2 20.5v-3.6h3.6" /></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 19.5s-7.5-4.4-7.5-10A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.5c0 5.6-7.5 10-7.5 10Z" /><path d="M7 12h2.5l1.5-2 2 4 1.5-2H17" /></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10.5 21 19 10.5h-6Z" /></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" /></symbol>
+      <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4" /></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.7 6.7a1.4 1.4 0 0 1-2 0Z" /><circle cx="8" cy="8" r="1.4" /></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5v10A1.5 1.5 0 0 0 5 19h14a1.5 1.5 0 0 0 1.5-1.5V9A1.5 1.5 0 0 0 19 7.5h-7L10 5H5a1.5 1.5 0 0 0-1.5 1.5Z" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2" /><path d="M3 19c.8-3.2 3.2-5 6-5s5.2 1.8 6 5" /><path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.3c1.7.6 3 2.2 3.5 4.7" /></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5h16v10.5H10l-6 4.5Z" /><path d="M8.5 10.5h7" /></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15Z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 0 0-13 0c0 5.4 6.5 11 6.5 11Z" /><circle cx="12" cy="10" r="2.3" /></symbol>
+      <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M8 18.5H6.5a4 4 0 0 1-.6-8 6 6 0 0 1 9.2-4M18.5 9.5a4.5 4.5 0 0 1-1.5 9h-5" /><path d="m4 3.5 16 17" /></symbol>
+      <symbol id="i-sync" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3L20 9" /><path d="M20 4v5h-5" /><path d="M20 12a8 8 0 0 1-14 5.3L4 15" /><path d="M4 20v-5h5" /></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6 9.5h.01M9 9.5h.01M12 9.5h.01M15 9.5h.01M18 9.5h.01M6 12.5h.01M18 12.5h.01M9 12.5h6M7.5 15.3h9" /></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3.1-3.1a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3.1 3.1a4 4 0 0 0 5.7 5.7l1-1" /></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5" /><path d="M10.5 18.5h3" /></symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12.5" rx="2" /><path d="M8.5 20.5h7M12 16.5v4" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" /><path d="M4.5 19.5h15" /></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.8" /></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.8" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.8" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.8" /></symbol>
+      <symbol id="i-swipe" viewBox="0 0 24 24"><path d="M3.5 7.5h11M11 4l3.5 3.5L11 11" /><path d="M9 21v-6.5a1.5 1.5 0 0 1 3 0V17l3.8.7a1.8 1.8 0 0 1 1.5 2V21" /></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M8 7.5l4-4 4 4" /><path d="M7 11H5.5v9.5h13V11H17" /></symbol>
+      <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5" /><path d="M13 6h7.5M13 11h5.5M13 16h3" /></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4 11V9.5A3.5 3.5 0 0 1 7.5 6H19" /><path d="m16 3 3 3-3 3" /><path d="M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H5" /><path d="m8 21-3-3 3-3" /></symbol>
+      <symbol id="i-clip" viewBox="0 0 24 24"><path d="m20 11.5-7.8 7.8a5 5 0 0 1-7-7.1L13 4.4a3.3 3.3 0 0 1 4.7 4.7l-7.8 7.8a1.7 1.7 0 0 1-2.4-2.4l7.2-7.2" /></symbol>
+      <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4.5h12l-2 4 2 4H5" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.3-4.3" /></symbol>
+      <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 9V6.5A2.5 2.5 0 1 0 6.5 9H9Zm0 0h6m-6 0v6m6-6V6.5A2.5 2.5 0 1 1 17.5 9H15Zm0 0v6m0 0h-6m6 0v2.5a2.5 2.5 0 1 0 2.5-2.5H15Zm-6 0v2.5A2.5 2.5 0 1 1 6.5 15H9Z" /></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3.5c.6 4.6 3.9 7.9 8.5 8.5-4.6.6-7.9 3.9-8.5 8.5-.6-4.6-3.9-7.9-8.5-8.5 4.6-.6 7.9-3.9 8.5-8.5Z" /></symbol>
+      <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="2" /><path d="M5 9h14M12 9v5.5M8.5 21l3.5-6.5 3.5 6.5" /></symbol>
+      <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5a6 6 0 0 1-5-2.8L3 15.3a1.6 1.6 0 0 1 2.6-1.8L8 15.5" /></symbol>
+      <symbol id="i-sections" viewBox="0 0 24 24"><path d="M4 5.5h16M4 12h16M4 18.5h16" /><path d="M4 5.5v13" /></symbol>
+      <symbol id="i-obsidian" viewBox="0 0 24 24"><path d="M9 2.8 4.8 9.6l3 7.7 5.6 3.9 4.1-3.4L19 9.4 14 3Z" /><path d="m9 2.8 1.6 8.1-2.8 6.4M10.6 10.9 19 9.4M10.6 10.9l2.8 10.3" /></symbol>
+      <symbol id="i-tray" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5" /><path d="M3 15h18M7 18h.01M10 18h.01" /></symbol>
+      <symbol id="i-windows" viewBox="0 0 24 24"><path d="M3.5 5.5 10.5 4.5v7h-7ZM12.5 4.2l8-1.2v8.5h-8ZM3.5 12.5h7v7l-7-1ZM12.5 12.5h8V21l-8-1.2Z" /></symbol>
+      <symbol id="i-apple" viewBox="0 0 24 24"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.5a4.3 4.3 0 0 0-3.4-1.8c-1.4-.2-2.8.8-3.5.8s-1.8-.8-3-.8a4.5 4.5 0 0 0-3.8 2.3c-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.3 0 2.1-1.1 2.8-2.3a10 10 0 0 0 1.3-2.6 4 4 0 0 1-2.5-3.7ZM14.2 5.8A4 4 0 0 0 15.1 3a4.1 4.1 0 0 0-2.7 1.4 3.8 3.8 0 0 0-1 2.7 3.4 3.4 0 0 0 2.8-1.3Z" /></symbol>
+      <symbol id="i-linux" viewBox="0 0 24 24"><path d="M12 3c-2.2 0-3.4 1.8-3.4 4.4 0 1.7-.6 2.6-1.6 4-1.2 1.6-2.4 3.6-2 6 .2 1.4 1.4 2.6 3 2.6h8c1.6 0 2.8-1.2 3-2.6.4-2.4-.8-4.4-2-6-1-1.4-1.6-2.3-1.6-4C15.4 4.8 14.2 3 12 3Z" /><path d="M10.4 7.6h.01M13.6 7.6h.01M10.7 10h2.6" /></symbol>
+      <symbol id="i-android" viewBox="0 0 24 24"><path d="M5 16V11a7 7 0 0 1 14 0v5Z" /><path d="M8 5 6.5 2.8M16 5l1.5-2.2" /><path d="M9 10h.01M15 10h.01" /><path d="M5 16h14v1.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z" /></symbol>
+      <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4 1.3-4-2-5.6-2.5M14.6 21v-3.3a2.9 2.9 0 0 0-.8-2.2c2.7-.3 5.6-1.3 5.6-6a4.6 4.6 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1-.3-3.4 1.3a11.6 11.6 0 0 0-6 0C6.5 2.8 5.5 3.1 5.5 3.1a4.3 4.3 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.9 5.7 5.6 6a2.9 2.9 0 0 0-.8 2.2V21" /></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15M13.5 6.5 19 12l-5.5 5.5" /></symbol>
+    </svg>
+
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="wrap header-row">
+        <a class="brand" href="./">
+          <img src="assets/img/brand/vicu-64.png" alt="" width="32" height="32" />
+          <span>Vicu</span>
+        </a>
+        <nav class="nav" aria-label="Sections">
+          <a href="#tour">Tour</a>
+          <a href="#capture">Capture</a>
+          <a href="#organize">Organize</a>
+          <a href="#mobile">Mobile</a>
+          <a href="#desktop">Desktop</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <div class="header-actions">
+          <button class="icon-btn theme-toggle" type="button" aria-label="Switch between light and dark">
+            <svg class="icon-moon" aria-hidden="true"><use href="#i-moon" /></svg>
+            <svg class="icon-sun" aria-hidden="true"><use href="#i-sun" /></svg>
+          </button>
+          <a class="btn btn--primary btn--small" href="#download">Get Vicu</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap">
+          <div class="hero-copy">
+            <p class="kicker">A task manager for Vikunja</p>
+            <h1 id="hero-title" class="display">From a thought to <span class="flourish">done</span>, on every device.</h1>
+            <p class="lead">
+              Vicu is a calm, fast task manager for your own Vikunja server. Catch a task from any app in two seconds, plan
+              your day in Today, and pick up on your phone where your desktop left off.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn--primary" href="#download"><svg aria-hidden="true"><use href="#i-download" /></svg>Download Vicu</a>
+              <a class="btn btn--ghost" href="#tour">Take the tour</a>
+            </div>
+            <div class="platforms" aria-label="Platforms">
+              <span class="pill"><svg aria-hidden="true"><use href="#i-windows" /></svg>Windows</span>
+              <span class="pill"><svg aria-hidden="true"><use href="#i-apple" /></svg>macOS</span>
+              <span class="pill"><svg aria-hidden="true"><use href="#i-linux" /></svg>Linux</span>
+              <span class="pill"><svg aria-hidden="true"><use href="#i-android" /></svg>Android</span>
+              <span class="pill"><svg aria-hidden="true"><use href="#i-phone" /></svg>iPhone and iPad</span>
+            </div>
+            <p class="hero-note">Free and open source. Works with any <a href="https://vikunja.io/">Vikunja</a> 2.4 server, your own or Vikunja Cloud.</p>
+          </div>
+          <div class="hero-visual">
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-today.webp" width="1600" height="1000" fetchpriority="high"
+                alt="Vicu on the desktop: the sidebar with Inbox, Today, Upcoming, Anytime and Logbook, projects and custom lists; Today shows two overdue tasks and six for today with projects, labels, times and priorities." />
+              <img class="only-dark" src="assets/img/screens/desktop-today-dark.webp" width="1600" height="1000" loading="lazy"
+                alt="Vicu on the desktop in dark mode: the sidebar and the Today list with overdue tasks, today's tasks, projects, labels and priorities." />
+            </div>
+            <div class="phone">
+              <img class="only-light" src="assets/img/screens/ios-today-light.webp" width="780" height="1696"
+                alt="Vicu on iPhone: Today with overdue and today's tasks and the New task button." />
+              <img class="only-dark" src="assets/img/screens/ios-today-dark.webp" width="780" height="1696" loading="lazy"
+                alt="Vicu on iPhone in dark mode: the Today list." />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- The flow -->
+      <section class="section section--alt" id="how" aria-labelledby="how-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">How it works</p>
+            <h2 id="how-title" class="h2">Organized around when, not where.</h2>
+            <p class="lead">
+              No boards and no Gantt charts. A task lands in your Inbox, gets a day, and ends up in the Logbook. Projects and
+              labels are there when you need them.
+            </p>
+          </div>
+          <ol class="flow reveal">
+            <li class="flow-step" style="--k: var(--c-inbox)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-inbox" /></svg></span>
+              <h3>Inbox</h3>
+              <p>Where new tasks land, from a hotkey, your voice, a widget or a share.</p>
+            </li>
+            <li class="flow-step" style="--k: var(--c-today)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sun" /></svg></span>
+              <h3>Today</h3>
+              <p>Due today, what slipped from before, and today's routines.</p>
+            </li>
+            <li class="flow-step" style="--k: var(--c-upcoming)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-calendar" /></svg></span>
+              <h3>Upcoming</h3>
+              <p>Everything from tomorrow on, grouped by day.</p>
+            </li>
+            <li class="flow-step" style="--k: var(--c-anytime)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-layers" /></svg></span>
+              <h3>Anytime</h3>
+              <p>Your open backlog: every task without a day, outside the Inbox.</p>
+            </li>
+            <li class="flow-step" style="--k: var(--c-logbook)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-check" /></svg></span>
+              <h3>Logbook</h3>
+              <p>What you finished, grouped by the day you did it.</p>
+            </li>
+          </ol>
+          <div class="trio reveal">
+            <article class="trio-card">
+              <span class="tag">Your server</span>
+              <h3 class="h3">Vikunja</h3>
+              <p>Your tasks live on your own Vikunja server or Vikunja Cloud. Vicu has no server or account of its own and collects nothing.</p>
+            </article>
+            <article class="trio-card trio-card--center">
+              <span class="tag">Your computer</span>
+              <h3 class="h3">Vicu for desktop</h3>
+              <p>Windows, macOS and Linux. Quick Entry and Quick View from any app, voice input, keyboard first.</p>
+            </article>
+            <article class="trio-card">
+              <span class="tag">Your phone</span>
+              <h3 class="h3">Vicu for mobile</h3>
+              <p>Android, iPhone and iPad. Widgets, swipe gestures, Siri, location reminders, and it works offline.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tour -->
+      <section class="section" id="tour" aria-labelledby="tour-title">
+        <div class="wrap">
+          <div class="section-head section-head--center">
+            <p class="kicker" style="--k: var(--c-inbox)">Tour</p>
+            <h2 id="tour-title" class="h2">The same app on your desk and in your pocket.</h2>
+            <p class="lead">
+              Both apps read your tasks by one shared set of rules and share one design system, so a due date, a custom list or
+              a task order means the same thing everywhere.
+            </p>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Screens">
+            <button class="tab" role="tab" id="tab-today" aria-controls="panel-today" aria-selected="true" style="--k: var(--c-today)"><span class="dot"></span>Today</button>
+            <button class="tab" role="tab" id="tab-upcoming" aria-controls="panel-upcoming" aria-selected="false" tabindex="-1" style="--k: var(--c-upcoming)"><span class="dot"></span>Upcoming</button>
+            <button class="tab" role="tab" id="tab-project" aria-controls="panel-project" aria-selected="false" tabindex="-1" style="--k: var(--c-inbox)"><span class="dot"></span>Projects</button>
+            <button class="tab" role="tab" id="tab-task" aria-controls="panel-task" aria-selected="false" tabindex="-1" style="--k: var(--c-anytime)"><span class="dot"></span>A task</button>
+            <button class="tab" role="tab" id="tab-lists" aria-controls="panel-lists" aria-selected="false" tabindex="-1" style="--k: var(--c-review)"><span class="dot"></span>Custom lists</button>
+            <button class="tab" role="tab" id="tab-shared" aria-controls="panel-shared" aria-selected="false" tabindex="-1" style="--k: var(--c-routines)"><span class="dot"></span>Shared work</button>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-today" aria-labelledby="tab-today">
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-today.webp" width="1600" height="1000" loading="lazy" alt="Today on the desktop: Overdue, then today's tasks grouped by area, each with its project, labels, time and priority." />
+              <img class="only-dark" src="assets/img/screens/desktop-today-dark.webp" width="1600" height="1000" loading="lazy" alt="Today on the desktop in dark mode." />
+            </div>
+            <div class="phone">
+              <img class="only-light" src="assets/img/screens/android-today-light.webp" width="780" height="1733" loading="lazy" alt="Today on Android: overdue and today's tasks with the bottom bar." />
+              <img class="only-dark" src="assets/img/screens/android-today-dark.webp" width="780" height="1733" loading="lazy" alt="Today on Android in dark mode." />
+            </div>
+            <p class="caption"><span><strong>Today</strong> shows what is due, an Overdue section for what slipped, and your routines. It follows your own calendar day and rolls over at midnight.</span><span>Android</span></p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-upcoming" aria-labelledby="tab-upcoming" hidden>
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-upcoming.webp" width="1600" height="1000" loading="lazy" alt="Upcoming on the desktop: tasks grouped by day, from tomorrow to December." />
+              <img class="only-dark" src="assets/img/screens/desktop-upcoming-dark.webp" width="1600" height="1000" loading="lazy" alt="Upcoming on the desktop in dark mode." />
+            </div>
+            <div class="phone">
+              <img class="only-light" src="assets/img/screens/ios-upcoming-light.webp" width="780" height="1696" loading="lazy" alt="Upcoming on iPhone: tasks grouped by day." />
+              <img class="only-dark" src="assets/img/screens/ios-upcoming-dark.webp" width="780" height="1696" loading="lazy" alt="Upcoming on iPhone in dark mode." />
+            </div>
+            <p class="caption"><span><strong>Upcoming</strong> lists everything from tomorrow on, day by day. Dates read the same everywhere: Today, Tomorrow, weekdays, then dates.</span><span>iPhone</span></p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-project" aria-labelledby="tab-project" hidden>
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-project-website.webp" width="1600" height="1000" loading="lazy" alt="A project on the desktop: Website redesign with its tasks, labels and subtask counts; the sidebar shows areas and projects with progress rings." />
+              <img class="only-dark" src="assets/img/screens/desktop-project-website-dark.webp" width="1600" height="1000" loading="lazy" alt="A project on the desktop in dark mode." />
+            </div>
+            <div class="phone">
+              <img src="assets/img/screens/android-project-light.webp" width="780" height="1733" loading="lazy" alt="A shared project on Android: Trip to Lisbon with who is assigned and comment counts." />
+            </div>
+            <p class="caption"><span><strong>Areas and projects</strong> with progress rings, sections, and a sort order per project that syncs to your other devices.</span><span>Android</span></p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-task" aria-labelledby="tab-task" hidden>
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-card.webp" width="1600" height="1000" loading="lazy" alt="An open task on the desktop: the row has grown into a card with notes, a checklist and chips for date, priority, label, subtasks, reminder, repeat and project." />
+              <img class="only-dark" src="assets/img/screens/desktop-card-dark.webp" width="1600" height="1000" loading="lazy" alt="An open task card on the desktop in dark mode." />
+            </div>
+            <div class="phone">
+              <img src="assets/img/screens/ios-task-editor-light.webp" width="780" height="1696" loading="lazy" alt="The task editor on iPhone: title, notes and the task's properties in one card." />
+            </div>
+            <p class="caption"><span><strong>Open a task</strong> and it grows from its row into a card. What is set shows as chips; what is not waits as a quiet button.</span><span>iPhone</span></p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-lists" aria-labelledby="tab-lists" hidden>
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-custom-list.webp" width="1600" height="1000" loading="lazy" alt="A custom list on the desktop called This week, with overdue tasks first and then this week's tasks." />
+              <img class="only-dark" src="assets/img/screens/desktop-custom-list-dark.webp" width="1600" height="1000" loading="lazy" alt="A custom list on the desktop in dark mode." />
+            </div>
+            <div class="phone">
+              <img src="assets/img/screens/android-drawer-light.webp" width="780" height="1733" loading="lazy" alt="The Android drawer with smart lists, custom lists, projects and labels." />
+            </div>
+            <p class="caption"><span><strong>Custom lists</strong> filter by project, label, due window, priority, recent changes and shared work. They are stored on your server, so every device shows the same lists.</span><span>Android</span></p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-shared" aria-labelledby="tab-shared" hidden>
+            <div class="window">
+              <img class="only-light" src="assets/img/screens/desktop-comments.webp" width="1600" height="1000" loading="lazy" alt="A shared project on the desktop with the comments pane open beside it: Maya asks about a flight fare and mentions you." />
+              <img class="only-dark" src="assets/img/screens/desktop-comments-dark.webp" width="1600" height="1000" loading="lazy" alt="The comments pane on the desktop in dark mode." />
+            </div>
+            <div class="phone">
+              <img src="assets/img/screens/ios-comments-light.webp" width="780" height="1696" loading="lazy" alt="Comments on iPhone: the thread on Book flights to Lisbon, visible to you, Maya and Sam." />
+            </div>
+            <p class="caption"><span><strong>Share a project</strong> with the people you live or work with: assign tasks, talk in comments, mention people. If you share nothing, none of it shows.</span><span>iPhone</span></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Capture -->
+      <section class="section section--alt" id="capture" aria-labelledby="capture-title">
+        <div class="wrap">
+          <div class="split">
+            <div class="stack stack--lg">
+              <div class="stack">
+                <p class="kicker" style="--k: var(--c-today)">Capture</p>
+                <h2 id="capture-title" class="h2">Catch it before it slips away.</h2>
+              </div>
+              <p class="lead">
+                Press a hotkey from any app and <strong>Quick Entry</strong> floats over what you are doing. Type, press Enter, and it is
+                gone. Press another and <strong>Quick View</strong> shows your list to check off without switching windows.
+              </p>
+              <ul class="checks" style="--k: var(--c-today)">
+                <li><strong>Hold + and say it.</strong> Your words appear as you speak, with the date, project and labels picked out. Let go to add it.</li>
+                <li><strong>Lands where you are.</strong> A task added in a project goes to that project; one added in Today is due today.</li>
+                <li><strong>Paste a list</strong> and every line becomes a task.</li>
+                <li><strong>Works offline.</strong> Whatever you capture without a connection is sent once you are back.</li>
+              </ul>
+            </div>
+            <div class="capture-visual reveal">
+              <figure>
+                <p class="label"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>V</kbd> <span>Quick Entry</span></p>
+                <div class="popup"><img src="assets/img/screens/desktop-quick-entry.webp" width="1200" height="412" loading="lazy" alt="Quick Entry: the text Pick up dry cleaning friday @errand, with friday and @errand highlighted and chips for Fri 23 Oct and errand." /></div>
+              </figure>
+              <figure class="popup--view">
+                <p class="label"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>B</kbd> <span>Quick View</span></p>
+                <div class="popup">
+                  <img class="only-light" src="assets/img/screens/desktop-quick-view.webp" width="920" height="1028" loading="lazy" alt="Quick View: a floating list of tasks with round checkboxes, due dates in words and priority marks." />
+                  <img class="only-dark" src="assets/img/screens/desktop-quick-view-dark.webp" width="920" height="1028" loading="lazy" alt="Quick View in dark mode." />
+                </div>
+              </figure>
+            </div>
+          </div>
+
+          <div class="platform-cols reveal">
+            <div class="platform-col">
+              <h3><svg class="i" aria-hidden="true"><use href="#i-monitor" /></svg>On the desktop</h3>
+              <ul class="checks">
+                <li>Quick Entry and Quick View hotkeys, your own if you like</li>
+                <li>A voice shortcut: hold to talk, tap to keep listening</li>
+                <li>Link the active Obsidian note or browser tab with <kbd>Ctrl</kbd><kbd>L</kbd></li>
+                <li>New task <kbd>Ctrl</kbd><kbd>N</kbd>, paste a task <kbd>Ctrl</kbd><kbd>V</kbd></li>
+              </ul>
+            </div>
+            <div class="platform-col">
+              <h3><svg class="i" aria-hidden="true"><use href="#i-android" /></svg>On Android</h3>
+              <ul class="checks">
+                <li>A Quick Settings tile in the notification shade</li>
+                <li>The Quick add widget, with a mic and a + button</li>
+                <li>Share a link, photo or file from any app</li>
+                <li>Drag + onto a day or project to start there</li>
+              </ul>
+            </div>
+            <div class="platform-col">
+              <h3><svg class="i" aria-hidden="true"><use href="#i-apple" /></svg>On iPhone and iPad</h3>
+              <ul class="checks">
+                <li>"Hey Siri, add a task in Vicu"</li>
+                <li>An Add task control for Control Center, the Lock Screen and the Action Button</li>
+                <li>Share to Vicu from any app</li>
+                <li>Add task when you hold the app icon</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick add parsing -->
+      <section class="section" id="parse" aria-labelledby="parse-title">
+        <div class="wrap split split--flip">
+          <div class="stack stack--lg">
+            <div class="stack">
+              <p class="kicker" style="--k: var(--c-anytime)">Natural language</p>
+              <h2 id="parse-title" class="h2">Type it the way you think.</h2>
+            </div>
+            <p class="lead">
+              Dates, times, projects, labels, priority and repeats are read as you type, highlighted, and shown as chips you can
+              remove. Everything else is the title. The desktop and mobile apps share one parser and one test corpus.
+            </p>
+            <dl class="tokens">
+              <div><dt>Days</dt><dd><code>tomorrow</code> <code>friday</code> <code>in 3 days</code></dd></div>
+              <div><dt>Times</dt><dd><code>3pm</code> <code>at 14:00</code> <code>in 2 hours</code></dd></div>
+              <div><dt>Dates</dt><dd><code>jan 15</code> <code>march 3rd</code> <code>10/15</code></dd></div>
+              <div><dt>Due today</dt><dd><code>Buy milk !</code></dd></div>
+              <div><dt>Projects</dt><dd><code>#work</code> <code>#"side project"</code></dd></div>
+              <div><dt>Labels</dt><dd><code>@errand</code> <code>@"grocery list"</code></dd></div>
+              <div><dt>Priority</dt><dd><code>p1</code> <code>!urgent</code> <code>!high</code></dd></div>
+              <div><dt>Repeats</dt><dd><code>every friday</code> <code>daily</code></dd></div>
+              <div><dt>Places</dt><dd><code>when I get home</code> <code>when I leave work</code></dd></div>
+            </dl>
+            <p class="muted" style="font-size: 14px">Prefer Vikunja's own syntax? Switch to <code>*label</code> and <code>+project</code> in Settings.</p>
+          </div>
+          <div class="stack reveal">
+            <div class="composer" aria-live="polite">
+              <div class="composer-input">
+                <span class="circle" aria-hidden="true"></span>
+                <span class="composer-text" id="demo-text"><span>Call Ana about the weekend </span><span class="t t--date">tomorrow 3pm</span><span> </span><span class="t t--label">@call</span><span> </span><span class="t t--prio">!high</span><span class="caret" aria-hidden="true"></span></span>
+              </div>
+              <div class="composer-chips" id="demo-chips">
+                <span class="chip t--date">Tomorrow, 15:00</span><span class="chip t--prio">High</span><span class="chip t--label">call</span>
+              </div>
+            </div>
+            <div class="examples" role="group" aria-label="Examples">
+              <button class="example" type="button" aria-pressed="true" data-demo="0">Call Ana tomorrow 3pm</button>
+              <button class="example" type="button" aria-pressed="false" data-demo="1">Water the plants every 3 days</button>
+              <button class="example" type="button" aria-pressed="false" data-demo="2">Book flights #lisbon friday</button>
+              <button class="example" type="button" aria-pressed="false" data-demo="3">Call mom when I get home</button>
+            </div>
+            <div class="crop" style="margin-top: 18px">
+              <img class="only-light" src="assets/img/screens/crop-composer.webp" width="1200" height="419" loading="lazy" alt="The new-task composer in the desktop app: tomorrow at 3pm, @call and !high are highlighted, with chips for Fri 23 Oct 15:00, High and call." />
+              <img class="only-dark" src="assets/img/screens/crop-composer-dark.webp" width="1200" height="419" loading="lazy" alt="The new-task composer in dark mode." />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Organize -->
+      <section class="section section--alt" id="organize" aria-labelledby="organize-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker" style="--k: var(--c-review)">Organize</p>
+            <h2 id="organize-title" class="h2">As much structure as you want, and no more.</h2>
+          </div>
+          <div class="cards reveal">
+            <article class="card" style="--k: var(--c-inbox)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-folder" /></svg></span>
+              <h3>Areas and projects</h3>
+              <p>Top-level areas with projects inside, progress rings and open counts. Drag to nest or reorder, with Undo.</p>
+            </article>
+            <article class="card" style="--k: var(--c-anytime)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sections" /></svg></span>
+              <h3>Sections</h3>
+              <p>Split a project into groups with their own headers and counts.</p>
+            </article>
+            <article class="card" style="--k: var(--c-review)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-filter" /></svg></span>
+              <h3>Custom lists</h3>
+              <p>Your own views by project, label, due window, priority, recent changes, assignee or unread comments.</p>
+            </article>
+            <article class="card" style="--k: var(--c-today)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-tag" /></svg></span>
+              <h3>Labels</h3>
+              <p>Coloured labels with always-readable chips and a page each. Drag a task onto one to apply it.</p>
+            </article>
+            <article class="card" style="--k: var(--c-routines)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-heart" /></svg></span>
+              <h3>Routines</h3>
+              <p>Habits next to your tasks, once or several times a day, with history and CSV export. Never overdue.</p>
+            </article>
+            <article class="card" style="--k: var(--c-upcoming)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-review" /></svg></span>
+              <h3>Project review</h3>
+              <p>Step through your projects on a cadence to keep them current. The status syncs across devices.</p>
+            </article>
+            <article class="card" style="--k: var(--c-logbook)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sort" /></svg></span>
+              <h3>Task order</h3>
+              <p>Due date, priority, title, newest or manual, per project. Subprojects follow their parent.</p>
+            </article>
+            <article class="card" style="--k: var(--c-inbox)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-search" /></svg></span>
+              <h3>Find anything</h3>
+              <p>Quick find as you type, Search through finished tasks too, and a command palette for every list and action.</p>
+            </article>
+          </div>
+          <div class="shot-pair reveal" style="margin-top: 32px">
+            <figure>
+              <div class="window">
+                <img class="only-light" src="assets/img/screens/desktop-list-editor.webp" width="1600" height="1000" loading="lazy" alt="The custom list editor: name, icon, sort, due date window, changed, projects to include or exclude, where new tasks go, priority and labels." />
+                <img class="only-dark" src="assets/img/screens/desktop-list-editor-dark.webp" width="1600" height="1000" loading="lazy" alt="The custom list editor in dark mode." />
+              </div>
+              <figcaption>Build a custom list</figcaption>
+            </figure>
+            <figure>
+              <div class="window">
+                <img class="only-light" src="assets/img/screens/desktop-review.webp" width="1600" height="1000" loading="lazy" alt="Review: projects due for review with Mark reviewed buttons; Work is due and Q4 planning has not been reviewed yet." />
+                <img class="only-dark" src="assets/img/screens/desktop-review-dark.webp" width="1600" height="1000" loading="lazy" alt="Review in dark mode." />
+              </div>
+              <figcaption>Review your projects</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- Working with tasks -->
+      <section class="section" id="tasks" aria-labelledby="tasks-title">
+        <div class="wrap split">
+          <div class="stack stack--lg">
+            <div class="stack">
+              <p class="kicker" style="--k: var(--c-logbook)">Working with tasks</p>
+              <h2 id="tasks-title" class="h2">Small touches that keep you moving.</h2>
+            </div>
+            <ul class="checks" style="--k: var(--c-logbook)">
+              <li><strong>One When panel</strong> for every date: type "next friday 9am", pick a quick choice, or move through the calendar with the keyboard.</li>
+              <li><strong>A second to change your mind.</strong> A finished task stays for five seconds, then collapses. One Undo covers a run of them.</li>
+              <li><strong>Notes, checklists and subtasks</strong>, rich text and links, pasted images and attachments.</li>
+              <li><strong>Repeating tasks</strong> on any interval; Undo puts the dates back.</li>
+              <li><strong>Reminders</strong> at a time, before the due date, or by default on every new dated task.</li>
+              <li><strong>Several at once</strong>: select tasks to schedule, move, label, complete or delete them together.</li>
+              <li><strong>Drag and drop</strong> to reorder, move to a project or apply a label. On a phone, swipe right to complete and left to schedule.</li>
+            </ul>
+          </div>
+          <div class="crop reveal">
+            <img class="only-light" src="assets/img/screens/crop-when.webp" width="1100" height="800" loading="lazy" alt="The When panel over an open task: a date field, quick choices Today, Tomorrow, This weekend and Next week, a month calendar, times, and Repeat every 3 days." />
+            <img class="only-dark" src="assets/img/screens/crop-when-dark.webp" width="1100" height="800" loading="lazy" alt="The When panel in dark mode." />
+          </div>
+        </div>
+      </section>
+
+      <!-- Reminders and sharing -->
+      <section class="section section--alt" id="together" aria-labelledby="together-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker" style="--k: var(--c-routines)">Reminders and sharing</p>
+            <h2 id="together-title" class="h2">The right nudge, at the right place.</h2>
+          </div>
+          <div class="cards cards--3 reveal">
+            <article class="card" style="--k: var(--c-today)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-bell" /></svg></span>
+              <h3>Reminders</h3>
+              <p>At a set time or relative to a date, with Mark complete and Snooze on the notification. A default reminder for every new dated task.</p>
+            </article>
+            <article class="card" style="--k: var(--c-routines)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-pin" /></svg></span>
+              <h3>Location reminders</h3>
+              <p>"Call mom when I get home." Your phone reminds you when you arrive or leave. Where a place is never leaves the phone.</p>
+            </article>
+            <article class="card" style="--k: var(--c-inbox)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sun" /></svg></span>
+              <h3>Daily summary</h3>
+              <p>A notification with what is overdue, due today and coming up, at the times you choose.</p>
+            </article>
+            <article class="card" style="--k: var(--c-anytime)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-users" /></svg></span>
+              <h3>Share a project</h3>
+              <p>Invite people on your server to view, edit or manage a project. Sharing a project shares its subprojects.</p>
+            </article>
+            <article class="card" style="--k: var(--c-review)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-chat" /></svg></span>
+              <h3>Assign and comment</h3>
+              <p>See who is on a task, talk in a thread beside your list, mention people with @, and follow a task.</p>
+            </article>
+            <article class="card" style="--k: var(--c-logbook)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-filter" /></svg></span>
+              <h3>Lists for shared work</h3>
+              <p>Assigned to me, Waiting on others, Unread comments, Changed this week: custom lists that keep a team in step.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Mobile -->
+      <section class="section" id="mobile" aria-labelledby="mobile-title">
+        <div class="wrap">
+          <div class="section-head section-head--center">
+            <p class="kicker" style="--k: var(--c-upcoming)">Mobile</p>
+            <h2 id="mobile-title" class="h2">Made for your phone, too.</h2>
+            <p class="lead">One app for Android, iPhone and iPad, with each platform's gestures, widgets and shortcuts. It keeps your tasks on the device, so it opens and works without a connection.</p>
+          </div>
+          <div class="phones reveal">
+            <figure>
+              <div class="phone"><img src="assets/img/screens/android-quick-add-light.webp" width="780" height="1733" loading="lazy" alt="Quick add on Android: a compact sheet above the keyboard with chips for project, labels, date and priority." /></div>
+              <figcaption>Quick add above the keyboard</figcaption>
+            </figure>
+            <figure>
+              <div class="phone"><img src="assets/img/screens/android-swipe-light.webp" width="780" height="1733" loading="lazy" alt="Swiping a task right on Android: the row shows Complete on a green background." /></div>
+              <figcaption>Swipe to complete or schedule</figcaption>
+            </figure>
+            <figure>
+              <div class="phone"><img src="assets/img/screens/ios-project-light.webp" width="780" height="1696" loading="lazy" alt="A project on iPhone." /></div>
+              <figcaption>Projects on iPhone</figcaption>
+            </figure>
+            <figure>
+              <div class="phone"><img src="assets/img/screens/ios-shared-light.webp" width="780" height="1696" loading="lazy" alt="A shared project on iPhone: Trip to Lisbon with avatars of who is assigned and comment counts." /></div>
+              <figcaption>Shared projects</figcaption>
+            </figure>
+            <figure>
+              <div class="phone"><img src="assets/img/screens/android-upcoming-dark.webp" width="780" height="1733" loading="lazy" alt="Upcoming on Android in dark mode." /></div>
+              <figcaption>Light, dark or your wallpaper colours</figcaption>
+            </figure>
+          </div>
+          <div class="cards cards--3 reveal" style="margin-top: 40px">
+            <article class="card" style="--k: var(--c-inbox)">
+              <img class="widget-shot" src="assets/img/screens/ios-widget.webp" width="900" height="396" loading="lazy" alt="The Vicu Tasks widget on an iPhone home screen: Today with four tasks, their due dates and priority, and a + button." />
+              <h3>Widgets</h3>
+              <p>A Tasks widget for any list with tap-to-complete, a Routines widget, and on Android a Quick add widget.</p>
+            </article>
+            <article class="card" style="--k: var(--c-logbook)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-swipe" /></svg></span>
+              <h3>Gestures and haptics</h3>
+              <p>Swipe right to complete, left to schedule. A small tap when a task is done or passes a position as you drag.</p>
+            </article>
+            <article class="card" style="--k: var(--c-today)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-hand" /></svg></span>
+              <h3>Your bottom bar</h3>
+              <p>Inbox first, then any three smart lists, projects or custom lists you choose. A left-handed option moves +.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Desktop -->
+      <section class="section section--alt" id="desktop" aria-labelledby="desktop-title">
+        <div class="wrap">
+          <div class="split">
+            <div class="stack stack--lg">
+              <div class="stack">
+                <p class="kicker" style="--k: var(--c-inbox)">Desktop</p>
+                <h2 id="desktop-title" class="h2">At home on your computer.</h2>
+              </div>
+              <p class="lead">Native on each system: Snap Layouts and Mica on Windows 11, traffic lights and a translucent sidebar on macOS, its own window controls on Linux. A tray icon, and a start at login if you want one.</p>
+              <ul class="checks" style="--k: var(--c-inbox)">
+                <li><strong>Obsidian.</strong> Link the note you are in to a task; the link survives renames, and one click opens the note again.</li>
+                <li><strong>Your browser.</strong> A small extension for Chrome, Edge, Brave, Vivaldi and Firefox links the tab you are on.</li>
+                <li><strong>Keyboard first.</strong> Arrow keys through tasks, Space to complete, a command palette for everything else.</li>
+              </ul>
+            </div>
+            <div class="window reveal">
+              <img class="only-light" src="assets/img/screens/desktop-palette.webp" width="1600" height="1000" loading="lazy" alt="The command palette over Today: New task, Say a task, Refresh, Toggle theme, Settings and every list." />
+              <img class="only-dark" src="assets/img/screens/desktop-palette-dark.webp" width="1600" height="1000" loading="lazy" alt="The command palette in dark mode." />
+            </div>
+          </div>
+          <dl class="keys reveal" style="margin-top: 44px" aria-label="Keyboard shortcuts">
+            <div><dt>Quick Entry, from any app</dt><dd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>V</kbd></dd></div>
+            <div><dt>Quick View, from any app</dt><dd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>B</kbd></dd></div>
+            <div><dt>New task</dt><dd><kbd>Ctrl</kbd><kbd>N</kbd></dd></div>
+            <div><dt>Command palette</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd></dd></div>
+            <div><dt>Quick find</dt><dd><kbd>Ctrl</kbd><kbd>F</kbd></dd></div>
+            <div><dt>Complete and move to the next</dt><dd><kbd>Space</kbd></dd></div>
+            <div><dt>Due today</dt><dd><kbd>Ctrl</kbd><kbd>T</kbd></dd></div>
+            <div><dt>Move a task up or down</dt><dd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>↑</kbd><kbd>↓</kbd></dd></div>
+            <div><dt>Comments</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd></dd></div>
+            <div><dt>Refresh from the server</dt><dd><kbd>F5</kbd></dd></div>
+          </dl>
+          <p class="muted" style="font-size: 13.5px; margin-top: 12px">On a Mac, Ctrl is Cmd and Quick Entry is <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Space</kbd>. Every shortcut can be changed in Settings.</p>
+        </div>
+      </section>
+
+      <!-- Sync -->
+      <section class="section" id="sync" aria-labelledby="sync-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker" style="--k: var(--c-anytime)">Sync and offline</p>
+            <h2 id="sync-title" class="h2">Every device in step, even offline.</h2>
+          </div>
+          <div class="cards reveal">
+            <article class="card" style="--k: var(--c-anytime)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-cloud-off" /></svg></span>
+              <h3>Works offline</h3>
+              <p>Create, edit, complete, comment. Changes wait in a queue and go out in order when you are back.</p>
+            </article>
+            <article class="card" style="--k: var(--c-inbox)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sync" /></svg></span>
+              <h3>No overwrites</h3>
+              <p>Vicu sends only what you changed, so an edit on your computer never undoes one from your phone.</p>
+            </article>
+            <article class="card" style="--k: var(--c-review)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sparkle" /></svg></span>
+              <h3>Settings that follow you</h3>
+              <p>Your Inbox, task orders, custom lists, places and location reminders are the same on every device.</p>
+            </article>
+            <article class="card" style="--k: var(--c-logbook)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock" /></svg></span>
+              <h3>Nothing in between</h3>
+              <p>Your data goes only to your Vikunja server. No account, no analytics, no ads.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Look and feel -->
+      <section class="section section--alt" id="look" aria-labelledby="look-title">
+        <div class="wrap split split--flip">
+          <div class="stack stack--lg">
+            <div class="stack">
+              <p class="kicker" style="--k: var(--c-today)">Look and feel</p>
+              <h2 id="look-title" class="h2">Calm, quick, and readable for everyone.</h2>
+            </div>
+            <ul class="checks" style="--k: var(--c-today)">
+              <li><strong>Light, dark or system</strong>, with every colour pair checked for readable contrast.</li>
+              <li><strong>Motion with a purpose</strong>: a task opens into its card and closes back into its row. With reduced motion, all of it becomes a plain fade.</li>
+              <li><strong>Accessible</strong>: one clear focus ring, real menus and dialogs, screen-reader announcements, Windows contrast themes, TalkBack and Dynamic Type.</li>
+              <li><strong>Priority you can see without colour</strong>: one to three bars, and a square for urgent.</li>
+            </ul>
+          </div>
+          <div class="shot-pair reveal">
+            <div class="window"><img src="assets/img/screens/desktop-upcoming.webp" width="1600" height="1000" loading="lazy" alt="Upcoming in light mode." /></div>
+            <div class="window"><img src="assets/img/screens/desktop-upcoming-dark.webp" width="1600" height="1000" loading="lazy" alt="Upcoming in dark mode." /></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Download -->
+      <section class="section" id="download" aria-labelledby="download-title">
+        <div class="wrap">
+          <div class="section-head section-head--center">
+            <p class="kicker">Get Vicu</p>
+            <h2 id="download-title" class="h2">Free, on every device you use.</h2>
+            <p class="lead">Desktop builds are on GitHub and tell you when an update is out. The mobile apps are in public beta.</p>
+          </div>
+          <div class="downloads reveal">
+            <div class="dl">
+              <svg class="i" aria-hidden="true"><use href="#i-windows" /></svg>
+              <h3>Windows</h3>
+              <p>Windows 10 or 11, x64 installer.</p>
+              <a class="btn btn--primary btn--small" href="https://github.com/rendyhd/Vicu/releases/latest">Download</a>
+            </div>
+            <div class="dl">
+              <svg class="i" aria-hidden="true"><use href="#i-apple" /></svg>
+              <h3>macOS</h3>
+              <p>macOS 13 or later, Apple Silicon. Signed and notarized.</p>
+              <a class="btn btn--primary btn--small" href="https://github.com/rendyhd/Vicu/releases/latest">Download</a>
+            </div>
+            <div class="dl">
+              <svg class="i" aria-hidden="true"><use href="#i-linux" /></svg>
+              <h3>Linux</h3>
+              <p>AppImage for x64 and arm64.</p>
+              <a class="btn btn--primary btn--small" href="https://github.com/rendyhd/Vicu/releases/latest">Download</a>
+            </div>
+            <div class="dl">
+              <svg class="i" aria-hidden="true"><use href="#i-phone" /></svg>
+              <h3>iPhone and iPad</h3>
+              <p>iOS and iPadOS 17 or later, public beta on TestFlight.</p>
+              <a class="btn btn--primary btn--small" href="https://testflight.apple.com/join/c6wuvXrH">Join on TestFlight</a>
+            </div>
+            <div class="dl">
+              <svg class="i" aria-hidden="true"><use href="#i-android" /></svg>
+              <h3>Android</h3>
+              <p>Android 8 or later. Google Play beta, or the APK.</p>
+              <a class="btn btn--primary btn--small" href="https://github.com/rendyhd/Vicu-Mobile#download">Get the beta</a>
+              <a class="alt" href="https://github.com/rendyhd/Vicu-Mobile/releases/latest">Download the APK</a>
+            </div>
+          </div>
+          <dl class="reqs reveal">
+            <div class="req">
+              <dt>Server</dt>
+              <dd>A <strong>Vikunja 2.4.0</strong> or newer server you can reach: <a href="https://vikunja.io/">your own</a> or <a href="https://vikunja.cloud/">Vikunja Cloud</a>.</dd>
+            </div>
+            <div class="req">
+              <dt>Sign in</dt>
+              <dd><strong>Username and password</strong> (with two-factor), <strong>single sign-on</strong> (OpenID Connect) or an <strong>API token</strong>.</dd>
+            </div>
+            <div class="req">
+              <dt>Then</dt>
+              <dd>Pick your Inbox project. If another device already chose one, Vicu suggests it. Turn on Quick Entry in Settings.</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="section section--alt" id="faq" aria-labelledby="faq-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker" style="--k: var(--c-inbox)">Questions</p>
+            <h2 id="faq-title" class="h2">Good to know.</h2>
+          </div>
+          <div class="faq">
+            <details>
+              <summary>Do I need a Vikunja server?</summary>
+              <div><p>Yes. Vicu is an app for <a href="https://vikunja.io/">Vikunja</a>, the open-source task server. Run your own, or use Vikunja Cloud. Vicu is built and tested against Vikunja 2.4.0.</p></div>
+            </details>
+            <details>
+              <summary>How is it different from Vikunja's own web app?</summary>
+              <div><p>Vikunja's web app is a full project suite with Kanban, Gantt and tables. Vicu is a personal task manager that trades those for speed and a simple flow, with just enough sharing for a household or a small team. They use the same server, so you can use both.</p></div>
+            </details>
+            <details>
+              <summary>Is it free?</summary>
+              <div><p>Yes, and open source under the MIT license. The code for the <a href="https://github.com/rendyhd/Vicu">desktop app</a> and the <a href="https://github.com/rendyhd/Vicu-Mobile">mobile app</a> is on GitHub.</p></div>
+            </details>
+            <details>
+              <summary>Does Vicu collect anything?</summary>
+              <div><p>No. There is no Vicu server, account or analytics. Your tasks go only to your Vikunja server, and on iPhone your sign-in stays in the Keychain. Read the <a href="https://github.com/rendyhd/Vicu-Mobile/blob/main/docs/privacy-policy.md">privacy policy</a>.</p></div>
+            </details>
+            <details>
+              <summary>Will my phone and computer agree?</summary>
+              <div><p>Yes. Both apps follow one written specification for due dates, weeks, custom lists, quick add, routines and task order, and run the same test cases. A task due "friday" is the same Friday everywhere.</p></div>
+            </details>
+            <details>
+              <summary>What are the hidden tasks I see in other Vikunja apps?</summary>
+              <div><p>Vikunja has no place for an app's own data, so Vicu keeps custom lists, routines and synced settings in tasks it marks done and hides. You may see them elsewhere, for example "Vicu preferences"; leave them in place.</p></div>
+            </details>
+            <details>
+              <summary>Does voice input work everywhere?</summary>
+              <div><p>On Android, iPhone, iPad, macOS and Windows. On Linux, holding + opens the composer instead.</p></div>
+            </details>
+            <details>
+              <summary>Where do I report a bug or share an idea?</summary>
+              <div><p>Open an issue for the <a href="https://github.com/rendyhd/Vicu/issues">desktop app</a> or the <a href="https://github.com/rendyhd/Vicu-Mobile/issues">mobile app</a>.</p></div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="cta-title">
+        <div class="wrap cta">
+          <img src="assets/img/brand/vicu-256.webp" alt="" width="84" height="84" loading="lazy" />
+          <h2 id="cta-title" class="h2">Clear your head. Keep your day.</h2>
+          <p class="lead">Vicu for Windows, macOS, Linux, Android, iPhone and iPad.</p>
+          <div class="hero-actions">
+            <a class="btn btn--primary" href="#download"><svg aria-hidden="true"><use href="#i-download" /></svg>Get Vicu</a>
+            <a class="btn btn--ghost" href="https://github.com/rendyhd/Vicu"><svg aria-hidden="true"><use href="#i-github" /></svg>View on GitHub</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-row">
+        <a class="brand" href="./"><img src="assets/img/brand/vicu-64.png" alt="" width="28" height="28" /><span>Vicu</span></a>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="https://github.com/rendyhd/Vicu">Desktop on GitHub</a>
+          <a href="https://github.com/rendyhd/Vicu-Mobile">Mobile on GitHub</a>
+          <a href="https://github.com/rendyhd/Vicu/releases">Release notes</a>
+          <a href="https://github.com/rendyhd/Vicu-Mobile/blob/main/docs/privacy-policy.md">Privacy</a>
+          <a href="https://vikunja.io/">Vikunja</a>
+        </nav>
+        <p>MIT licensed. Vicu is an independent app, not made by the Vikunja team. Screens show made-up tasks.</p>
+      </div>
+    </footer>
+  </body>
+</html>
