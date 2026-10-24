@@ -20,7 +20,8 @@
  *   and as a once-a-day safety net for servers whose search does not look into descriptions.
  * - A task is a carrier when its description holds the kind's marker (never by its title) and the
  *   signed-in user created it (`created_by`, section 10.3): another user's carriers in a shared
- *   project are left alone.
+ *   project are left alone, except a routine its owner shared (section 6.9), which every member of
+ *   its project reads.
  *
  * Kept free of Electron so the rules run in unit tests; `carrier-service.ts` wires it to the API
  * client and the config.
@@ -33,7 +34,14 @@ import { JsonFileStore } from './json-file-store'
 import { mapLimited } from './map-limited'
 import { isOwnTask } from '../shared/hidden-tasks'
 import { PREFS_CARRIER_SEARCH, hasPrefsMarker } from './synced-prefs-protocol'
-import { ROUTINE_ARCHIVE_SEARCH, ROUTINE_CARRIER_SEARCH, hasRoutineArchiveMarker, hasRoutineMarker } from '../shared/routines'
+import {
+  ROUTINE_ARCHIVE_SEARCH,
+  ROUTINE_CARRIER_SEARCH,
+  hasRoutineArchiveMarker,
+  hasRoutineMarker,
+  isSharedRoutine,
+  parseRoutineEnvelope,
+} from '../shared/routines'
 
 export const DISCOVERY_INTERVAL_MS = 60_000
 export const FULL_SCAN_INTERVAL_MS = 24 * 60 * 60_000
@@ -61,12 +69,21 @@ export interface CarrierSpec {
   search: string
   /** True for a carrier of this kind, readable or not. */
   isCarrier(task: CarrierTask): boolean
+  /**
+   * True for a carrier of this kind that another user created and that is read all the same. Only
+   * routines have one: a routine its owner shared (section 6.9). Missing: only the user's own.
+   */
+  isSharedByOthers?(task: CarrierTask): boolean
 }
 
 export const ROUTINE_CARRIER_SPEC: CarrierSpec = {
   kind: 'routine',
   search: ROUTINE_CARRIER_SEARCH,
   isCarrier: (task) => hasRoutineMarker(task.description),
+  isSharedByOthers: (task) => {
+    const payload = parseRoutineEnvelope(task.description).payload
+    return !!payload && isSharedRoutine(payload)
+  },
 }
 
 /** The routine archive parts: only the sidebar counts load them here (the history reads its own). */
@@ -215,8 +232,8 @@ export interface CarrierLoaderDeps {
 
 export interface CarrierLoader {
   /**
-   * Every carrier of `spec.kind` on `server` that the user `ownerId` created, ascending by id,
-   * done or reopened.
+   * Every carrier of `spec.kind` on `server` that the user `ownerId` created (and, for routines, the
+   * ones others shared, section 6.9), ascending by id, done or reopened.
    */
   load(spec: CarrierSpec, server: string, ownerId: number): Promise<ApiResult<CarrierTask[]>>
   /** A carrier this app just created: fetched directly from the next load on. */
@@ -249,11 +266,15 @@ export function createCarrierLoader(deps: CarrierLoaderDeps): CarrierLoader {
     return finished
   }
 
-  /** The tasks of a listing that are the owner's carriers of this kind, done or not. */
+  /**
+   * The tasks of a listing that are the owner's carriers of this kind, done or not, and the ones
+   * another user shared when the kind has them (routines, section 6.9).
+   */
   function carriersIn(spec: CarrierSpec, tasks: unknown[], ownerId: number): CarrierTask[] {
     return tasks.filter((raw): raw is CarrierTask => {
       const task = raw as CarrierTask | null
-      return !!task && typeof task.id === 'number' && spec.isCarrier(task) && isOwnTask(task, ownerId)
+      if (!task || typeof task.id !== 'number' || !spec.isCarrier(task)) return false
+      return isOwnTask(task, ownerId) || (spec.isSharedByOthers?.(task) ?? false)
     })
   }
 

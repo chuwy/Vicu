@@ -1,6 +1,9 @@
 import { Checkbox } from '@/components/shared/Checkbox'
 import { Switch } from '@/components/shared/Switch'
 import { isRoutinesEnabled, type AppConfig } from '@/lib/vikunja-types'
+import { useRoutines } from '@/hooks/use-routines'
+import { useSetSyncedPreference } from '@/hooks/use-synced-prefs'
+import { routineHiddenKey } from '../../../shared/synced-prefs'
 
 interface RoutinesSettingsPanelProps {
   config: AppConfig
@@ -42,6 +45,35 @@ export function RoutinesSettingsPanel({ config, onChange }: RoutinesSettingsPane
           </div>
         </label>
       </div>
+
+      {enabled && <HiddenSharedRoutines />}
+    </div>
+  )
+}
+
+/** The shared routines this account hid (section 6.9), to show again. Nothing while there are none. */
+function HiddenSharedRoutines() {
+  const { hiddenShared } = useRoutines()
+  const setPref = useSetSyncedPreference()
+  if (hiddenShared.length === 0) return null
+  return (
+    <div className="mt-5 border-t border-[var(--border-color)] pt-4">
+      <h3 className="mb-1 text-sm font-medium text-[var(--text-primary)]">Hidden shared routines</h3>
+      <p className="mb-3 text-xs text-[var(--text-secondary)]">Routines someone shared with you that you hid. They stay shared; only you do not see them.</p>
+      <ul className="space-y-1.5">
+        {hiddenShared.map((carrier) => (
+          <li key={carrier.payload.definition.id} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm text-[var(--text-primary)]">{carrier.payload.definition.name}</span>
+            <button
+              type="button"
+              onClick={() => setPref.mutate({ key: routineHiddenKey(carrier.payload.definition.id), value: null })}
+              className="rounded-control px-2 py-1 text-xs font-medium text-accent-blue hover:bg-[var(--bg-hover)]"
+            >
+              Show
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

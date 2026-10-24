@@ -2,13 +2,18 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  archivePartReadable,
+  keepServerRecordsOfSameState,
+  loggedByUserId,
   mergeRoutinePayload,
+  routineCarrierReadable,
   pruneRoutinePayload,
   readRoutineHistory,
   routineDueDate,
   type OccurrenceStatus,
   type RoutineArchivePart,
   type RoutineDefinition,
+  type RoutineLoggedBy,
   type RoutineOccurrenceRecord,
   type RoutinePayload,
 } from '../routines'
@@ -27,6 +32,8 @@ interface CompactOccurrence {
   modifiedBy: string
   loggedAt?: string
   timeZoneId?: string
+  note?: string
+  loggedBy?: RoutineLoggedBy
 }
 interface Side { prunedBefore: string; occurrences: CompactOccurrence[] }
 interface DefinitionSide { name: string; updatedAt: string; updatedBy: string }
@@ -34,6 +41,16 @@ interface Fixture {
   contractVersion: number
   baseDefinition: RoutineDefinition
   merge: Array<{ name: string; local: Side; remote: Side; expect: { prunedBefore: string; occurrences: Record<string, string> } }>
+  writeKeep: Array<{ name: string; local: Side; remote: Side; expect: Record<string, string> }>
+  sharedVisibility: Array<{
+    name: string
+    me: number
+    carriers: Array<{ id: number; createdBy: number; routineId: string; shared?: boolean }>
+    parts: Array<{ id: number; createdBy: number; routineId: string }>
+    useCarriers: number[]
+    useParts: number[]
+  }>
+  loggedBy: Array<{ name: string; record: CompactOccurrence; expectUserId: number | null }>
   definitionMerge: Array<{ name: string; local: DefinitionSide; remote: DefinitionSide; expectName: string }>
   prune: Array<{
     name: string
@@ -75,7 +92,8 @@ function expand(compact: CompactOccurrence): RoutineOccurrenceRecord {
     loggedAt: compact.loggedAt ?? '',
     modifiedAt: compact.modifiedAt,
     modifiedBy: compact.modifiedBy,
-    note: '',
+    note: compact.note ?? '',
+    ...(compact.loggedBy ? { loggedBy: compact.loggedBy } : {}),
   }
 }
 
@@ -123,6 +141,37 @@ export function runRoutineArchiveSuite(options: { zone: string; expectedOffsetMi
           const merged = mergeRoutinePayload(payload(vector.remote), payload(vector.local))
           expect(merged.prunedBefore).toBe(vector.expect.prunedBefore)
           expect(statusByDate(merged.occurrences)).toEqual(vector.expect.occurrences)
+        })
+      }
+    })
+
+    describe('writeKeep', () => {
+      for (const vector of fixture.writeKeep) {
+        it(vector.name, () => {
+          const remote = payload(vector.remote)
+          const sent = keepServerRecordsOfSameState(mergeRoutinePayload(payload(vector.local), remote), remote)
+          const byDate = Object.fromEntries(Object.values(sent.occurrences).map((record) => [record.scheduledDate, record.modifiedBy]))
+          expect(byDate).toEqual(vector.expect)
+        })
+      }
+    })
+
+    describe('sharedVisibility', () => {
+      for (const vector of fixture.sharedVisibility) {
+        it(vector.name, () => {
+          const carriers = vector.carriers.filter((carrier) => routineCarrierReadable(carrier.createdBy, carrier.shared === true, vector.me))
+          expect(carriers.map((carrier) => carrier.id)).toEqual(vector.useCarriers)
+          const routines = new Map(carriers.map((carrier) => [carrier.routineId, { shared: carrier.shared === true }]))
+          const parts = vector.parts.filter((part) => archivePartReadable(part.routineId, vector.me, routines))
+          expect(parts.map((part) => part.id)).toEqual(vector.useParts)
+        })
+      }
+    })
+
+    describe('loggedBy', () => {
+      for (const vector of fixture.loggedBy) {
+        it(vector.name, () => {
+          expect(loggedByUserId(expand(vector.record))).toBe(vector.expectUserId)
         })
       }
     })

@@ -30,6 +30,9 @@ const api = {
     ipcRenderer.invoke('delete-task', id, options),
   fetchTaskById: (id: number) =>
     ipcRenderer.invoke('fetch-task-by-id', id),
+  // A routine carrier or archive part write (cross-app semantics 6.8): never queued.
+  patchTaskJson: (id: number, operations: ReadonlyArray<Record<string, unknown>>) =>
+    ipcRenderer.invoke('patch-task-json', id, operations),
   createTaskRelation: (taskId: number, otherTaskId: number, relationKind: string) =>
     ipcRenderer.invoke('create-task-relation', taskId, otherTaskId, relationKind),
   deleteTaskRelation: (taskId: number, relationKind: string, otherTaskId: number) =>

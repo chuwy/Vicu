@@ -40,7 +40,7 @@ vi.mock('../secure-ipc', () => ({
   },
 }))
 vi.mock('../api-client', () => {
-  const entries = Object.fromEntries(['updateTask', 'deleteTask', 'addLabelToTask', 'removeLabelFromTask', 'createTask', 'updateTaskPosition', 'createTaskRelation', 'deleteTaskRelation'].map((name) => {
+  const entries = Object.fromEntries(['updateTask', 'patchTaskJson', 'deleteTask', 'addLabelToTask', 'removeLabelFromTask', 'createTask', 'updateTaskPosition', 'createTaskRelation', 'deleteTaskRelation'].map((name) => {
     const fn = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ success: true, data: { id: 5 } }))
     hoisted.api[name] = fn
     return [name, fn]
@@ -123,6 +123,43 @@ describe('task writes go through the write gate', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  describe('patch-task-json (routine carrier writes, cross-app semantics 6.8)', () => {
+    const ops = [
+      { op: 'test', path: '/description', value: 'old' },
+      { op: 'replace', path: '/description', value: 'new' },
+    ]
+
+    it('sends the JSON Patch and tells the other windows', async () => {
+      const result = await call('patch-task-json', 5, ops)
+      expect(hoisted.api.patchTaskJson).toHaveBeenCalledWith(5, ops)
+      expect(result).toEqual({ success: true, data: { id: 5 } })
+      expect(hoisted.mainSend).toHaveBeenCalledWith('tasks-changed')
+    })
+
+    it('passes a failed test (422) on, and never queues it', async () => {
+      hoisted.api.patchTaskJson.mockResolvedValueOnce({ success: false, error: 'Unable to apply patch', statusCode: 422 })
+      const result = await call('patch-task-json', 5, ops)
+      expect(result).toMatchObject({ success: false, statusCode: 422 })
+      expect(hoisted.queue.enqueueUpdate).not.toHaveBeenCalled()
+    })
+
+    it('is refused while changes for the task wait in the queue', async () => {
+      hoisted.queue.waiting = true
+      const result = await call('patch-task-json', 5, ops)
+      expect(hoisted.api.patchTaskJson).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ success: false })
+      expect(hoisted.queue.enqueueUpdate).not.toHaveBeenCalled()
+    })
+
+    it('refuses anything that is not a short patch of top-level fields', async () => {
+      for (const bad of [[], [{ op: 'move', path: '/a', from: '/b' }], [{ op: 'replace', path: '/a/b', value: 1 }], { op: 'test' }, 'x']) {
+        expect(await call('patch-task-json', 5, bad)).toMatchObject({ success: false, error: 'Invalid task patch' })
+      }
+      expect(await call('patch-task-json', -1, ops)).toMatchObject({ success: false })
+      expect(hoisted.api.patchTaskJson).not.toHaveBeenCalled()
+    })
   })
 
   describe('update-task', () => {

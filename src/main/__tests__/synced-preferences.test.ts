@@ -204,6 +204,25 @@ describe('synced preferences', () => {
     await vi.waitFor(() => expect(documentOf(7).entries['location_reminder.42'].value).toBeNull())
   })
 
+  it("writes a shared routine's reminders and hiding for this account only (section 6.9)", async () => {
+    writeConfig({ inbox_project_id: 0 })
+    putCarrier(7, { version: 1, entries: {} })
+    const service = await loadService()
+    await service.syncSyncedPrefs()
+
+    service.setSyncedPreference('routine_reminders.3f2a-routine', 'off')
+    service.setSyncedPreference('routine_hidden.3f2a-routine', true)
+    await vi.waitFor(() => expect(documentOf(7).entries['routine_hidden.3f2a-routine']?.value).toBe(true))
+    expect(documentOf(7).entries['routine_reminders.3f2a-routine'].value).toBe('off')
+
+    expect(() => service.setSyncedPreference('routine_reminders.3f2a-routine', 'on')).toThrow()
+    expect(() => service.setSyncedPreference('routine_hidden.3f2a-routine', false)).toThrow()
+    expect(() => service.setSyncedPreference('routine_hidden.bad id', true)).toThrow()
+
+    service.setSyncedPreference('routine_reminders.3f2a-routine', null)
+    await vi.waitFor(() => expect(documentOf(7).entries['routine_reminders.3f2a-routine'].value).toBeNull())
+  })
+
   it("never reads or writes another user's carrier", async () => {
     writeConfig({ inbox_project_id: 5 })
     putCarrier(7, { version: 1, entries: { inbox_project_id: entry(42) } }, 2)

@@ -6,7 +6,9 @@ import { ListSectionHeader } from '@/components/task-list/ListSectionHeader'
 import {
   Archive,
   Bell,
+  BellOff,
   Check,
+  EyeOff,
   ChevronRight,
   Download,
   HeartPulse,
@@ -37,6 +39,11 @@ import {
 import { isRoutinesEnabled, type Task } from '@/lib/vikunja-types'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { cn } from '@/lib/cn'
+import { RoutineShareField, SharedRoutineLabel, useRoutineSharing, type RoutineShareChoice } from '@/components/routines/RoutineSharing'
+import { useCollabMe, useProjectAccess } from '@/hooks/use-project-access'
+import { useSetSyncedPreference, useSyncedPrefs } from '@/hooks/use-synced-prefs'
+import { loggedByText } from '@/lib/routine-sharing'
+import { routineHiddenKey, routineRemindersKey, routineRemindersOn } from '../../shared/synced-prefs'
 
 const FIELD = 'h-9 w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 text-sm text-[var(--text-primary)] transition'
 const LABEL = 'mb-1.5 block text-caption uppercase tracking-wide text-[var(--text-secondary)]'
@@ -102,10 +109,12 @@ function RoutineEditor({
 }: {
   carrier?: RoutineCarrier<Task>
   busy: boolean
-  onSave: (draft: RoutineDraft) => void
+  onSave: (draft: RoutineDraft, share: RoutineShareChoice) => void
   onClose: () => void
 }) {
   const [draft, setDraft] = useState<RoutineDraft>(() => carrier ? draftFor(carrier) : emptyDraft())
+  // What saving does about sharing; null while "Keep in" still needs a choice (section 6.9).
+  const [share, setShare] = useState<RoutineShareChoice | null>({ kind: 'keep' })
   const updateSlot = (id: string, patch: Partial<RoutineSlot>) => setDraft((current) => ({
     ...current,
     slots: current.slots.map((slot) => slot.id === id ? { ...slot, ...patch } : slot),
@@ -115,7 +124,7 @@ function RoutineEditor({
 
   return (
     <DialogFrame title={carrier ? 'Edit routine' : 'New routine'} onClose={onClose}>
-      <form className="overflow-y-auto" onSubmit={(event) => { event.preventDefault(); onSave(draft) }}>
+      <form className="overflow-y-auto" onSubmit={(event) => { event.preventDefault(); if (share) onSave(draft, share) }}>
         <div className="space-y-5 p-5">
           <div>
             <label className={LABEL}>Name</label>
@@ -174,6 +183,8 @@ function RoutineEditor({
             )}
           </div>
 
+          <RoutineShareField carrier={carrier} onChange={setShare} />
+
           <div>
             <div className="mb-2 flex items-center">
               <label className="flex-1 text-caption uppercase tracking-wide text-[var(--text-secondary)]">Times & reminders</label>
@@ -199,7 +210,7 @@ function RoutineEditor({
 
         <footer className="sticky bottom-0 flex justify-end gap-2 border-t border-[var(--border-color)] bg-[var(--bg-primary)] p-4">
           <button type="button" onClick={onClose} className="rounded-control border border-[var(--border-color)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)]">Cancel</button>
-          <button type="submit" disabled={busy || !draft.name.trim() || draft.slots.length === 0} className="rounded-control bg-accent-fill px-4 py-2 text-sm font-medium text-on-accent disabled:opacity-50">{busy ? 'Saving...' : carrier ? 'Save changes' : 'Create routine'}</button>
+          <button type="submit" disabled={busy || !draft.name.trim() || draft.slots.length === 0 || share === null} className="rounded-control bg-accent-fill px-4 py-2 text-sm font-medium text-on-accent disabled:opacity-50">{busy ? 'Saving...' : carrier ? 'Save changes' : 'Create routine'}</button>
         </footer>
       </form>
     </DialogFrame>
@@ -208,6 +219,9 @@ function RoutineEditor({
 
 function HistoryDialog({ carrier, onClose }: { carrier: RoutineCarrier<Task>; onClose: () => void }) {
   const dateFormat = useDateFormat()
+  const sharing = useRoutineSharing(carrier)
+  const me = useCollabMe()
+  const members = useProjectAccess(carrier.task.project_id).members
   const { records, loadingArchive, archiveError } = useRoutineHistory(carrier)
   const logged = records.filter((record) => record.status !== 'PENDING')
   const completed = logged.filter((record) => record.status === 'COMPLETED').length
@@ -230,6 +244,7 @@ function HistoryDialog({ carrier, onClose }: { carrier: RoutineCarrier<Task>; on
                   {record.status === 'COMPLETED' ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
                 </div>
                 <div className="min-w-0 flex-1"><div className="text-sm text-[var(--text-primary)]">{formatDateChip(new Date(`${record.scheduledDate}T12:00:00`), true, new Date(), dateFormat)}</div><div className="text-meta text-[var(--text-secondary)]">{formatMinutesOfDay(record.scheduledMinutes, dateFormat)}</div></div>
+                {sharing.shared && loggedByText(record.status, record, me?.id, members) && <span className="text-meta text-[var(--text-secondary)]">{loggedByText(record.status, record, me?.id, members)}</span>}
                 <span className="text-meta capitalize text-[var(--text-secondary)]">{record.status.toLowerCase().replace('_', ' ')}</span>
               </div>
             ))}
@@ -263,6 +278,22 @@ function RoutinesContent() {
   const active = useMemo(() => routines.active, [routines.active])
 
   const [exportError, setExportError] = useState<string | null>(null)
+
+  /** Saves the editor: the routine, then what changed about sharing (section 6.9). */
+  const save = async (target: RoutineCarrier<Task> | 'new', draft: RoutineDraft, share: RoutineShareChoice) => {
+    try {
+      if (target === 'new') {
+        await routines.createRoutine.mutateAsync({ ...draft, shareProjectId: share.kind === 'share' ? share.projectId : undefined })
+      } else {
+        const saved = await routines.updateRoutine.mutateAsync({ carrier: target, draft })
+        if (share.kind === 'share') await routines.shareRoutine.mutateAsync({ carrier: saved, projectId: share.projectId })
+        else if (share.kind === 'private') await routines.stopSharingRoutine.mutateAsync(saved)
+      }
+      setEditor(null)
+    } catch {
+      // The error banner below shows what went wrong; the editor stays open with the draft.
+    }
+  }
 
   const exportCsv = async () => {
     setExportError(null)
@@ -313,25 +344,22 @@ function RoutinesContent() {
               />
             )}
             <div className="space-y-2">
-              {active.map((carrier) => {
-                const definition = carrier.payload.definition
-                return (
-                  <article key={definition.id} className="group flex items-center gap-3 rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-3.5 transition hover:border-[var(--text-tertiary)] hover:shadow-sm">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card text-white" style={{ backgroundColor: definition.color || STORED_ROUTINE_COLORS[0] }}><HeartPulse className="h-5 w-5" /></div>
-                    <button type="button" onClick={() => setHistory(carrier)} className="min-w-0 flex-1 text-left"><div className="truncate text-sm font-semibold text-[var(--text-primary)]">{definition.name}</div><div className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">{[scheduleSummary(definition), [...definition.slots].sort((left, right) => left.reminderMinutes - right.reminderMinutes).map((slot) => formatMinutesOfDay(slot.reminderMinutes)).join(', ')].filter(Boolean).join(' · ')}</div></button>
-                    <button type="button" title="History" onClick={() => setHistory(carrier)} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><History className="h-4 w-4" /></button>
-                    <button type="button" title="Edit" onClick={() => setEditor(carrier)} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><ChevronRight className="h-4 w-4" /></button>
-                    <button type="button" title="Archive" onClick={() => routines.archiveRoutine.mutate({ carrier, archived: true })} className="rounded-control p-2 text-[var(--text-secondary)] opacity-0 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] group-hover:opacity-100"><Archive className="h-4 w-4" /></button>
-                  </article>
-                )
-              })}
+              {active.map((carrier) => (
+                <RoutineCard
+                  key={carrier.payload.definition.id}
+                  carrier={carrier}
+                  onHistory={() => setHistory(carrier)}
+                  onEdit={() => setEditor(carrier)}
+                  onArchive={() => routines.archiveRoutine.mutate({ carrier, archived: true })}
+                />
+              ))}
             </div>
           </section>
 
           {routines.archived.length > 0 && (
             <section className="px-6 pt-7">
               <button type="button" onClick={() => setShowArchived(!showArchived)} aria-expanded={showArchived} className="mb-3 flex h-8 w-full items-center gap-2 text-left text-section text-text"><span>Archived</span><span className="font-medium tabular-nums text-text-secondary">{routines.archived.length}</span></button>
-              {showArchived && <div className="space-y-2">{routines.archived.map((carrier) => <div key={carrier.payload.definition.id} className="flex items-center gap-3 rounded-card border border-[var(--border-color)] px-3 py-2.5"><Archive className="h-4 w-4 text-[var(--text-secondary)]" /><span className="flex-1 text-sm text-[var(--text-primary)]">{carrier.payload.definition.name}</span><button type="button" onClick={() => routines.archiveRoutine.mutate({ carrier, archived: false })} className="flex items-center gap-1 text-xs font-medium text-accent-blue"><Undo2 className="h-3.5 w-3.5" /> Restore</button><button type="button" onClick={() => { if (window.confirm(`Permanently delete "${carrier.payload.definition.name}" and its history?`)) routines.deleteRoutine.mutate(carrier) }} className="rounded-control p-1.5 text-[var(--text-secondary)] hover:bg-danger/10 hover:text-danger"><Trash2 className="h-4 w-4" /></button></div>)}</div>}
+              {showArchived && <div className="space-y-2">{routines.archived.map((carrier) => <ArchivedRoutineRow key={carrier.payload.definition.id} carrier={carrier} onRestore={() => routines.archiveRoutine.mutate({ carrier, archived: false })} onDelete={() => { if (window.confirm(`Permanently delete "${carrier.payload.definition.name}" and its history?`)) routines.deleteRoutine.mutate(carrier) }} />)}</div>}
             </section>
           )}
 
@@ -343,8 +371,71 @@ function RoutinesContent() {
         </div>
       </ReadingScroll>
 
-      {editor && <RoutineEditor carrier={editor === 'new' ? undefined : editor} busy={routines.isMutating} onClose={() => setEditor(null)} onSave={(draft) => editor === 'new' ? routines.createRoutine.mutate(draft, { onSuccess: () => setEditor(null) }) : routines.updateRoutine.mutate({ carrier: editor, draft }, { onSuccess: () => setEditor(null) })} />}
+      {editor && <RoutineEditor carrier={editor === 'new' ? undefined : editor} busy={routines.isMutating} onClose={() => setEditor(null)} onSave={(draft, share) => { void save(editor, draft, share) }} />}
       {history && <HistoryDialog carrier={history} onClose={() => setHistory(null)} />}
+    </div>
+  )
+}
+
+/** A routine in "Your routines": what you may do with it depends on whose it is (section 6.9). */
+function RoutineCard({
+  carrier,
+  onHistory,
+  onEdit,
+  onArchive,
+}: {
+  carrier: RoutineCarrier<Task>
+  onHistory: () => void
+  onEdit: () => void
+  onArchive: () => void
+}) {
+  const definition = carrier.payload.definition
+  const sharing = useRoutineSharing(carrier)
+  const { snapshot } = useSyncedPrefs()
+  const setPref = useSetSyncedPreference()
+  const remindersOn = routineRemindersOn(snapshot.values, definition.id)
+  const member = sharing.shared && !sharing.own
+  return (
+    <article className="group flex items-center gap-3 rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-3.5 transition hover:border-[var(--text-tertiary)] hover:shadow-sm">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-card text-white" style={{ backgroundColor: definition.color || STORED_ROUTINE_COLORS[0] }}><HeartPulse className="h-5 w-5" /></div>
+      <button type="button" onClick={onHistory} className="min-w-0 flex-1 text-left">
+        <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{definition.name}</div>
+        <div className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">{[scheduleSummary(definition), [...definition.slots].sort((left, right) => left.reminderMinutes - right.reminderMinutes).map((slot) => formatMinutesOfDay(slot.reminderMinutes)).join(', ')].filter(Boolean).join(' · ')}</div>
+        <SharedRoutineLabel sharing={sharing} className="mt-0.5 block" />
+      </button>
+      <button type="button" title="History" onClick={onHistory} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><History className="h-4 w-4" /></button>
+      {sharing.canWrite && <button type="button" title="Edit" onClick={onEdit} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><ChevronRight className="h-4 w-4" /></button>}
+      {member && sharing.canWrite && (
+        <button
+          type="button"
+          title={remindersOn ? 'Turn off my reminders' : 'Turn on my reminders'}
+          aria-label={remindersOn ? 'Turn off my reminders' : 'Turn on my reminders'}
+          onClick={() => setPref.mutate({ key: routineRemindersKey(definition.id), value: remindersOn ? 'off' : null })}
+          className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+        >
+          {remindersOn ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+        </button>
+      )}
+      {member && (
+        <button type="button" title="Hide for me" aria-label="Hide for me" onClick={() => setPref.mutate({ key: routineHiddenKey(definition.id), value: true })} className="rounded-control p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"><EyeOff className="h-4 w-4" /></button>
+      )}
+      {sharing.own && <button type="button" title="Archive" onClick={onArchive} className="rounded-control p-2 text-[var(--text-secondary)] opacity-0 hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] group-hover:opacity-100"><Archive className="h-4 w-4" /></button>}
+    </article>
+  )
+}
+
+/** An archived routine: only its owner restores or deletes it (section 6.9). */
+function ArchivedRoutineRow({ carrier, onRestore, onDelete }: { carrier: RoutineCarrier<Task>; onRestore: () => void; onDelete: () => void }) {
+  const sharing = useRoutineSharing(carrier)
+  return (
+    <div className="flex items-center gap-3 rounded-card border border-[var(--border-color)] px-3 py-2.5">
+      <Archive className="h-4 w-4 text-[var(--text-secondary)]" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm text-[var(--text-primary)]">{carrier.payload.definition.name}</span>
+        <SharedRoutineLabel sharing={sharing} className="block" />
+      </span>
+      {sharing.own && <button type="button" onClick={onRestore} className="flex items-center gap-1 text-xs font-medium text-accent-blue"><Undo2 className="h-3.5 w-3.5" /> Restore</button>}
+      {sharing.own && <button type="button" aria-label={`Delete ${carrier.payload.definition.name}`} onClick={onDelete} className="rounded-control p-1.5 text-[var(--text-secondary)] hover:bg-danger/10 hover:text-danger"><Trash2 className="h-4 w-4" /></button>}
     </div>
   )
 }

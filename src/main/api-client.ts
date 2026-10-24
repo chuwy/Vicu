@@ -51,6 +51,7 @@ const REQUEST_TIMEOUT = 10_000
 const DOWNLOAD_IDLE_TIMEOUT = 60_000
 const API_BASE_PATH = '/api/v2'
 const JSON_MERGE_PATCH = 'application/merge-patch+json'
+const JSON_PATCH = 'application/json-patch+json'
 
 // Friendly error overrides for known unhelpful server messages
 const FRIENDLY_ERROR_OVERRIDES: { pattern: RegExp; message: string }[] = [
@@ -414,6 +415,25 @@ export async function updateTask(
   if ('success' in c) return c
 
   return patchWithRetry<unknown>(`${c.url}${API_BASE_PATH}/tasks/${id}`, c.token, createTaskPatch(task))
+}
+
+/**
+ * A JSON Patch (RFC 6902) of a task: the routine carrier and archive part writes (cross-app
+ * semantics 6.8) start with a `test` of the description they read, so Vikunja applies nothing and
+ * answers 422 when another device wrote the task since. A 304 (nothing changed) reads the task back,
+ * as for a merge patch. A JSON Patch body may be larger than the 1 MiB a merge patch is limited to.
+ */
+export async function patchTaskJson(
+  id: number,
+  operations: readonly Record<string, unknown>[]
+): Promise<ApiResult<unknown>> {
+  const c = await getConfigOrFail()
+  if ('success' in c) return c
+
+  const url = `${c.url}${API_BASE_PATH}/tasks/${id}`
+  const result = await requestWithRetry<unknown>('PATCH', url, c.token, operations, JSON_PATCH)
+  if (result.success || result.statusCode !== 304) return result
+  return requestWithRetry<unknown>('GET', url, c.token)
 }
 
 export async function deleteTask(id: number): Promise<ApiResult<void>> {

@@ -72,6 +72,7 @@ export interface ElectronAPI {
   updateTask(id: number, task: UpdateTaskPayload, options?: TaskWriteOptions): Promise<ApiResult<Task> | QueuedWriteReply>
   deleteTask(id: number, options?: TaskWriteOptions): Promise<ApiResult<void> | QueuedWriteReply>
   fetchTaskById(id: number): Promise<ApiResult<Task>>
+  patchTaskJson(id: number, operations: ReadonlyArray<Record<string, unknown>>): Promise<ApiResult<Task>>
   createTaskRelation(taskId: number, otherTaskId: number, relationKind: string): Promise<ApiResult<unknown>>
   deleteTaskRelation(taskId: number, relationKind: string, otherTaskId: number): Promise<ApiResult<void>>
 

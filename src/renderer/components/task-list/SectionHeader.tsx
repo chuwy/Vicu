@@ -10,6 +10,9 @@ import { useConfirmDelete } from '@/hooks/use-confirm-delete'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { normalizeHex } from '@/lib/constants'
 import type { Project } from '@/lib/vikunja-types'
+import { useQueryClient } from '@tanstack/react-query'
+import { sharedRoutineNamesIn } from '@/hooks/use-routines'
+import { projectDeleteQuestion } from '@/lib/routine-sharing'
 
 interface SectionHeaderProps {
   project: Project
@@ -33,6 +36,7 @@ export function SectionHeader({ project, siblings, onAddTask }: SectionHeaderPro
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
+  const queryClient = useQueryClient()
   const { confirmDelete, dialogProps: deleteDialogProps } = useConfirmDelete()
   const { active } = useDndContext()
 
@@ -96,7 +100,12 @@ export function SectionHeader({ project, siblings, onAddTask }: SectionHeaderPro
 
   const handleDelete = async () => {
     setShowMenu(false)
-    const ok = await confirmDelete('Delete this project? All tasks in it will be deleted. This cannot be undone.')
+    // Deleting the project deletes the shared routines in it, for everyone (section 6.9).
+    const question = projectDeleteQuestion(
+      'Delete this project? All tasks in it will be deleted. This cannot be undone.',
+      await sharedRoutineNamesIn(queryClient, project.id),
+    )
+    const ok = await confirmDelete(question.message, { force: question.force })
     if (ok) {
       deleteProject.mutate(project.id)
     }

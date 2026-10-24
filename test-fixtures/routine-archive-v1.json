@@ -1,6 +1,6 @@
 {
   "contractVersion": 1,
-  "about": "Routine merge, pruning, archive and after-completion vectors for docs/cross-app-semantics-v1.md section 6. Occurrences are written compactly; expand each to a full record with key '<routineId>:<date>:<slotId>', routineId 'r1', slotId 's1', scheduledDate = date, scheduledMinutes 480, timeZoneId 'UTC' unless given, loggedAt '' unless given, note ''. A prune vector may override the definition schedule with \"schedule\" (then kind is CHORE). Keep this file identical in vicu and vicu-android.",
+  "about": "Routine merge, pruning, archive and after-completion vectors for docs/cross-app-semantics-v1.md section 6. Occurrences are written compactly; expand each to a full record with key '<routineId>:<date>:<slotId>', routineId 'r1', slotId 's1', scheduledDate = date, scheduledMinutes 480, timeZoneId 'UTC' unless given, loggedAt '' unless given, note ''. A prune vector may override the definition schedule with \"schedule\" (then kind is CHORE). A compact occurrence may also give \"note\" and \"loggedBy\". writeKeep (section 6.8): merge local into remote, then keep the server's record where the result has the same status and note; expect gives each date's modifiedBy in what is sent. sharedVisibility (section 6.9): useCarriers and useParts are the ids an app signed in as me reads. loggedBy (section 6.9): expectUserId is the person named, or null. Keep this file identical in vicu and vicu-android.",
   "baseDefinition": {
     "id": "r1",
     "name": "Vitamin D",
@@ -61,6 +61,102 @@
       "local": { "prunedBefore": "", "occurrences": [ { "date": "2020-01-01", "status": "COMPLETED", "modifiedAt": "2020-01-01T08:00:00.000Z", "modifiedBy": "a" } ] },
       "remote": { "prunedBefore": "", "occurrences": [] },
       "expect": { "prunedBefore": "", "occurrences": { "2020-01-01": "COMPLETED" } }
+    },
+    {
+      "name": "a placeholder loses to a person's record it was written after",
+      "local": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "NOT_LOGGED", "modifiedAt": "1970-01-01T00:00:00.000Z", "modifiedBy": "phone-b" } ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T21:55:00.000Z", "modifiedBy": "phone-a" } ] },
+      "expect": { "prunedBefore": "", "occurrences": { "2026-10-01": "COMPLETED" } }
+    },
+    {
+      "name": "two placeholders: the larger device id",
+      "local": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "NOT_LOGGED", "modifiedAt": "1970-01-01T00:00:00.000Z", "modifiedBy": "phone-b" } ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "NOT_LOGGED", "modifiedAt": "1970-01-01T00:00:00.000Z", "modifiedBy": "phone-a" } ] },
+      "expect": { "prunedBefore": "", "occurrences": { "2026-10-01": "NOT_LOGGED" } }
+    }
+  ],
+  "writeKeep": [
+    {
+      "name": "a completion of an occurrence already completed keeps the first record",
+      "local": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T09:00:00.000Z", "modifiedBy": "phone", "loggedAt": "2026-10-01T09:00:00.000Z" } ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "maya", "loggedAt": "2026-10-01T08:00:00.000Z" } ] },
+      "expect": { "2026-10-01": "maya" }
+    },
+    {
+      "name": "a different status replaces it",
+      "local": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "SKIPPED", "modifiedAt": "2026-10-01T09:00:00.000Z", "modifiedBy": "phone" } ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "maya", "loggedAt": "2026-10-01T08:00:00.000Z" } ] },
+      "expect": { "2026-10-01": "phone" }
+    },
+    {
+      "name": "a different note replaces it",
+      "local": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T09:00:00.000Z", "modifiedBy": "phone", "loggedAt": "2026-10-01T08:00:00.000Z", "note": "with food" } ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "maya", "loggedAt": "2026-10-01T08:00:00.000Z" } ] },
+      "expect": { "2026-10-01": "phone" }
+    },
+    {
+      "name": "the server's newer record stays by the merge",
+      "local": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "phone", "loggedAt": "2026-10-01T08:00:00.000Z" } ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "SKIPPED", "modifiedAt": "2026-10-01T09:00:00.000Z", "modifiedBy": "maya" } ] },
+      "expect": { "2026-10-01": "maya" }
+    },
+    {
+      "name": "a record only this device has is sent, the others kept",
+      "local": { "prunedBefore": "", "occurrences": [
+        { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "maya", "loggedAt": "2026-10-01T08:00:00.000Z" },
+        { "date": "2026-10-02", "status": "COMPLETED", "modifiedAt": "2026-10-02T08:00:00.000Z", "modifiedBy": "phone", "loggedAt": "2026-10-02T08:00:00.000Z" }
+      ] },
+      "remote": { "prunedBefore": "", "occurrences": [ { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "maya", "loggedAt": "2026-10-01T08:00:00.000Z" } ] },
+      "expect": { "2026-10-01": "maya", "2026-10-02": "phone" }
+    }
+  ],
+  "sharedVisibility": [
+    {
+      "name": "own routines, routines shared by others, and every archive part of both, a part a member wrote before sharing stopped (14) too",
+      "me": 1,
+      "carriers": [
+        { "id": 3, "createdBy": 1, "routineId": "own" },
+        { "id": 4, "createdBy": 2, "routineId": "theirs-shared", "shared": true },
+        { "id": 5, "createdBy": 2, "routineId": "theirs-private" },
+        { "id": 6, "createdBy": 1, "routineId": "own-shared", "shared": true },
+        { "id": 7, "createdBy": 3, "routineId": "other-private", "shared": false }
+      ],
+      "parts": [
+        { "id": 10, "createdBy": 2, "routineId": "theirs-shared" },
+        { "id": 11, "createdBy": 2, "routineId": "theirs-private" },
+        { "id": 12, "createdBy": 1, "routineId": "own" },
+        { "id": 13, "createdBy": 2, "routineId": "own-shared" },
+        { "id": 14, "createdBy": 3, "routineId": "own" },
+        { "id": 15, "createdBy": 1, "routineId": "theirs-shared" },
+        { "id": 16, "createdBy": 1, "routineId": "gone" }
+      ],
+      "useCarriers": [3, 4, 6],
+      "useParts": [10, 12, 13, 14, 15]
+    },
+    {
+      "name": "only someone else's private routine",
+      "me": 2,
+      "carriers": [ { "id": 3, "createdBy": 1, "routineId": "own" } ],
+      "parts": [ { "id": 12, "createdBy": 1, "routineId": "own" } ],
+      "useCarriers": [],
+      "useParts": []
+    }
+  ],
+  "loggedBy": [
+    {
+      "name": "logged on the device that wrote the record",
+      "record": { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "phone-a", "loggedBy": { "userId": 2, "deviceId": "phone-a" } },
+      "expectUserId": 2
+    },
+    {
+      "name": "logged again by a version without loggedBy",
+      "record": { "date": "2026-10-01", "status": "SKIPPED", "modifiedAt": "2026-10-01T09:00:00.000Z", "modifiedBy": "desktop-b", "loggedBy": { "userId": 2, "deviceId": "phone-a" } },
+      "expectUserId": null
+    },
+    {
+      "name": "no loggedBy",
+      "record": { "date": "2026-10-01", "status": "COMPLETED", "modifiedAt": "2026-10-01T08:00:00.000Z", "modifiedBy": "phone-a" },
+      "expectUserId": null
     }
   ],
   "definitionMerge": [
