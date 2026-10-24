@@ -2,6 +2,7 @@
 // file adds the renderer-only pieces: device identity, view models and display helpers.
 import { toLocalDate } from '../../shared/due-dates'
 import {
+  isSharedRoutine,
   routineOccurrenceKey,
   scheduledDateOn,
   type OccurrenceStatus,
@@ -31,6 +32,8 @@ export interface RoutineOccurrence<TTask = { id: number; description: string }> 
   status: OccurrenceStatus
   loggedAt: string
   note: string
+  /** The stored record, when there is one (who logged it, section 6.9). */
+  record?: RoutineOccurrenceRecord
 }
 
 /** The device's local calendar date (a thin name kept for the views). */
@@ -62,6 +65,7 @@ export function occurrencesForDate<TTask>(
       status,
       loggedAt: record?.loggedAt ?? '',
       note: record?.note ?? '',
+      record,
     }
   })
 }
@@ -96,20 +100,28 @@ export function deviceId(): string {
   return id
 }
 
+/**
+ * A person's change to an occurrence. On a shared routine it says who (`loggedBy`, section 6.9, with
+ * this device as `modifiedBy`); a private routine's record has no `loggedBy`.
+ */
 export function statusRecord(
   payload: RoutinePayload,
   date: string,
   slot: RoutineSlot,
   status: OccurrenceStatus,
   note = '',
+  userId: number | null = null,
 ): RoutineOccurrenceRecord {
   const now = formatInstant()
   const id = deviceId()
   const key = routineOccurrenceKey(payload.definition.id, date, slot.id)
   // A record logged before keeps the fields this app does not know (contract 10.8).
-  const previous = payload.occurrences[key]
+  const { loggedBy: _previousLoggedBy, ...previous } = payload.occurrences[key] ?? ({} as Partial<RoutineOccurrenceRecord>)
+  void _previousLoggedBy
+  const loggedBy = isSharedRoutine(payload) && userId !== null && userId > 0 ? { loggedBy: { userId, deviceId: id } } : {}
   return {
     ...previous,
+    ...loggedBy,
     key,
     routineId: payload.definition.id,
     slotId: slot.id,

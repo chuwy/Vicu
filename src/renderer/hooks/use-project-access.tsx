@@ -116,6 +116,11 @@ export function useCollabMe(): PersonRef | null {
   return useContext(CollabContext).me
 }
 
+/** The access of every active project, by id (sharing a routine looks across all of them, section 6.9). */
+export function useProjectAccessMap(): ReadonlyMap<number, ProjectAccess> {
+  return useContext(CollabContext).byProject
+}
+
 /** Ids of the projects that are shared, for the sidebar. */
 export function useSharedProjectIds(): ReadonlySet<number> {
   const { byProject } = useContext(CollabContext)

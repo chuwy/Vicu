@@ -6,6 +6,9 @@ import { cn } from '@/lib/cn'
 import { ListSectionHeader } from '@/components/task-list/ListSectionHeader'
 import { formatMinutesOfDay } from '@/lib/date-utils'
 import { useDateFormat } from '@/hooks/use-date-format'
+import { useCollabMe, useProjectAccess } from '@/hooks/use-project-access'
+import { loggedByText } from '@/lib/routine-sharing'
+import { useRoutineSharing } from './RoutineSharing'
 
 function RoutineCheck({
   occurrence,
@@ -20,6 +23,12 @@ function RoutineCheck({
   const completed = occurrence.status === 'COMPLETED'
   const skipped = occurrence.status === 'SKIPPED'
   const definition = occurrence.carrier.payload.definition
+  // A routine someone shared: who finished it, and whether this account may tick it (section 6.9).
+  const sharing = useRoutineSharing(occurrence.carrier)
+  const me = useCollabMe()
+  const members = useProjectAccess(occurrence.carrier.task.project_id).members
+  const doneBy = sharing.shared ? loggedByText(occurrence.status, occurrence.record, me?.id, members) : ''
+  const locked = disabled || !sharing.canWrite
 
   return (
     <div className={cn(
@@ -28,7 +37,7 @@ function RoutineCheck({
     )}>
       <button
         type="button"
-        disabled={disabled}
+        disabled={locked}
         onClick={() => onStatus(completed ? 'PENDING' : 'COMPLETED')}
         aria-label={completed ? `Undo ${definition.name}` : `Complete ${definition.name}`}
         className={cn(
@@ -54,20 +63,21 @@ function RoutineCheck({
           </span>
           {occurrence.slot.reminderEnabled && <Bell className="h-3 w-3" />}
           {occurrence.status === 'NOT_LOGGED' && <span>Not logged</span>}
-          {skipped && <span>Skipped</span>}
+          {skipped && !doneBy && <span>Skipped</span>}
+          {doneBy && <span>{doneBy}</span>}
         </div>
       </div>
 
-      <button
+      {sharing.canWrite && <button
         type="button"
-        disabled={disabled}
+        disabled={locked}
         onClick={() => onStatus(skipped ? 'PENDING' : 'SKIPPED')}
         className="flex h-7 items-center gap-1 rounded-control px-2 text-meta text-[var(--text-secondary)] opacity-0 transition hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] group-hover:opacity-100 focus:opacity-100"
         aria-label={skipped ? `Undo skip for ${definition.name}` : `Skip ${definition.name}`}
       >
         {skipped ? <Undo2 className="h-3.5 w-3.5" /> : <SkipForward className="h-3.5 w-3.5" />}
         {skipped ? 'Undo' : 'Skip'}
-      </button>
+      </button>}
     </div>
   )
 }

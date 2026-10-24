@@ -22,6 +22,9 @@ import {
   shouldMoveLocalPref,
   syncedPrefValues,
   taskIdOfLocationReminderKey,
+  routineIdOfKey,
+  ROUTINE_HIDDEN_KEY_PREFIX,
+  ROUTINE_REMINDERS_KEY_PREFIX,
   validateSyncedPrefs,
   type SyncedPrefsDocument,
   type SyncedPrefsSnapshot,
@@ -230,6 +233,9 @@ export function isWritablePref(key: unknown, value: unknown): key is string {
     const reminder = readLocationReminderPref(value)
     return reminder !== null && canonicalJson(reminder) === canonicalJson(value)
   }
+  // A shared routine's reminders turned off, or the routine hidden, on this account (section 6.9).
+  if (routineIdOfKey(key, ROUTINE_REMINDERS_KEY_PREFIX) !== null) return value === null || value === 'off'
+  if (routineIdOfKey(key, ROUTINE_HIDDEN_KEY_PREFIX) !== null) return value === null || value === true
   return false
 }
 

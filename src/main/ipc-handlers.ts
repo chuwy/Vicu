@@ -11,6 +11,7 @@ import {
   fetchTasks,
   createTask,
   updateTask,
+  patchTaskJson,
   deleteTask,
   fetchTaskById,
   createTaskRelation,
@@ -173,6 +174,16 @@ function quickActionDeps(): QuickActionDeps {
   }
 }
 
+const JSON_PATCH_OPS: ReadonlySet<string> = new Set(['test', 'replace', 'add', 'remove'])
+
+/** A JSON Patch the renderer may send: a short list of `test`/`replace`/`add`/`remove` on top-level fields. */
+function isJsonPatch(value: unknown): value is Array<{ op: string; path: string; value?: unknown }> {
+  return Array.isArray(value) && value.length > 0 && value.length <= 32 && value.every((op) =>
+    !!op && typeof op === 'object' && !Array.isArray(op) &&
+    JSON_PATCH_OPS.has((op as { op?: unknown }).op as string) &&
+    typeof (op as { path?: unknown }).path === 'string' && /^\/[a-z_]+$/.test((op as { path: string }).path))
+}
+
 /** Every change to an existing task goes through the write gate (see offline/task-writes.ts). */
 function taskWriteDeps() {
   return { queue: getOfflineQueue(), requestReplay }
@@ -291,6 +302,29 @@ export function registerIpcHandlers(): void {
       // projects after a move, which the response does not tell: everything is asked again).
       if ('project_id' in patch) invalidateProjectCounts()
       else if ('done' in patch) invalidateProjectCounts(projectIdOf(outcome.result.data))
+    }
+    return taskWriteReply(outcome)
+  })
+
+  // A JSON Patch of a routine carrier or archive part (cross-app semantics 6.8): a test of the
+  // description the renderer read, then the new values. It needs the server's answer (a 422 means
+  // another device wrote the task since, and the renderer reads, merges and sends again), so it is
+  // never queued and is refused while changes for the task wait in the queue.
+  handleTrusted('patch-task-json', async (event, id: unknown, operations: unknown) => {
+    if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0 || !isJsonPatch(operations)) {
+      return { success: false as const, error: 'Invalid task patch' }
+    }
+    const deps = taskWriteDeps()
+    const outcome = await writeTask(deps, {
+      taskId: id,
+      send: () => patchTaskJson(id, operations),
+      enqueue: () => Promise.reject(new Error('A routine write is never queued')),
+    })
+    if (outcome.kind === 'sent') {
+      notifyViewerSync()
+      notifyMainWindow(event.sender.id)
+      // A routine that moved between projects changes what both projects' counts subtract.
+      invalidateProjectCounts(operations.some((op) => op.path === '/project_id') ? undefined : projectIdOf(outcome.result.data))
     }
     return taskWriteReply(outcome)
   })

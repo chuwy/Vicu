@@ -336,6 +336,9 @@ archive and changes the merge.
 - Definition: last-write-wins by `definition.updatedAt` (parsed), ties by `updatedBy`.
 - Timestamps are written as UTC ISO-8601 with exactly three fraction digits
   (`2026-10-06T08:00:00.000Z`).
+- A **placeholder** is a `NOT_LOGGED` record an app writes on its own for a missed day (section
+  6.7), not because a person logged it. Its `modifiedAt` is `1970-01-01T00:00:00.000Z`, so any
+  record a person wrote wins the merge, also one a device saw only after it wrote the placeholder.
 
 ### 6.4 Archive parts
 
@@ -395,7 +398,7 @@ them with these values:
 Neither app shows `kind`, `healthSubtype`, `amount`, `unit`, `label` or `period`, and none of
 them changes what is shown. (The mobile app still writes explicit `NOT_LOGGED` records for the
 missed days of a `HEALTH` calendar routine, which older versions expect; it changes nothing on
-screen.) Status of an occurrence on a past date:
+screen. Those records are placeholders, section 6.3.) Status of an occurrence on a past date:
 
 - `calendar` schedule: an occurrence without a record (or still `PENDING`) on a date before
   today is shown as **Not logged**.
@@ -403,6 +406,109 @@ screen.) Status of an occurrence on a past date:
   or skipped, and is shown on today when its due date has passed (section 6.5). It is never
   marked Not logged.
 - Routines have no overdue state.
+
+### 6.8 Writing a carrier
+
+- A write reads the server's copy of the main carrier, merges the change into it (6.3) and sends
+  the result as a JSON Patch: `PATCH tasks/{id}` with `Content-Type: application/json-patch+json`.
+  The first operation is `{"op": "test", "path": "/description", "value": <the description it
+  read>}`, followed by `replace` operations for `title`, `description` and the fields of section
+  10.2 (`done`, `due_date`, `repeat_after`, `repeat_mode`, `reminders`). When the test fails,
+  Vikunja applies none of it and answers 422: the carrier changed since it was read, so the app
+  reads it again, merges and sends again. A 304 means the server already holds the result.
+  (`If-Match` cannot do this: Vikunja 2.4 ignores it on `PATCH`. A JSON Patch body may exceed the
+  1 MiB that a merge patch is limited to, which the test operation needs for the largest
+  carriers.)
+- **Read back.** Vikunja 2.4 checks the test and stores the result in two steps, so two writes
+  that arrive at the same moment can both pass the test, and the one stored last removes what the
+  other wrote; on an SQLite server one of them fails with a 500 ("database is locked") instead. So
+  a write that went through waits half a second, reads the carrier again and merges what it sent
+  into it: when that changes the server's copy, something it sent was lost, and it sends the merge
+  (a further write, tested as above). A 5xx answer is treated like a 422, after a short wait. At
+  most four writes in all, then the app reports the write as failed.
+- **Lost changes.** When a refresh brings a carrier the app has a copy of (the one it last wrote
+  or read), and the server's copy lacks records of that copy that this device wrote (`modifiedBy`
+  is its device id, `modifiedAt` within the last 7 days) or holds older ones, or lacks a definition
+  change this device made in that time, the app writes those again (a carrier write as above, its
+  local side only those records and that definition). Records of other devices and older ones are
+  left to the server, so an old copy never brings back what another device archived.
+- An archive part (6.4) that already exists is written the same way, with `description` only, and
+  read back the same way: the write is done when the part holds every record it sent, or a newer
+  one.
+- **Same state, first record kept.** Where the merged result would replace the server's record of
+  an occurrence with one of the same `status` and `note`, the write sends the server's record
+  instead: the occurrence was already in that state (a screen or notification that was out of
+  date), and the record of whoever logged it first stays. The merge itself (6.3) is unchanged.
+- A carrier this version cannot read is never written (section 10.7).
+
+### 6.9 Shared routines
+
+A routine can be shared with the people of a project the user already shares (section 9.1).
+Apps never create or share a project for it.
+
+- **Flag.** `definition.shared: true` marks a shared routine; missing or `false` means private.
+  Only the routine's **owner**, the user who created its main carrier (`created_by`), changes it.
+- **Where it lives.** The main carrier and its archive parts are in the project the routine is
+  shared through. Everyone who can see that project sees the routine: its direct shares, the
+  members of a team it is shared with and the people a parent project is shared with. A flagged
+  routine whose project has no other members (section 9.1) behaves as private: no shared mark,
+  no names.
+- **Who reads it.** Section 10.3 has one exception: a main carrier another user created is read,
+  merged and written when its definition has `shared: true`. An archive part counts when its
+  `routineId` belongs to a routine the app reads, whoever created it: a part a member wrote while
+  the routine was shared stays part of its history after the owner stops sharing it (routine ids
+  are random, so no other routine's part has that id). Other users' private routines, archive
+  parts of routines the app does not read, and every other kind of hidden task of another user
+  stay ignored.
+- **Sharing** (the owner, online only): first move the archive parts into the project (a merge
+  patch with `project_id`), then one carrier write (6.8) that also has
+  `{"op": "replace", "path": "/project_id", "value": <project id>}` and sets the flag. **Stopping**:
+  one carrier write that clears the flag and moves the carrier to the owner's Inbox, then move
+  the archive parts there. Moving a shared routine to another project is sharing it again.
+- **Which people.** The people a routine can be shared with are the members (9.1) of the
+  **eligible** projects: shared, not archived, and the user's permission there 1 or 2. A person
+  whose permission (9.1) is 0 in every eligible project is listed but cannot be picked ("Can view
+  only"). When the person picked is in one eligible project the routine goes there; when they
+  are in several, the user picks the project, and the one the routine is already in comes first.
+- **Who can do what.**
+
+| | Owner | Member with permission 1 or 2 | Member with permission 0 |
+|---|---|---|---|
+| See it, its status and its history | yes | yes | yes |
+| Complete, skip or undo an occurrence, whoever logged it | yes | yes | no |
+| Edit name, times, schedule, icon and colour | yes | yes | no |
+| Reminders | yes | yes, unless turned off for themselves | none |
+| Hide it for themselves | no | yes | yes |
+| Stop sharing, move, archive, delete | yes | no | no |
+
+- **Who logged it.** A person's change to an occurrence of a shared routine writes
+  `"loggedBy": {"userId": <their user id>, "deviceId": <the record's modifiedBy>}` on the record.
+  Apps name the person only when `loggedBy.deviceId` equals the record's `modifiedBy`, because a
+  version that does not know `loggedBy` keeps the old one when it logs the slot again; otherwise
+  they name nobody. Placeholders (6.3) and private routines have no `loggedBy`.
+- **Per person.** Turning the reminders of a shared routine off, and hiding it, are the account's
+  own synced preferences (`routine_reminders.<routineId>`, `routine_hidden.<routineId>`, section
+  11.3), never part of the routine. A hidden routine leaves that person's lists, widgets and
+  reminders, and the routine settings list it so it can be shown again.
+- **Texts.** The control is "Share with", with "Only you" first and each eligible person by display
+  name (9.3). Under it: "Visible to you and Maya" (9.3, everyone in the project), and "Kept in
+  {project}", or a "Keep in" choice listing the eligible projects, each with its "Visible to" line
+  and "Yours" on the user's own projects. A member sees "Shared by Maya" instead of the control.
+  The explanation next to the label: "A shared routine is kept in a project you share with that
+  person, so everyone in that project can see it and tick it off. Only people you already share a
+  project with are listed; to share with someone else, share a project with them first, in Vicu or
+  in Vikunja. Deleting that project deletes the routine and its history for everyone, and if you
+  lose access to the project, you lose the routine." A shared routine's card says "Shared with
+  Maya" ("Shared with Maya and Sam", "Shared with Maya, Sam and Lee"; the owner's view) or "Shared
+  by Maya" (a member's view). A finished occurrence of a shared routine says "Done by Maya",
+  "Skipped by Maya", "Done by you" or "Skipped by you". Deleting a project that holds shared
+  routines adds "It also holds the shared routine "Feed the cat". Deleting the project deletes the
+  routine and its history for everyone." ("the shared routines "A" and "B"" for more), and that
+  question is asked even when the app's delete confirmations are turned off; archiving it adds
+  "Shared routines in it can't be ticked off until it is restored."
+- **Vectors.** The `routine-archive-v1.json` blocks `writeKeep` (the same-state rule of 6.8),
+  `sharedVisibility` (which carriers and archive parts an app reads) and `loggedBy` (when a name is
+  shown); the placeholder rule is in `merge`.
 
 ---
 
@@ -756,6 +862,8 @@ parts (section 6) and the preferences carrier (section 11). These rules hold for
   created over an API token belongs to the token's user). An app reads, merges, writes and deletes
   only its signed-in user's hidden tasks. Other users' hidden tasks stay hidden and are otherwise
   ignored, so a shared project never mixes two people's data.
+- One exception: a routine its owner shared (section 6.9) is read, merged and written by the
+  people of its project, and the archive parts they wrote for it stay with the routine.
 - Until the app knows its user id (`GET user`), it does not discover carriers.
 
 ### 10.4 Placement and discovery
@@ -870,6 +978,8 @@ A key is added here, in both repos, in the release that starts writing it.
 | `task_order.project.<id>` | a task order key, or `null` | follows the parent project, then `task_order` (section 12.3) |
 | `place.<placeId>` | a saved place's name, `{"name": "Home"}`, or `null` (deleted); section 11.7 | none |
 | `location_reminder.<taskId>` | a task's location reminder, `{"place", "trigger", "radius_m"}`, or `null`; section 11.7 | none |
+| `routine_reminders.<routineId>` | `"off"`: no reminders of that shared routine on this account; or `null`. Any other value acts as the default and is kept; section 6.9 | on: the routine's own reminder settings |
+| `routine_hidden.<routineId>` | `true`: that shared routine is hidden on this account; or `null`. Any other value acts as the default and is kept; section 6.9 | shown |
 
 ### 11.4 The Inbox
 

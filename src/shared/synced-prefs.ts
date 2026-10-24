@@ -241,6 +241,47 @@ export function locationReminderLabel(trigger: LocationTrigger, placeName: strin
   return trigger === 'arrive' ? `Arrive: ${placeName}` : `Leave: ${placeName}`
 }
 
+// Shared routines, per person (section 6.9): this account's reminders of a routine someone shared,
+// and whether it is hidden here. Never part of the routine itself.
+
+export const ROUTINE_REMINDERS_KEY_PREFIX = 'routine_reminders.'
+export const ROUTINE_HIDDEN_KEY_PREFIX = 'routine_hidden.'
+
+const ROUTINE_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+export function routineRemindersKey(routineId: string): string {
+  return `${ROUTINE_REMINDERS_KEY_PREFIX}${routineId}`
+}
+
+export function routineHiddenKey(routineId: string): string {
+  return `${ROUTINE_HIDDEN_KEY_PREFIX}${routineId}`
+}
+
+/** The routine id of a `routine_reminders.<id>` or `routine_hidden.<id>` key, or null. */
+export function routineIdOfKey(key: string, prefix: typeof ROUTINE_REMINDERS_KEY_PREFIX | typeof ROUTINE_HIDDEN_KEY_PREFIX): string | null {
+  if (!key.startsWith(prefix)) return null
+  const id = key.slice(prefix.length)
+  return ROUTINE_ID.test(id) ? id : null
+}
+
+/** False when this account turned the reminders of that shared routine off (`"off"`); any other value is the default, on. */
+export function routineRemindersOn(values: Readonly<Record<string, unknown>>, routineId: string): boolean {
+  return values[routineRemindersKey(routineId)] !== 'off'
+}
+
+/** True when this account hid that shared routine (`true`); any other value is the default, shown. */
+export function routineHidden(values: Readonly<Record<string, unknown>>, routineId: string): boolean {
+  return values[routineHiddenKey(routineId)] === true
+}
+
+/** The routines this account hid, by id. */
+export function hiddenRoutineIds(values: Readonly<Record<string, unknown>>): string[] {
+  return Object.entries(values).flatMap(([key, value]) => {
+    const id = routineIdOfKey(key, ROUTINE_HIDDEN_KEY_PREFIX)
+    return id && value === true ? [id] : []
+  })
+}
+
 /**
  * The value an app uses for `key`, given the entries' values (absent, `null`, an unknown value or a
  * wrong type read as the default). A per-project order reads as null when it has no entry, which
@@ -254,6 +295,8 @@ export function readSyncedPref(values: Readonly<Record<string, unknown>>, key: s
   if (placeIdOfKey(key) !== null) return readPlacePref(value)
   if (taskIdOfLocationReminderKey(key) !== null) return readLocationReminderPref(value)
   if (key.startsWith(PLACE_KEY_PREFIX) || key.startsWith(LOCATION_REMINDER_KEY_PREFIX)) return null
+  if (routineIdOfKey(key, ROUTINE_REMINDERS_KEY_PREFIX) !== null) return value === 'off' ? 'off' : null
+  if (routineIdOfKey(key, ROUTINE_HIDDEN_KEY_PREFIX) !== null) return value === true
   return undefined
 }
 

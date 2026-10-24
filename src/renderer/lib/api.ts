@@ -25,6 +25,7 @@ import type {
   TaskCommentPage,
 } from './vikunja-types'
 import type { TaskPatch } from './merge-patches'
+import type { JsonPatchOperation } from '../../shared/routines'
 import type { SyncedPrefsSnapshot } from '../../shared/synced-prefs'
 import { withCollabSignals } from './collab-signals'
 import { announceAccountChanged } from './account-events'
@@ -89,6 +90,10 @@ export const api = {
 
   fetchTaskById: (id: number) =>
     window.api.fetchTaskById(id) as Promise<ApiResult<Task>>,
+
+  /** A JSON Patch of a routine carrier or archive part; a 422 (`statusCode`) means it changed since it was read. */
+  patchTaskJson: (id: number, operations: ReadonlyArray<JsonPatchOperation>) =>
+    window.api.patchTaskJson(id, operations as unknown as ReadonlyArray<Record<string, unknown>>) as Promise<ApiResult<Task> & { statusCode?: number }>,
 
   createTaskRelation: (taskId: number, otherTaskId: number, relationKind: string) =>
     window.api.createTaskRelation(taskId, otherTaskId, relationKind) as Promise<ApiResult<unknown>>,

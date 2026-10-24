@@ -55,6 +55,42 @@ export function useMemberPermissions(projectId: number, enabled: boolean): (user
   }, [projectId, nodes, chain, stamp])
 }
 
+/**
+ * Each member's permission on several projects at once (the "Share with" list of a routine,
+ * section 6.9): reads the shares of those projects and their parents while `enabled`. Unknown
+ * answers null, which counts as read and write.
+ */
+export function useMembersPermissions(projectIds: readonly number[], enabled: boolean): (projectId: number, userId: number) => number | null {
+  const { data: projects } = useProjects()
+  const nodes = useMemo<ProjectNode[]>(
+    () => (projects?.all ?? []).map((p) => ({ id: p.id, parent: p.parent_project_id || 0, owner: p.owner?.id ?? 0 })),
+    [projects],
+  )
+  const idsKey = projectIds.join(',')
+  const chainIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const id of projectIds) for (const node of projectChain(id, nodes)) ids.add(node.id)
+    return [...ids]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `idsKey` stands for `projectIds`
+  }, [idsKey, nodes])
+  const results = useQueries({ queries: chainIds.map((id) => ({ ...projectSharesQuery(id), enabled })) })
+  const stamp = results.map((r) => r.dataUpdatedAt).join(',')
+  return useMemo(() => {
+    const graph: ShareGraph = {
+      projects: nodes,
+      shares: Object.fromEntries(chainIds.map((id, i) => [id, results[i]?.data?.users.map((u) => ({ user: u.id, permission: u.permission }))])),
+      teams: Object.fromEntries(
+        chainIds.map((id, i) => [
+          id,
+          results[i]?.data?.teams.map((t) => ({ permission: t.permission, members: (t.members ?? []).map((m) => m.id) })),
+        ]),
+      ),
+    }
+    return (projectId: number, userId: number) => memberPermission(projectId, userId, graph)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `stamp` stands for `results`
+  }, [nodes, chainIds, stamp])
+}
+
 /** Look a person up by exact username (`GET users?q=`). */
 export async function findUserByUsername(username: string): Promise<PersonRef | null> {
   const query = username.trim().replace(/^@/, '')

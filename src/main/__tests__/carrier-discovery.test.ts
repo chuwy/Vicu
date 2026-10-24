@@ -15,6 +15,7 @@ import {
   type CarrierIdStore,
   type CarrierTask,
 } from '../carrier-discovery'
+import { encodeRoutineEnvelope, type RoutinePayload } from '../../shared/routines'
 
 const SERVER = 'https://tasks.example.com'
 /** The signed-in user; every carrier below is theirs unless it says otherwise. */
@@ -205,6 +206,36 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
     const asTheOther = await t.loader.load(CUSTOM_LIST_CARRIER_SPEC, SERVER, 2)
     expect(asTheOther).toMatchObject({ success: true })
     expect((asTheOther as { data: CarrierTask[] }).data.map((task) => task.id)).toEqual([40])
+  })
+
+  it("reads another user's routine when it is shared, and drops it once it is not (section 6.9)", async () => {
+    const payload = (id: string, shared?: boolean): RoutinePayload => ({
+      version: 1,
+      definition: {
+        id, name: id, kind: 'HEALTH', healthSubtype: null, amount: '', unit: '', iconName: '', color: '',
+        schedule: { type: 'calendar', weekdays: [], weekInterval: 1, anchorDate: '2026-01-01' },
+        slots: [{ id: 's1', label: '08:00', period: 'MORNING', reminderMinutes: 480, reminderEnabled: true, followUpMinutes: 0 }],
+        activeFrom: '2026-01-01', archived: false, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', updatedBy: 'x',
+        ...(shared === undefined ? {} : { shared }),
+      },
+      occurrences: {},
+      prunedBefore: '',
+    })
+    const carrier = (id: number, routine: RoutinePayload, owner: number): CarrierTask =>
+      ({ id, title: routine.definition.name, done: true, description: encodeRoutineEnvelope(routine), created_by: { id: owner } })
+    const t = setup([
+      carrier(50, payload('own'), ME),
+      carrier(51, payload('theirs-shared', true), 2),
+      carrier(52, payload('theirs-private'), 2),
+      carrier(53, payload('theirs-unshared', false), 2),
+    ])
+    expect(await t.ids()).toEqual([50, 51])
+    // Maya stops sharing: the remembered id no longer counts.
+    t.server.tasks.set(51, carrier(51, payload('theirs-shared', false), 2))
+    expect(await t.ids()).toEqual([50])
+    // Archive parts stay the user's own: the counts only subtract those.
+    expect(ROUTINE_CARRIER_SPEC.isSharedByOthers).toBeTypeOf('function')
+    expect(CUSTOM_LIST_CARRIER_SPEC.isSharedByOthers).toBeUndefined()
   })
 
   it('finds a reopened carrier it does not remember with the search', async () => {
