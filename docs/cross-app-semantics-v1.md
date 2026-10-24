@@ -765,6 +765,11 @@ parts (section 6) and the preferences carrier (section 11). These rules hold for
   `GET tasks?q=<kind search>` (no `done` filter) at most once a minute and whenever no id is
   known, and list all done tasks when a remembered id answers 404 or 403 and once a day. A task
   found is a carrier when its description has that kind's marker and the user created it.
+- A search the server answers with an error other than 401 finds nothing new: what the last
+  listing of all done tasks found stands until the next one. (Vikunja on a ParadeDB `pg_search`
+  extension older than its library answers every search with 500 while plain listings work.) A
+  read that needs every carrier or archive part at once lists all done tasks instead. A search
+  that gets no answer, or a 401, is still a failure.
 - Vikunja 2.4 leaves tasks of archived projects out of every list and search (a remembered id is
   still fetched) and refuses writes there with 412. A carrier in an archived project is
   therefore read only, and a device that does not remember it creates a new one.

@@ -51,11 +51,17 @@ const plainDone = (id: number): CarrierTask => ({ id, title: `Done ${id}`, done:
 function fakeServer(initial: CarrierTask[]) {
   const tasks = new Map<number, CarrierTask>(initial.map((task) => [task.id, task]))
   const calls = { list: [] as Array<Record<string, unknown>>, byId: [] as number[] }
-  const failing = { list: null as null | string, byId: null as null | { id: number; statusCode?: number; error: string } }
+  const failing = {
+    list: null as null | string,
+    byId: null as null | { id: number; statusCode?: number; error: string },
+    /** The answer to every `q` search, the way a server whose search is broken answers it. */
+    search: null as null | { statusCode?: number; error: string },
+  }
 
   const fetchTasks = async (params: Record<string, unknown>): Promise<ApiResult<unknown[]>> => {
     calls.list.push(params)
     if (failing.list) return { success: false, error: failing.list }
+    if (failing.search && typeof params.q === 'string') return { success: false, ...failing.search }
     let result = [...tasks.values()]
     if (params.filter === 'done = true') result = result.filter((task) => task.done)
     if (typeof params.q === 'string') {
@@ -339,6 +345,46 @@ describe('carrier discovery (D-NOTIF-3, D-RT-2)', () => {
     t.server.failing.list = 'Timed out'
     t.advance(DISCOVERY_INTERVAL_MS + 1)
     expect(await t.ids()).toEqual([10])
+  })
+
+  /** What Vikunja answers every search with when its ParadeDB extension is older than the library. */
+  const brokenSearch = { statusCode: 500, error: 'unexpected error occurred' }
+
+  it('goes by the scan of the last day when the server answers the search with an error and no carrier exists', async () => {
+    const t = setup([plainDone(1)])
+    expect(await t.ids()).toEqual([])
+    t.server.failing.search = brokenSearch
+    t.reset()
+    t.advance(DISCOVERY_INTERVAL_MS + 1)
+
+    expect(await t.ids()).toEqual([])
+    expect(t.server.calls.list.every((params) => typeof params.q === 'string')).toBe(true) // no extra scan
+
+    t.server.tasks.set(20, routineCarrier(20))
+    t.advance(FULL_SCAN_INTERVAL_MS)
+    expect(await t.ids()).toEqual([20]) // the daily scan finds what the search cannot
+  })
+
+  it('goes by the remembered carriers when the server answers the search for a replaced one with an error', async () => {
+    const t = setup([routineCarrier(10)])
+    await t.ids()
+    t.server.tasks.set(10, plainDone(10))
+    t.server.failing.search = brokenSearch
+    t.advance(1_000)
+
+    const result = await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME)
+    expect(result).toEqual({ success: true, data: [] })
+  })
+
+  it('still reports a search that needs sign-in, and one that got no answer', async () => {
+    const t = setup([plainDone(1)])
+    await t.ids()
+    t.advance(1_000)
+    t.server.failing.search = { statusCode: 401, error: 'Session expired' }
+    expect(await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME)).toMatchObject({ success: false, statusCode: 401 })
+
+    t.server.failing.search = { error: 'Network error' }
+    expect(await t.loader.load(ROUTINE_CARRIER_SPEC, SERVER, ME)).toMatchObject({ success: false, error: 'Network error' })
   })
 
   it('searches on every load while no carrier exists (cheap) but scans only once a day', async () => {

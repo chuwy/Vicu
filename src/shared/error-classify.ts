@@ -39,6 +39,17 @@ export function isAuthError(error: string): boolean {
   )
 }
 
+/**
+ * Whether the server answered a `q` search with this failure while the session still works: the
+ * server's search is broken, not the connection or the sign-in. A ParadeDB `pg_search` extension
+ * older than the library Postgres loads answers every search with a 500 ("function
+ * paradedb.ctid_is_valid(tid) does not exist") while listings without `q` keep working, so the
+ * carrier and archive reads list without `q` instead of failing (cross-app semantics 10.4).
+ */
+export function isBrokenSearch(failure: { statusCode?: number }): boolean {
+  return failure.statusCode !== undefined && failure.statusCode !== 401
+}
+
 /** What a failed API call looks like to the classifiers: the message and, when the server answered, the status. */
 export interface FailureLike {
   error: string

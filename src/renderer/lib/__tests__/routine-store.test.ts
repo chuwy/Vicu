@@ -395,6 +395,23 @@ describe('reading the archive', () => {
     expect(server.log).toEqual(['fetchTasks:q', 'fetchTasks:all'])
   })
 
+  it('scans once instead when the server answers the search with an error', async () => {
+    const server = new FakeServer()
+    server.addCarrier(payloadOf(['2026-10-01'], { prunedBefore: '2025-09-01' }))
+    const part = server.addPart({ version: 1, routineId: 'r1', part: 1, occurrences: { 'r1:2025-01-15:s1': record('2025-01-15') } }, 50)
+    const original = server.fetchTasks.bind(server)
+    // What Vikunja answers every search with when its ParadeDB extension is older than the library.
+    server.fetchTasks = async (params) => params.q
+      ? (server.log.push('fetchTasks:q'), { success: false, error: 'unexpected error occurred', statusCode: 500 })
+      : original(params)
+
+    expect((await loadArchiveParts(server, ['r1', 'without-parts'])).map((ref) => ref.taskId)).toEqual([part.id])
+    expect(server.log).toEqual(['fetchTasks:q', 'fetchTasks:all'])
+
+    server.fetchTasks = async (params) => params.q ? { success: false, error: 'Network error' } : original(params)
+    await expect(loadArchiveParts(server, ['r1'])).rejects.toThrow('Network error')
+  })
+
   it('exports archived history in the CSV rows from a single search', async () => {
     const server = new FakeServer()
     server.addCarrier(payloadOf(['2026-10-01'], { prunedBefore: '2025-09-01' }))

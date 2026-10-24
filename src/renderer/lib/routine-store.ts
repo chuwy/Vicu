@@ -11,6 +11,7 @@
  * If step 3 fails the carrier is still written, unpruned, so no history is ever lost.
  */
 import { taskPatch } from './merge-patches'
+import { isBrokenSearch } from '../../shared/error-classify'
 import { isOwnTask } from '../../shared/hidden-tasks'
 import {
   NULL_DATE,
@@ -42,7 +43,8 @@ import type { ApiResult, CreateTaskPayload, Task, TaskQueryParams, UpdateTaskPay
 export interface RoutineStoreApi {
   /** The signed-in user's id; archive parts are read, written and deleted only when they are this user's. */
   ownUserId(): Promise<number | null>
-  fetchTasks(params: TaskQueryParams): Promise<ApiResult<Task[]>>
+  /** A failure the server answered carries its `statusCode` (`isBrokenSearch`). */
+  fetchTasks(params: TaskQueryParams): Promise<ApiResult<Task[]> & { statusCode?: number }>
   fetchTaskById(id: number): Promise<ApiResult<Task>>
   createTask(projectId: number, task: CreateTaskPayload): Promise<ApiResult<Task>>
   updateTask(id: number, patch: UpdateTaskPayload): Promise<ApiResult<Task>>
@@ -97,34 +99,39 @@ export async function createRoutineCarrier(
 
 // --- Archive parts -----------------------------------------------------------------------
 
-async function fetchParts(api: RoutineStoreApi, fullScan: boolean): Promise<ArchivePartRef[]> {
+/** The archive parts of a listing, and whether that listing was every done task. */
+async function fetchParts(api: RoutineStoreApi, fullScan: boolean): Promise<{ parts: ArchivePartRef[]; scanned: boolean }> {
   const me = await api.ownUserId()
   // Until the app knows who is signed in it cannot tell its own parts from someone else's in a
   // shared project (cross-app semantics 10.3), and a write must not guess.
   if (!me) throw new Error('Vicu could not confirm the signed-in account; try again when connected')
+  const scan = { filter: 'done = true', per_page: PAGE_SIZE }
   // The search has no done filter: a part someone reopened in the web UI is still a part (10.4).
-  const tasks = unwrap(await api.fetchTasks(
-    fullScan ? { filter: 'done = true', per_page: PAGE_SIZE } : { q: ROUTINE_ARCHIVE_SEARCH, per_page: PAGE_SIZE },
-  ))
-  return tasks.flatMap((task) => {
+  const listing = await api.fetchTasks(fullScan ? scan : { q: ROUTINE_ARCHIVE_SEARCH, per_page: PAGE_SIZE })
+  // The server answered the search with an error: the scan finds the parts without it.
+  const brokenSearch = !fullScan && !listing.success && isBrokenSearch(listing)
+  const tasks = unwrap(brokenSearch ? await api.fetchTasks(scan) : listing)
+  const parts = tasks.flatMap((task) => {
     if (!isOwnTask(task, me)) return []
     const parsed = parseRoutineArchiveEnvelope(task.description)
     return parsed.part ? [{ taskId: task.id, part: parsed.part }] : []
   })
+  return { parts, scanned: fullScan || brokenSearch }
 }
 
 /**
  * Every archive part on the server. The marker search is used first; when a routine that has
  * pruned history (`expectedRoutineIds`) shows no part in it, one full scan of the done tasks
- * double-checks before the caller concludes the archive is empty.
+ * double-checks before the caller concludes the archive is empty. A search the server answers
+ * with an error is replaced by that scan.
  */
 export async function loadArchiveParts(
   api: RoutineStoreApi,
   expectedRoutineIds: string[] = [],
 ): Promise<ArchivePartRef[]> {
-  const parts = await fetchParts(api, false)
-  const missing = expectedRoutineIds.some((id) => !parts.some((ref) => ref.part.routineId === id))
-  return missing ? fetchParts(api, true) : parts
+  const { parts, scanned } = await fetchParts(api, false)
+  const missing = !scanned && expectedRoutineIds.some((id) => !parts.some((ref) => ref.part.routineId === id))
+  return missing ? (await fetchParts(api, true)).parts : parts
 }
 
 async function applyArchiveOp(

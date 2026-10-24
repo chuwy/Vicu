@@ -17,7 +17,8 @@
  *   (`vicu-routine:v1:...`) and not the archive parts (`vicu-routine:archive:v1:...`): the day views
  *   never download history.
  * - A full scan of the done tasks is only a fallback: when a remembered id is gone (404 or 403),
- *   and as a once-a-day safety net for servers whose search does not look into descriptions.
+ *   and as a once-a-day safety net for servers whose search does not look into descriptions or
+ *   answers it with an error (`isBrokenSearch`; such a search finds nothing new in between).
  * - A task is a carrier when its description holds the kind's marker (never by its title) and the
  *   signed-in user created it (`created_by`, section 10.3): another user's carriers in a shared
  *   project are left alone.
@@ -31,6 +32,7 @@ import { MAX_PAGE_SIZE } from './api-v2'
 import { CUSTOM_LIST_CARRIER_SEARCH, hasCustomListMarker } from './custom-list-protocol'
 import { JsonFileStore } from './json-file-store'
 import { mapLimited } from './map-limited'
+import { isBrokenSearch } from '../shared/error-classify'
 import { isOwnTask } from '../shared/hidden-tasks'
 import { PREFS_CARRIER_SEARCH, hasPrefsMarker } from './synced-prefs-protocol'
 import { ROUTINE_ARCHIVE_SEARCH, ROUTINE_CARRIER_SEARCH, hasRoutineArchiveMarker, hasRoutineMarker } from '../shared/routines'
@@ -291,7 +293,13 @@ export function createCarrierLoader(deps: CarrierLoaderDeps): CarrierLoader {
       const listing = fullScanDue
         ? await scanDoneTasks(server)
         : await deps.fetchTasks({ q: spec.search, per_page: MAX_PAGE_SIZE })
-      const listed = listing.success && Array.isArray(listing.data) ? listing.data : null
+      let listed = listing.success && Array.isArray(listing.data) ? listing.data : null
+      if (!listing.success && !fullScanDue && isBrokenSearch(listing)) {
+        // The server answered the search with an error: it finds nothing new, and the scan of the
+        // last day that the remembered ids come from stands in for it.
+        console.warn(`[carriers] search for ${spec.kind} carriers failed; going by the last full scan:`, listing.error)
+        listed = []
+      }
       if (listed) {
         for (const task of carriersIn(spec, listed, ownerId)) found.set(task.id, task)
         lastDiscoveryAt.set(key, now)
