@@ -258,6 +258,13 @@ function dueDateSamples(reference: Date): string[] {
 
 type Candidate = ServerFilterTask & CustomListTask
 
+/**
+ * The sweep below checks 760,320 task and filter pairs per zone (5 days, 384 filters, 396 tasks).
+ * That takes several seconds and far longer on a busy machine, which the default 5 s limit
+ * turned into failures; the work is fixed, so the limit only has to leave room for the machine.
+ */
+const SWEEP_TIMEOUT_MS = 60_000
+
 describe.each(['America/New_York', 'Pacific/Auckland', 'Europe/Berlin'])('server filter is a superset of the evaluator in %s', (zone) => {
   it('never drops a task the evaluator accepts', () => {
     process.env.TZ = zone
@@ -310,5 +317,5 @@ describe.each(['America/New_York', 'Pacific/Auckland', 'Europe/Berlin'])('server
     // Not vacuous: plenty of tasks were accepted, and the server filter also narrows the fetch.
     expect(accepted).toBeGreaterThan(10_000)
     expect(rejectedByServer).toBeGreaterThan(10_000)
-  })
+  }, SWEEP_TIMEOUT_MS)
 })
