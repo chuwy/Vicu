@@ -14,6 +14,8 @@ import { undoPlacement, TOP_LEVEL, type ProjectPlacement } from '@/lib/project-m
 import { announce } from '@/stores/announcer-store'
 import { toast, UNDO_TOAST_MS } from '@/stores/toast-store'
 import type { AppConfig, Project } from '@/lib/vikunja-types'
+import { sharedRoutineNamesIn } from '@/hooks/use-routines'
+import { SHARED_ROUTINE_ARCHIVE_NOTE, projectDeleteQuestion } from '@/lib/routine-sharing'
 
 const MOVE_TOAST_KEY = 'project-move'
 const REVIEW_TOAST_KEY = 'project-review'
@@ -100,7 +102,10 @@ export function useProjectActions() {
 
   const archive = useCallback(
     async (project: Project, returnFocusTo?: HTMLElement | null) => {
-      const ok = await confirmDelete(archiveMessage(project.title), {
+      // A shared routine in it becomes read only while it is archived (section 6.9).
+      const shared = await sharedRoutineNamesIn(qc, project.id)
+      const message = shared.length > 0 ? `${archiveMessage(project.title)} ${SHARED_ROUTINE_ARCHIVE_NOTE}` : archiveMessage(project.title)
+      const ok = await confirmDelete(message, {
         force: true,
         confirmLabel: 'Archive',
         destructive: false,
@@ -108,7 +113,7 @@ export function useProjectActions() {
       })
       if (ok) setArchived({ project, archived: true })
     },
-    [setArchived],
+    [qc, setArchived],
   )
 
   const restore = useCallback(
@@ -120,10 +125,12 @@ export function useProjectActions() {
 
   const remove = useCallback(
     async (project: Project, returnFocusTo?: HTMLElement | null) => {
-      const ok = await confirmDelete(deleteMessage(project.title), { returnFocusTo })
+      // Deleting the project deletes the shared routines in it, for everyone (section 6.9).
+      const question = projectDeleteQuestion(deleteMessage(project.title), await sharedRoutineNamesIn(qc, project.id))
+      const ok = await confirmDelete(question.message, { returnFocusTo, force: question.force })
       if (ok) deleteProject(project.id)
     },
-    [deleteProject],
+    [qc, deleteProject],
   )
 
   /** Make a project the Inbox. Saved as a config patch, shown at once. */

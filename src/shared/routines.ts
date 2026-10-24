@@ -78,6 +78,20 @@ export interface RoutineDefinition {
   createdAt: string
   updatedAt: string
   updatedBy: string
+  /**
+   * Shared through the routine's project (section 6.9). Missing or false: private. Only the owner,
+   * the user who created the main carrier, changes it.
+   */
+  shared?: boolean
+}
+
+/**
+ * Who logged an occurrence of a shared routine (section 6.9). The device is the record's
+ * `modifiedBy` when it was written; a person is named only while the two still match.
+ */
+export interface RoutineLoggedBy {
+  userId: number
+  deviceId: string
 }
 
 export interface RoutineOccurrenceRecord {
@@ -92,6 +106,8 @@ export interface RoutineOccurrenceRecord {
   modifiedAt: string
   modifiedBy: string
   note: string
+  /** Set on a person's change to an occurrence of a shared routine (section 6.9). */
+  loggedBy?: RoutineLoggedBy
 }
 
 export interface RoutinePayload {
@@ -504,6 +520,186 @@ export function mergeRoutinePayload(local: RoutinePayload, remote: RoutinePayloa
     occurrences: dropPrunedOccurrences(mergeOccurrenceMaps(local.occurrences, remote.occurrences), prunedBefore),
     prunedBefore,
   }
+}
+
+// --- Writing a carrier (section 6.8) -----------------------------------------------------
+
+/**
+ * "Same state, first record kept" (section 6.8): where `merged` would replace the server's record of
+ * an occurrence with one of the same status and note, the server's record is kept, so a screen or
+ * notification that was out of date does not take the occurrence over from whoever logged it first.
+ * The merge itself (section 6.3) is unchanged; this runs only on what a write sends.
+ */
+export function keepServerRecordsOfSameState(merged: RoutinePayload, remote: RoutinePayload): RoutinePayload {
+  let occurrences: Record<string, RoutineOccurrenceRecord> | null = null
+  for (const [key, record] of Object.entries(merged.occurrences)) {
+    const server = remote.occurrences[key]
+    if (!server || server === record) continue
+    if (server.modifiedAt === record.modifiedAt && server.modifiedBy === record.modifiedBy) continue
+    if (server.status !== record.status || (server.note ?? '') !== (record.note ?? '')) continue
+    occurrences ??= { ...merged.occurrences }
+    occurrences[key] = server
+  }
+  return occurrences ? { ...merged, occurrences } : merged
+}
+
+/** How many times a carrier write is sent before it is reported as failed (section 6.8). */
+export const ROUTINE_WRITE_ATTEMPTS = 4
+
+/**
+ * How long a write that went through waits before it reads the carrier back (section 6.8): long
+ * enough for a write that passed Vikunja's test at the same moment to have been stored.
+ */
+export const ROUTINE_VERIFY_DELAY_MS = 500
+
+/** The wait before another try after a 5xx (an SQLite server that was busy), times the try. */
+export const ROUTINE_SERVER_ERROR_DELAY_MS = 250
+
+/** How far back a refresh looks for this device's changes the server lost (section 6.8). */
+export const ROUTINE_REASSERT_DAYS = 7
+
+/**
+ * True when the server's copy `remote` holds everything in `wanted`: merging it in (section 6.3,
+ * with "same state, first record kept") changes nothing. A write that went through and still
+ * fails this lost part of what it sent to a write made at the same moment (section 6.8).
+ */
+export function routineWriteHeld(remote: RoutinePayload, wanted: RoutinePayload): boolean {
+  const merged = keepServerRecordsOfSameState(mergeRoutinePayload(wanted, remote), remote)
+  return sortedJson(merged) === sortedJson(mergeRoutinePayload(remote, remote))
+}
+
+/** True when the records `stored` hold every record of `wanted`, or a newer one (section 6.3). */
+export function occurrencesHeld(
+  stored: Record<string, RoutineOccurrenceRecord>,
+  wanted: Record<string, RoutineOccurrenceRecord>,
+): boolean {
+  return Object.entries(wanted).every(([key, record]) => {
+    const kept = stored[key]
+    return kept !== undefined && sortedJson(newerOccurrence(kept, record)) === sortedJson(kept)
+  })
+}
+
+/** JSON with object keys sorted at every level, so two payloads compare by content only. */
+function sortedJson(value: unknown): string {
+  const sort = (entry: unknown): unknown => {
+    if (Array.isArray(entry)) return entry.map(sort)
+    if (!entry || typeof entry !== 'object') return entry
+    const sorted: Record<string, unknown> = {}
+    for (const key of Object.keys(entry as Record<string, unknown>).sort()) {
+      const field = (entry as Record<string, unknown>)[key]
+      if (field !== undefined) sorted[key] = sort(field)
+    }
+    return sorted
+  }
+  return JSON.stringify(sort(value))
+}
+
+/**
+ * This device's changes that the server's copy lost (section 6.8): the records of `local` that
+ * `deviceId` wrote since `since`, and the definition when it wrote that since then, as a payload to
+ * write again, or null when `server` already holds all of it. `local` is the copy the device last
+ * wrote or read; anything else in it is left out, so an old copy never brings back what another
+ * device archived.
+ */
+export function lostOwnRoutineChanges(
+  local: RoutinePayload,
+  server: RoutinePayload,
+  deviceId: string,
+  since: Date,
+): RoutinePayload | null {
+  if (local.definition.id !== server.definition.id) return null
+  const recent = (at: string) => {
+    const time = Date.parse(at)
+    return Number.isFinite(time) && time >= since.getTime()
+  }
+  const own = Object.fromEntries(
+    Object.entries(local.occurrences).filter(([, record]) => record.modifiedBy === deviceId && recent(record.modifiedAt)),
+  )
+  const ownDefinition = local.definition.updatedBy === deviceId && recent(local.definition.updatedAt)
+  if (Object.keys(own).length === 0 && !ownDefinition) return null
+  const probe: RoutinePayload = { ...server, definition: ownDefinition ? local.definition : server.definition, occurrences: own }
+  return routineWriteHeld(server, probe) ? null : probe
+}
+
+/** One operation of a JSON Patch (RFC 6902) as Vikunja takes it on `PATCH tasks/{id}`. */
+export type JsonPatchOperation =
+  | { op: 'test' | 'replace' | 'add'; path: string; value: unknown }
+  | { op: 'remove'; path: string }
+
+const NULL_DUE_DATE = '0001-01-01T00:00:00Z'
+
+/**
+ * The JSON Patch of a carrier write (section 6.8): a test that the description is still the one
+ * read, then the title, the description and the forced fields of section 10.2, and the project when
+ * the routine moves (section 6.9).
+ */
+export function carrierWriteOperations(
+  readDescription: string,
+  title: string,
+  description: string,
+  options: { projectId?: number } = {},
+): JsonPatchOperation[] {
+  const ops: JsonPatchOperation[] = [
+    { op: 'test', path: '/description', value: readDescription },
+    { op: 'replace', path: '/title', value: title },
+    { op: 'replace', path: '/description', value: description },
+    { op: 'replace', path: '/done', value: true },
+    { op: 'replace', path: '/due_date', value: NULL_DUE_DATE },
+    { op: 'replace', path: '/repeat_after', value: 0 },
+    { op: 'replace', path: '/repeat_mode', value: 0 },
+    { op: 'replace', path: '/reminders', value: [] },
+  ]
+  if (options.projectId !== undefined) ops.push({ op: 'replace', path: '/project_id', value: options.projectId })
+  return ops
+}
+
+/** The JSON Patch of an archive part write: the test, then the description only (section 6.8). */
+export function archiveWriteOperations(readDescription: string, description: string): JsonPatchOperation[] {
+  return [
+    { op: 'test', path: '/description', value: readDescription },
+    { op: 'replace', path: '/description', value: description },
+  ]
+}
+
+// --- Shared routines (section 6.9) -------------------------------------------------------
+
+/** True when the routine's owner shared it (`definition.shared`). */
+export function isSharedRoutine(payload: Pick<RoutinePayload, 'definition'>): boolean {
+  return payload.definition.shared === true
+}
+
+/**
+ * Whether an app signed in as `me` reads a main carrier (sections 6.9 and 10.3): its own, or another
+ * user's that is shared. Until the user is known nothing is read.
+ */
+export function routineCarrierReadable(createdBy: number | null, shared: boolean, me: number | null | undefined): boolean {
+  if (typeof me !== 'number' || me <= 0) return false
+  return createdBy === me || shared
+}
+
+/**
+ * Whether an archive part counts (section 6.9): its routine is one the app reads (`routines`, by
+ * id), whoever created the part. A part a member wrote while the routine was shared stays part of
+ * its history when the owner stops sharing it. Until the user is known nothing is read.
+ */
+export function archivePartReadable(
+  routineId: string,
+  me: number | null | undefined,
+  routines: ReadonlyMap<string, { shared: boolean }>,
+): boolean {
+  if (typeof me !== 'number' || me <= 0) return false
+  return routines.has(routineId)
+}
+
+/**
+ * The person who logged a record (section 6.9): `loggedBy.userId` while `loggedBy.deviceId` is the
+ * record's `modifiedBy`, else nobody (a version without `loggedBy` logged it again since).
+ */
+export function loggedByUserId(record: Pick<RoutineOccurrenceRecord, 'modifiedBy' | 'loggedBy'> | undefined): number | null {
+  const loggedBy = record?.loggedBy
+  if (!loggedBy || typeof loggedBy !== 'object') return null
+  if (typeof loggedBy.userId !== 'number' || !Number.isInteger(loggedBy.userId) || loggedBy.userId <= 0) return null
+  return loggedBy.deviceId === record?.modifiedBy ? loggedBy.userId : null
 }
 
 // --- Pruning (section 6.2) ---------------------------------------------------------------

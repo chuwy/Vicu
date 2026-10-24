@@ -2,15 +2,20 @@ import { app, Notification, nativeImage, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { loadConfig, type AppConfig } from './config'
 import { MAX_PAGE_SIZE } from './api-v2'
-import { fetchTaskById, fetchTasks } from './api-client'
+import { fetchProjects, fetchTaskById, fetchTasks } from './api-client'
 import { isHiddenTask } from '../shared/hidden-tasks'
 import { loadRoutineCarriers } from './carrier-service'
+import { ensureKnownUserId } from './known-user'
+import { getSyncedPrefs } from './synced-preferences'
+import { occurrenceStillOpen, routineRemindsHere, type RoutineReminderContext } from './routine-reminder-rules'
+import { createdById } from '../shared/hidden-tasks'
+import { effectivePermission } from '../shared/collaboration'
 import { getAllStandaloneTasks } from './cache'
 import { getOfflineQueue } from './offline/service'
 import { createTaskReminderScheduler } from './task-reminders'
 import { notificationCategory, notificationFilters, overdueDays } from './notification-windows'
 import { addLocalDays, startOfLocalDay, toLocalDate } from '../shared/due-dates'
-import { parseRoutineEnvelope, routineOccurrenceKey, scheduledDateOn, type RoutinePayload } from '../shared/routines'
+import { isSharedRoutine, parseRoutineEnvelope, routineOccurrenceKey, scheduledDateOn, type RoutinePayload } from '../shared/routines'
 import { isRoutinesEnabled } from '../shared/config-types'
 
 const NULL_DATE = '0001-01-01T00:00:00Z'
@@ -94,16 +99,21 @@ export async function refreshRoutineReminders(): Promise<void> {
   const config = loadConfig()
   if (!config?.notifications_enabled || config.standalone_mode || !isRoutinesEnabled(config)) return
 
-  // Carriers are fetched by their remembered ids; the done tasks are not listed (D-NOTIF-3).
+  // Carriers are fetched by their remembered ids; the done tasks are not listed (D-NOTIF-3). They
+  // include the routines other people shared with this account (section 6.9).
   const result = await loadRoutineCarriers()
   if (!result.success) return
   const now = Date.now()
   const today = toLocalDate(new Date())
+  const tasks = result.data as unknown as Array<Record<string, unknown>>
+  const context = await reminderContext(tasks)
 
-  for (const task of result.data as unknown as Array<Record<string, unknown>>) {
+  for (const task of tasks) {
     // Archive parts and malformed carriers have no payload and are skipped here.
     const payload = parseRoutineEnvelope(typeof task.description === 'string' ? task.description : '').payload
     if (!payload || payload.definition.archived) continue
+    if (!routineRemindsHere(task, payload, context)) continue
+    const taskId = typeof task.id === 'number' ? task.id : 0
     for (let offset = 0; offset <= 21; offset += 1) {
       const candidate = addLocalDays(today, offset)
       // The same scheduling rules as the Today view (src/shared/routines.ts); reminders only
@@ -116,13 +126,34 @@ export async function refreshRoutineReminders(): Promise<void> {
         const status = payload.occurrences[key]?.status ?? 'PENDING'
         if (status !== 'PENDING') continue
         const base = localDateAtMinutes(candidate, slot.reminderMinutes).getTime()
-        scheduleRoutineTimer(`${key}:primary`, base, now, payload, false, config)
+        scheduleRoutineTimer(`${key}:primary`, base, now, payload, false, config, { taskId, occurrenceKey: key })
         if (slot.followUpMinutes > 0) {
-          scheduleRoutineTimer(`${key}:followup`, base + slot.followUpMinutes * 60_000, now, payload, true, config)
+          scheduleRoutineTimer(`${key}:followup`, base + slot.followUpMinutes * 60_000, now, payload, true, config, { taskId, occurrenceKey: key })
         }
       }
     }
   }
+}
+
+/**
+ * Who you are, the synced preferences, and (only when someone else's shared routine is among the
+ * carriers) your permission per project, for `routineRemindsHere`. A project list that cannot be read
+ * leaves the permission unknown, which counts as write.
+ */
+async function reminderContext(tasks: Array<Record<string, unknown>>): Promise<RoutineReminderContext> {
+  const me = (await ensureKnownUserId()) ?? null
+  const prefs = getSyncedPrefs().values
+  const othersShared = tasks.some((task) => createdById(task) !== me)
+  const permissions = new Map<number, number>()
+  if (othersShared) {
+    const projects = await fetchProjects(true)
+    if (projects.success) {
+      for (const project of projects.data as Array<{ id?: unknown; max_permission?: number; is_archived?: boolean }>) {
+        if (typeof project.id === 'number') permissions.set(project.id, effectivePermission(project.max_permission, project.is_archived))
+      }
+    }
+  }
+  return { me, prefs, permissionOf: (projectId) => permissions.get(projectId) ?? null }
 }
 
 /**
@@ -191,6 +222,12 @@ function clearRoutineReminderTimers(): void {
   routineReminderTimers.clear()
 }
 
+/** The carrier and occurrence a routine timer is for, so it can look again when it fires. */
+interface RoutineTimerTarget {
+  taskId: number
+  occurrenceKey: string
+}
+
 function scheduleRoutineTimer(
   key: string,
   triggerAt: number,
@@ -198,21 +235,49 @@ function scheduleRoutineTimer(
   payload: RoutinePayload,
   followUp: boolean,
   config: AppConfig,
+  target: RoutineTimerTarget,
 ): void {
   const delay = triggerAt - now
   if (delay <= 0 || delay > 2_147_483_647 || routineReminderTimers.has(key)) return
   const timerId = setTimeout(() => {
-    fireRoutineReminder(payload, followUp, config)
     routineReminderTimers.delete(key)
+    void fireRoutineReminder(payload, followUp, config, target)
   }, delay)
   routineReminderTimers.set(key, timerId)
 }
 
-function fireRoutineReminder(
+/**
+ * The routine as the server has it now when it is shared (section 6.9): another person may have
+ * ticked it off, or this account hid it or turned its reminders off, since the timers were planned.
+ * Null when it could not be read (offline): the reminder shows as planned.
+ */
+async function freshSharedRoutine(target: RoutineTimerTarget): Promise<{ task: Record<string, unknown>; payload: RoutinePayload } | null> {
+  if (target.taskId <= 0) return null
+  const result = await fetchTaskById(target.taskId)
+  if (!result.success) return null
+  const task = result.data as Record<string, unknown>
+  const payload = parseRoutineEnvelope(typeof task.description === 'string' ? task.description : '').payload
+  return payload ? { task, payload } : null
+}
+
+async function fireRoutineReminder(
   payload: RoutinePayload,
   followUp: boolean,
   configSnapshot: AppConfig,
-): void {
+  target: RoutineTimerTarget,
+): Promise<void> {
+  if (isSharedRoutine(payload)) {
+    const fresh = await freshSharedRoutine(target)
+    if (fresh) {
+      if (fresh.payload.definition.archived || !occurrenceStillOpen(fresh.payload, target.occurrenceKey)) return
+      const context: RoutineReminderContext = {
+        me: (await ensureKnownUserId()) ?? null,
+        prefs: getSyncedPrefs().values,
+        permissionOf: () => null,
+      }
+      if (!routineRemindsHere(fresh.task, fresh.payload, context)) return
+    }
+  }
   const config = loadConfig() || configSnapshot
   if (!config.notifications_enabled || !isRoutinesEnabled(config)) return
   const definition = payload.definition
