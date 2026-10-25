@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { autoUpdate, computePosition, flip, offset, shift, size, type Placement } from '@floating-ui/dom'
 import { POPOVER_EDGE, POPOVER_GAP, popoverMaxHeight } from './popover-logic'
+import { afterPress } from './pointer-press'
 
 interface FloatingPopoverOptions {
   placement: Placement
@@ -36,7 +37,6 @@ export function useFloatingPopover(
 
     // Hidden until the first position is known, so it never shows at the browser's default spot.
     el.style.visibility = 'hidden'
-    if (!el.matches(':popover-open')) el.showPopover()
 
     // A pointer press on the anchor of an open popover must not count as an outside press: the
     // anchor's own click toggles the popover, and light dismiss would close it first, so the click
@@ -85,10 +85,17 @@ export function useFloatingPopover(
         }
       })
     }
-    const stop = autoUpdate(anchor, el, update)
+    // A context menu on macOS mounts while the right button is still down; shown now, the release
+    // would light-dismiss it at once. It opens on the release instead (`pointer-press.ts`).
+    let stop = () => {}
+    const cancelOpen = afterPress(() => {
+      if (!el.matches(':popover-open')) el.showPopover()
+      stop = autoUpdate(anchor, el, update)
+    })
 
     return () => {
       alive = false
+      cancelOpen()
       stop()
       for (const invoker of invokers) {
         invoker.popoverTargetElement = null
