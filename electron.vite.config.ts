@@ -26,6 +26,9 @@ export default defineConfig({
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     build: {
+      // Scripts loaded by URL (the AudioWorklet of local speech, src/renderer/lib/ai/pcm-worklet.js)
+      // stay files: the page's CSP allows scripts from 'self' only, not data: URLs.
+      assetsInlineLimit: (file: string) => (file.endsWith('.js') ? false : undefined),
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),

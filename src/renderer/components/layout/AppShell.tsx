@@ -50,6 +50,10 @@ import { UpdateBanner } from '@/components/UpdateBanner'
 import { ToastHost } from '@/components/shared/ToastHost'
 import { VoiceHost } from '@/components/voice/VoiceHost'
 import { CommentsPaneHost } from '@/components/comments/CommentsPane'
+import { AskHost } from '@/components/ai/AskPane'
+import { DictationHost } from '@/components/ai/DictationHost'
+import { MakeTasksDialog } from '@/components/ai/MakeTasksDialog'
+import { AiHost } from '@/components/ai/AiHost'
 import { ProjectAccessProvider } from '@/hooks/use-project-access'
 import { APP_CONFIG_QUERY_KEY, useAppConfig } from '@/hooks/use-app-config'
 import { openTaskInApp } from '@/lib/open-task'
@@ -791,12 +795,16 @@ export function AppShell() {
           </ContentArea>
         </div>
         <CommentsPaneHost />
+        <AskHost />
         <BadgeSync />
         <CompletionSoundSync />
         <GlobalConfirm />
         <ProjectActionsHost />
         <ToastHost />
         <VoiceHost />
+        <DictationHost />
+        <MakeTasksDialog />
+        <AiHost />
         <CommandPalette />
       </div>
 

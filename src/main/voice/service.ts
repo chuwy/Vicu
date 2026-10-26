@@ -55,7 +55,7 @@ function helperCommand(extra: string[] = []): HelperCommand | null {
 
 const UNSUPPORTED_REASON = 'Voice input is not available on this system.'
 const MISSING_HELPER_REASON = 'Voice input is not part of this build of Vicu.'
-const MIC_DENIED_REASON = 'Vicu may not use the microphone. Allow it in System Settings, Privacy & Security, Microphone.'
+export const MIC_DENIED_REASON = 'Vicu may not use the microphone. Allow it in System Settings, Privacy & Security, Microphone.'
 
 let availabilityCache: { at: number; value: VoiceAvailability } | null = null
 const AVAILABILITY_TTL_MS = 60_000
@@ -103,8 +103,8 @@ export async function getVoiceAvailability(force = false): Promise<VoiceAvailabi
   return value
 }
 
-/** On macOS, ask for the microphone the first time; null when it may be used. */
-async function ensureMicrophone(): Promise<VoiceErrorCode | null> {
+/** On macOS, ask for the microphone the first time; null when it may be used. Also used by local speech. */
+export async function ensureMicrophone(): Promise<VoiceErrorCode | null> {
   if (!isMac) return null
   const status = systemPreferences.getMediaAccessStatus('microphone')
   if (status === 'granted') return null

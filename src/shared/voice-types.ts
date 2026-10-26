@@ -1,8 +1,11 @@
 // What the main window and the main process exchange about voice input (docs/voice-input.md).
 // The engine behind it differs per platform; these shapes do not.
 
-/** Which recognizer runs: Apple's speech recognizer, the Windows desktop recognizer, or none. */
-export type VoiceEngineName = 'macos-speech' | 'windows-speech' | 'none'
+/**
+ * Which recognizer runs: Apple's speech recognizer, the Windows desktop recognizer, the assistant's
+ * local speech (a downloaded Whisper or Parakeet model, docs/ai-assistant-v1.md section 3), or none.
+ */
+export type VoiceEngineName = 'macos-speech' | 'windows-speech' | 'local-speech' | 'none'
 
 export type VoiceErrorCode =
   /** No engine on this system (Linux), or the helper is missing from this build. */

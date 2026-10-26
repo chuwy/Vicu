@@ -221,7 +221,7 @@ jobs:
       # runners would build both arches AND publish them, leading to duplicate
       # asset-upload conflicts on the second runner.
       - name: Build and publish (${{ matrix.arch }})
-        run: npm run build && npx electron-builder --linux AppImage:${{ matrix.arch }} --publish always
+        run: npm run build && npm run speech:lib && npx electron-builder --linux AppImage:${{ matrix.arch }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

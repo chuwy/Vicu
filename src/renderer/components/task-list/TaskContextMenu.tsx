@@ -16,6 +16,7 @@ import {
   Sunrise,
   Tag,
   Trash2,
+  Sparkles,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { isNullDate } from '@/lib/date-utils'
@@ -35,6 +36,8 @@ import { PRIORITY_OPTIONS } from './PriorityPickerPopover'
 import { PriorityMark } from '../shared/PriorityMark'
 import { Menu, MenuHeading, MenuItem, MenuRadioItem, MenuSeparator } from '../overlay/Menu'
 import { shortcutHint } from '@/lib/shortcut-hint'
+import { useAiReady } from '@/hooks/use-ai'
+import { breakIntoSteps } from '@/lib/ai/break-into-steps'
 
 interface TaskContextMenuProps {
   /** The right-clicked row — guarantees at least one target if the cache can't resolve the selection. */
@@ -106,6 +109,9 @@ export function TaskContextMenu({ fallbackTask, x, y, reorderable = false, onClo
   )
 
   const hint = (spec: string) => shortcutHint(spec, window.api.platform === 'darwin')
+  // The assistant's "Break into steps" (docs/ai-assistant-v1.md section 4): one saved task.
+  const ai = useAiReady()
+  const canBreak = ai.dictation && !multi && fallbackTask.id > 0 && !fallbackTask.done
 
   return (
     <Menu
@@ -253,6 +259,12 @@ export function TaskContextMenu({ fallbackTask, x, y, reorderable = false, onClo
       {canMoveDown && (
         <MenuItem icon={<ArrowDown />} shortcut={hint('Alt+Shift+↓')} onSelect={() => stepTask(fallbackTask.id, 'down')}>
           Move down
+        </MenuItem>
+      )}
+
+      {canBreak && (
+        <MenuItem icon={<Sparkles />} onSelect={() => breakIntoSteps(fallbackTask, projectData?.all.find((p) => p.id === fallbackTask.project_id)?.title)}>
+          Break into steps
         </MenuItem>
       )}
 

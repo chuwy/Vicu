@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { createRecognizer, type VoiceRecognizer } from '@/lib/voice/recognizer'
+import type { VoiceRecognizer } from '@/lib/voice/recognizer'
+import { appRecognizer } from '@/lib/ai/recognizers'
 import { toast } from '@/stores/toast-store'
 import { announce } from '@/stores/announcer-store'
 import type { VoiceErrorCode } from '../../shared/voice-types'
@@ -43,7 +44,8 @@ interface VoiceState {
 
 let recognizer: VoiceRecognizer | null = null
 function getRecognizer(): VoiceRecognizer {
-  recognizer ??= createRecognizer(window.api.voice, () => navigator.language)
+  // Local speech when a speech model is downloaded, else the platform recogniser (lib/ai/recognizers.ts).
+  recognizer ??= appRecognizer()
   return recognizer
 }
 

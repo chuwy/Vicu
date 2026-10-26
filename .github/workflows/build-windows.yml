@@ -44,6 +44,10 @@ jobs:
       - name: Build app
         run: npm run build
 
+      # The local speech engine (docs/ai-assistant-v1.md section 3), built with CMake into resources/speech/.
+      - name: Build the speech library
+        run: npm run speech:lib
+
       - name: Package Windows (x64)
         timeout-minutes: 30
         run: npx electron-builder --win nsis:x64 --publish never

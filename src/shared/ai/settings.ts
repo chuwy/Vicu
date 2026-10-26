@@ -1,0 +1,149 @@
+/**
+ * The assistant's device settings (docs/ai-assistant-v1.md section 7.2): their default, their
+ * normalizer, and the rules read from them (which address is local, whether consent is needed,
+ * which features can run). Used by the main process, which owns them, and by Settings.
+ */
+import { providerPreset, speechModel, type ProviderId } from './contract'
+import type { AiSettings, ModelCapabilities } from './types'
+
+export const DEFAULT_AI_SETTINGS: AiSettings = {
+  provider: null,
+  address: '',
+  models: { dictation: '', ask: '' },
+  features: { dictation: false, ask: false, talk: false },
+  tested: {},
+  consented: [],
+  refusedFields: {},
+  speech: { modelId: null, language: 'auto' },
+  speakAnswers: true,
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const str = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
+
+/** A settings object from disk or a window, with every field of the right type. */
+export function normaliseAiSettings(raw: unknown): AiSettings {
+  const o = isObject(raw) ? raw : {}
+  const provider = typeof o.provider === 'string' && providerPreset(o.provider) ? o.provider as ProviderId : null
+  const models = isObject(o.models) ? o.models : {}
+  const features = isObject(o.features) ? o.features : {}
+  const speech = isObject(o.speech) ? o.speech : {}
+  const tested: Record<string, ModelCapabilities> = {}
+  if (isObject(o.tested)) {
+    for (const [key, value] of Object.entries(o.tested)) {
+      if (!isObject(value)) continue
+      const structured = value.structured === 'json_schema' || value.structured === 'prompt' ? value.structured : null
+      tested[key] = { structured, tools: value.tools === true }
+    }
+  }
+  const refusedFields: Record<string, string[]> = {}
+  if (isObject(o.refusedFields)) {
+    for (const [key, value] of Object.entries(o.refusedFields)) {
+      if (Array.isArray(value)) refusedFields[key] = value.filter((v): v is string => typeof v === 'string')
+    }
+  }
+  const modelId = typeof speech.modelId === 'string' && speechModel(speech.modelId) ? speech.modelId : null
+  const language = typeof speech.language === 'string' && /^(auto|[a-z]{2})$/.test(speech.language) ? speech.language : 'auto'
+  return {
+    provider,
+    address: str(o.address).trim().replace(/\/+$/, ''),
+    models: { dictation: str(models.dictation).trim(), ask: str(models.ask).trim() },
+    features: { dictation: features.dictation === true, ask: features.ask === true, talk: features.talk === true },
+    tested,
+    consented: Array.isArray(o.consented) ? o.consented.filter((v): v is string => typeof v === 'string') : [],
+    refusedFields,
+    speech: { modelId, language },
+    speakAnswers: o.speakAnswers !== false,
+  }
+}
+
+/** The address requests go to: the preset's own unless the user may type one. */
+export function effectiveAddress(settings: Pick<AiSettings, 'provider' | 'address'>): string {
+  const preset = settings.provider ? providerPreset(settings.provider) : undefined
+  if (!preset) return ''
+  return (preset.addressEditable ? settings.address || preset.address || '' : preset.address ?? '').replace(/\/+$/, '')
+}
+
+export function modelKey(settings: Pick<AiSettings, 'provider' | 'address'>, model: string): string {
+  return `${settings.provider}|${effectiveAddress(settings)}|${model}`
+}
+
+export function consentKey(settings: Pick<AiSettings, 'provider' | 'address'>): string {
+  return `${settings.provider}|${effectiveAddress(settings)}`
+}
+
+/** The lower-case host of an address, or null. */
+export function hostOf(address: string): string | null {
+  const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(address.trim())
+  if (!match) return null
+  const authority = match[1].slice(match[1].lastIndexOf('@') + 1)
+  if (authority.startsWith('[')) {
+    const end = authority.indexOf(']')
+    return end > 0 ? authority.slice(1, end).toLowerCase() : null
+  }
+  const host = authority.split(':')[0].toLowerCase()
+  return host || null
+}
+
+const LOCAL_SUFFIXES = ['.localhost', '.local', '.lan', '.home', '.internal', '.home.arpa', '.test']
+
+/** A host on this computer or the local network: localhost, a private range, a `.local` name, a name without a dot. */
+export function isLocalHost(host: string): boolean {
+  if (host === 'localhost' || LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix))) return true
+  if (host.includes(':')) {
+    if (host === '::1') return true
+    const first = host.split(':')[0]
+    return first.length === 4 && (first.startsWith('fc') || first.startsWith('fd') || (first.startsWith('fe') && '89ab'.includes(first[2])))
+  }
+  const parts = host.split('.')
+  if (parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)) {
+    const [a, b] = parts.map(Number)
+    return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127)
+  }
+  return !host.includes('.')
+}
+
+export function isLocalAddress(address: string): boolean {
+  const host = hostOf(address)
+  return host !== null && isLocalHost(host)
+}
+
+/** Plain http to a host outside the local network: the same warning the setup screen gives for a Vikunja server. */
+export function isCleartextToRemoteHost(address: string): boolean {
+  return /^http:\/\//i.test(address.trim()) && !isLocalAddress(address)
+}
+
+/**
+ * Consent is asked before a cloud provider is first used (7.1); a local server (Ollama or Open
+ * WebUI at a local address) skips it.
+ */
+export function needsConsent(settings: Pick<AiSettings, 'provider' | 'address'>): boolean {
+  const preset = settings.provider ? providerPreset(settings.provider) : undefined
+  if (!preset) return false
+  const local = (preset.id === 'ollama' || preset.id === 'openwebui' || preset.id === 'other') && isLocalAddress(effectiveAddress(settings))
+  return !local
+}
+
+export function hasConsent(settings: Pick<AiSettings, 'provider' | 'address' | 'consented'>): boolean {
+  return !needsConsent(settings) || settings.consented.includes(consentKey(settings))
+}
+
+/** The provider is chosen with an address and, where the preset needs one, a key. */
+export function isSetUp(settings: AiSettings, hasKey: boolean): boolean {
+  const preset = settings.provider ? providerPreset(settings.provider) : undefined
+  if (!preset || !effectiveAddress(settings)) return false
+  return preset.key === 'optional' || hasKey
+}
+
+export function capabilitiesOf(settings: AiSettings, model: string): ModelCapabilities | undefined {
+  return model ? settings.tested[modelKey(settings, model)] : undefined
+}
+
+/** Which features can run now: set up, consent given, switched on, and the model passed Test connection. */
+export function readyFeatures(settings: AiSettings, hasKey: boolean): { dictation: boolean; ask: boolean; talk: boolean } {
+  const base = isSetUp(settings, hasKey) && hasConsent(settings)
+  const dictation = base && settings.features.dictation && !!capabilitiesOf(settings, settings.models.dictation)?.structured
+  const askCaps = capabilitiesOf(settings, settings.models.ask)
+  const ask = base && settings.features.ask && !!askCaps?.structured && askCaps.tools
+  return { dictation, ask, talk: ask && settings.features.talk }
+}

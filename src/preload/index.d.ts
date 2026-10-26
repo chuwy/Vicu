@@ -43,6 +43,20 @@ import type {
   TaskWriteOptions,
 } from '../shared/offline-queue-types'
 import type { VoiceAvailability, VoiceEventEnvelope, VoiceStartResult } from '../shared/voice-types'
+import type {
+  AiResult,
+  AiSettingsPatch,
+  AiSettingsView,
+  AskTurnEnvelope,
+  AskTurnRequest,
+  ConnectionTestResult,
+  KeptTranscript,
+  SpeechDownloadProgress,
+  SpeechEventEnvelope,
+  SpeechStartOptions,
+  SpeechStatus,
+  StoredConversation,
+} from '../shared/ai/types'
 
 type OidcLoginResult =
   | { success: true }
@@ -210,6 +224,40 @@ export interface ElectronAPI {
     stop(sessionId?: number): Promise<boolean>
     cancel(sessionId?: number): Promise<boolean>
     onEvent(cb: (envelope: VoiceEventEnvelope) => void): () => void
+  }
+
+  /** The AI assistant (docs/ai-assistant-v1.md). The key can be saved or removed, never read. */
+  ai: {
+    getSettings(): Promise<AiSettingsView>
+    saveSettings(patch: AiSettingsPatch): Promise<AiSettingsView>
+    setKey(key: string | null): Promise<AiSettingsView>
+    listModels(): Promise<AiResult<string[]>>
+    testConnection(model: string): Promise<AiResult<ConnectionTestResult>>
+    /** One dictation request; the answer is checked against the schema (and repaired once) in main. */
+    dictate(input: { requestId: string; edit: boolean; user: string }): Promise<AiResult<unknown>>
+    cancelDictation(requestId: string): Promise<boolean>
+    askStart(request: AskTurnRequest): Promise<boolean>
+    askCancel(turnId: string): Promise<boolean>
+    onAskEvent(cb: (envelope: AskTurnEnvelope) => void): () => void
+    getConversations(): Promise<StoredConversation[]>
+    saveConversations(list: StoredConversation[]): Promise<StoredConversation[]>
+    getKeptTranscripts(): Promise<KeptTranscript[]>
+    keepTranscript(entry: KeptTranscript): Promise<boolean>
+    dropKeptTranscript(id: string): Promise<boolean>
+  }
+
+  /** Local speech (docs/ai-assistant-v1.md section 3). */
+  speech: {
+    status(): Promise<SpeechStatus>
+    download(id: string): Promise<{ success: boolean; error?: string }>
+    cancelDownload(id: string): Promise<boolean>
+    deleteModel(id: string): Promise<boolean>
+    start(options: SpeechStartOptions): Promise<{ success: true; sessionId: number } | { success: false; error: string; code: 'unavailable' | 'mic-denied' | 'busy' }>
+    audio(sessionId: number, samples: Float32Array): Promise<boolean>
+    stop(sessionId: number): Promise<boolean>
+    cancel(sessionId: number): Promise<boolean>
+    onEvent(cb: (envelope: SpeechEventEnvelope) => void): () => void
+    onDownloadProgress(cb: (progress: SpeechDownloadProgress) => void): () => void
   }
 
   // Standalone mode

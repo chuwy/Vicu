@@ -4,7 +4,7 @@ import type { Label, Project, Task } from './vikunja-types'
 // What the command palette lists and how a query picks from it. Pure: the component turns an
 // action into a navigation or a change.
 
-export type PaletteCommand = 'new-task' | 'voice' | 'refresh' | 'toggle-theme' | 'settings'
+export type PaletteCommand = 'new-task' | 'voice' | 'ask' | 'make-tasks' | 'refresh' | 'toggle-theme' | 'settings'
 
 export type PaletteAction =
   | { type: 'command'; command: PaletteCommand }
@@ -40,6 +40,9 @@ export function buildPaletteItems({ smartLists, projects, labels }: PaletteSourc
     { id: 'cmd:new-task', kind: 'Action', title: 'New task', keywords: 'add create', action: { type: 'command', command: 'new-task' } },
     // Voice input that needs no holding (docs/voice-input.md): listening until Enter, Esc cancels.
     { id: 'cmd:voice', kind: 'Action', title: 'Say a task', keywords: 'voice dictate speak speech microphone add', action: { type: 'command', command: 'voice' } },
+    // The AI assistant (docs/ai-assistant-v1.md): Ask, and dictation's "Make tasks from this".
+    { id: 'cmd:ask', kind: 'Action', title: 'Ask Vicu', keywords: 'assistant ai chat question talk', action: { type: 'command', command: 'ask' } },
+    { id: 'cmd:make-tasks', kind: 'Action', title: 'Make tasks from text', keywords: 'assistant ai paste notes email split', action: { type: 'command', command: 'make-tasks' } },
     { id: 'cmd:refresh', kind: 'Action', title: 'Refresh', keywords: 'reload sync update', action: { type: 'command', command: 'refresh' } },
     { id: 'cmd:toggle-theme', kind: 'Action', title: 'Toggle theme', keywords: 'dark light mode', action: { type: 'command', command: 'toggle-theme' } },
     { id: 'cmd:settings', kind: 'Action', title: 'Settings', keywords: 'preferences options', action: { type: 'command', command: 'settings' } },

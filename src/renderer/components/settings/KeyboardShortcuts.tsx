@@ -26,6 +26,11 @@ const shortcuts = [
     { keys: [mod, 'T'], description: 'Set due date to today' },
     { keys: [mod, 'Shift', 'C'], description: 'Show or hide comments (shared projects)' },
   ]},
+  { category: 'Assistant', items: [
+    { keys: [mod, 'J'], description: 'Show or hide Ask' },
+    { keys: ['Enter'], description: 'Send the message' },
+    { keys: [mod, 'Enter'], description: 'Make tasks from the text' },
+  ]},
   { category: 'Comments', items: [
     { keys: [mod, 'Enter'], description: 'Post the comment' },
     { keys: ['@'], description: 'Mention someone' },

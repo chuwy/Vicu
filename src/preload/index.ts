@@ -7,6 +7,7 @@ import type {
   TaskWriteOptions,
 } from '../shared/offline-queue-types'
 import type { VoiceEventEnvelope } from '../shared/voice-types'
+import type { AiSettingsPatch, AskTurnEnvelope, AskTurnRequest, KeptTranscript, SpeechDownloadProgress, SpeechEventEnvelope, SpeechStartOptions } from '../shared/ai/types'
 
 const api = {
   platform: process.platform as 'darwin' | 'win32' | 'linux',
@@ -283,6 +284,52 @@ const api = {
       const handler = (_: unknown, envelope: VoiceEventEnvelope) => cb(envelope)
       ipcRenderer.on('voice:event', handler)
       return () => { ipcRenderer.removeListener('voice:event', handler) }
+    },
+  },
+
+  // The AI assistant (docs/ai-assistant-v1.md). Provider requests run in main, where the key is;
+  // a window can save or remove the key, never read it.
+  ai: {
+    getSettings: () => ipcRenderer.invoke('ai:get-settings'),
+    saveSettings: (patch: AiSettingsPatch) => ipcRenderer.invoke('ai:save-settings', patch),
+    setKey: (key: string | null) => ipcRenderer.invoke('ai:set-key', key),
+    listModels: () => ipcRenderer.invoke('ai:list-models'),
+    testConnection: (model: string) => ipcRenderer.invoke('ai:test-connection', model),
+    dictate: (input: { requestId: string; edit: boolean; user: string }) => ipcRenderer.invoke('ai:dictate', input),
+    cancelDictation: (requestId: string) => ipcRenderer.invoke('ai:cancel-dictation', requestId),
+    askStart: (request: AskTurnRequest) => ipcRenderer.invoke('ai:ask-start', request),
+    askCancel: (turnId: string) => ipcRenderer.invoke('ai:ask-cancel', turnId),
+    onAskEvent: (cb: (envelope: AskTurnEnvelope) => void) => {
+      const handler = (_: unknown, envelope: AskTurnEnvelope) => cb(envelope)
+      ipcRenderer.on('ai:ask-event', handler)
+      return () => { ipcRenderer.removeListener('ai:ask-event', handler) }
+    },
+    getConversations: () => ipcRenderer.invoke('ai:get-conversations'),
+    saveConversations: (list: unknown) => ipcRenderer.invoke('ai:save-conversations', list),
+    getKeptTranscripts: () => ipcRenderer.invoke('ai:get-kept-transcripts'),
+    keepTranscript: (entry: KeptTranscript) => ipcRenderer.invoke('ai:keep-transcript', entry),
+    dropKeptTranscript: (id: string) => ipcRenderer.invoke('ai:drop-kept-transcript', id),
+  },
+
+  // Local speech (docs/ai-assistant-v1.md section 3): one recording at a time, run in main.
+  speech: {
+    status: () => ipcRenderer.invoke('speech:status'),
+    download: (id: string) => ipcRenderer.invoke('speech:download', id),
+    cancelDownload: (id: string) => ipcRenderer.invoke('speech:cancel-download', id),
+    deleteModel: (id: string) => ipcRenderer.invoke('speech:delete-model', id),
+    start: (options: SpeechStartOptions) => ipcRenderer.invoke('speech:start', options),
+    audio: (sessionId: number, samples: Float32Array) => ipcRenderer.invoke('speech:audio', sessionId, samples),
+    stop: (sessionId: number) => ipcRenderer.invoke('speech:stop', sessionId),
+    cancel: (sessionId: number) => ipcRenderer.invoke('speech:cancel', sessionId),
+    onEvent: (cb: (envelope: SpeechEventEnvelope) => void) => {
+      const handler = (_: unknown, envelope: SpeechEventEnvelope) => cb(envelope)
+      ipcRenderer.on('speech:event', handler)
+      return () => { ipcRenderer.removeListener('speech:event', handler) }
+    },
+    onDownloadProgress: (cb: (progress: SpeechDownloadProgress) => void) => {
+      const handler = (_: unknown, progress: SpeechDownloadProgress) => cb(progress)
+      ipcRenderer.on('speech:download-progress', handler)
+      return () => { ipcRenderer.removeListener('speech:download-progress', handler) }
     },
   },
 

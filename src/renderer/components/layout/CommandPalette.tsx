@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Circle, Folder, Mic, Plus, RefreshCw, Settings, SunMoon, Tag } from 'lucide-react'
+import { CheckCircle2, Circle, Folder, Mic, Plus, RefreshCw, Settings, Sparkles, SunMoon, Tag } from 'lucide-react'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { formatAcceleratorForDisplay } from '@/lib/accelerator'
 import { Dialog } from '@/components/overlay/Dialog'
@@ -18,6 +18,8 @@ import { refreshNow } from '@/hooks/use-manual-refresh'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { applyTheme } from '@/lib/theme'
+import { useAskStore } from '@/stores/ask-store'
+import { useAiUiStore } from '@/stores/ai-ui-store'
 import { buildPaletteItems, rankPalette, type PaletteCommand, type PaletteItem, type PaletteKind } from '@/lib/palette'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { useUIStore } from '@/stores/ui-store'
@@ -92,6 +94,10 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       void navigate({ to: '/settings' })
     } else if (command === 'voice') {
       useVoiceStore.getState().begin('command', 'latched')
+    } else if (command === 'ask') {
+      useAskStore.getState().setOpen(true)
+    } else if (command === 'make-tasks') {
+      useAiUiStore.getState().openMakeTasks()
     } else if (command === 'refresh') {
       refreshNow(queryClient)
     } else if (command === 'toggle-theme') {
@@ -156,6 +162,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     if (action.type === 'command' && action.command === 'toggle-theme') return SunMoon
     if (action.type === 'command' && action.command === 'refresh') return RefreshCw
     if (action.type === 'command' && action.command === 'voice') return Mic
+    if (action.type === 'command' && (action.command === 'ask' || action.command === 'make-tasks')) return Sparkles
     return ICONS[kind]
   }
 

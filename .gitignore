@@ -13,3 +13,7 @@ resources/voice/vicu-speech-macos
 .DS_Store
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Built by scripts/build-speech.mjs (npm run speech:lib)
+resources/speech/
+.speech-build/

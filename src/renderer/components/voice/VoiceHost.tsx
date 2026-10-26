@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { Mic } from 'lucide-react'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useAddVoiceTask } from '@/hooks/use-add-voice-task'
@@ -14,6 +14,10 @@ import { cleanTranscript, voiceCardChips, type VoiceTaskContext } from '@/lib/vo
 import { useProjects } from '@/hooks/use-projects'
 import { useNewTaskRequestStore } from '@/stores/new-task-request-store'
 import { useVoiceStore } from '@/stores/voice-store'
+import { useDictationStore } from '@/stores/dictation-store'
+import { useAiReady, useAiWorkspace } from '@/hooks/use-ai'
+import { listInfoOf } from '@/lib/ai/workspace'
+import { toLocalDate } from '@/lib/due-dates'
 import { Button } from '@/components/shared/Button'
 import { TokenChip } from '@/components/task-input/TokenChip'
 
@@ -33,16 +37,38 @@ export function VoiceHost() {
   const addVoiceTask = useAddVoiceTask()
   const navigate = useNavigate()
 
-  // The final words: add them once.
+  // The final words: add them once. With the assistant's dictation on they become draft cards
+  // instead (docs/ai-assistant-v1.md section 4); with cards on screen they are an instruction
+  // about them (4.4). Without it, quick add reads them as one task, as before.
+  const ai = useAiReady()
+  const ws = useAiWorkspace()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const adding = useRef<string | null>(null)
   useEffect(() => {
     if (phase !== 'adding' || finalText === null || adding.current === finalText) return
     adding.current = finalText
+    const dictation = useDictationStore.getState()
+    if (ai.dictation && dictation.phase === 'cards') {
+      dictation.editByVoice(finalText)
+      adding.current = null
+      useVoiceStore.getState().done()
+      return
+    }
+    if (ai.dictation && dictation.phase === 'idle') {
+      dictation.open({
+        transcript: finalText,
+        list: listInfoOf(pathname, ws, useVoiceStore.getState().list, toLocalDate),
+        source: 'voice',
+      })
+      adding.current = null
+      useVoiceStore.getState().done()
+      return
+    }
     void addVoiceTask(finalText, useVoiceStore.getState().list).finally(() => {
       adding.current = null
       useVoiceStore.getState().done()
     })
-  }, [phase, finalText, addVoiceTask])
+  }, [phase, finalText, addVoiceTask, ai.dictation, pathname, ws])
 
   // No speech engine here (Linux): open the composer instead, as the palette's New task does.
   const lastFallback = useRef(fallbackRequest)

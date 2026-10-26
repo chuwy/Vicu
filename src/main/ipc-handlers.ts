@@ -121,6 +121,7 @@ import { getOfflineQueue, knownUserIdFor, rememberKnownUser } from './offline/se
 import { registerOfflineQueueIpc } from './offline/ipc'
 import { registerCollaborationIpc } from './collab-ipc'
 import { registerVoiceIpc } from './voice/service'
+import { forgetAiAccountData, registerAiIpc } from './ai/ipc'
 import { accountChanged, refreshKnownUser, replayPendingActions } from './sync'
 import { claimAccountData, ensureKnownUserId } from './known-user'
 import {
@@ -260,6 +261,7 @@ export function registerIpcHandlers(): void {
   registerOfflineQueueIpc()
   registerCollaborationIpc()
   registerVoiceIpc()
+  registerAiIpc()
 
   // Tasks
   handleTrusted('fetch-tasks', (_event, params: Record<string, unknown>) => {
@@ -634,6 +636,9 @@ export function registerIpcHandlers(): void {
   handleTrusted('auth:logout', async () => {
     await authManager.logout()
     accountChanged()
+    // The assistant's conversations and kept transcripts hold this account's tasks; its device
+    // settings and key stay (docs/ai-assistant-v1.md section 7.2).
+    await forgetAiAccountData()
   })
 
   // --- Quick Entry IPC ---

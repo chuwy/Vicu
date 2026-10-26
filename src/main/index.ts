@@ -20,8 +20,8 @@ import { setupApplicationMenu } from './app-menu'
 import { storeAPIToken, getAPIToken, API_TOKEN_NO_EXPIRY } from './auth/token-store'
 import { clearTaskBadge, reapplyTaskBadge } from './badge'
 import { replayPendingActions } from './sync'
-import { flushOfflineQueue, offlineQueueHasUnsavedChanges } from './offline/service'
-import { flushTaskCache, taskCacheHasUnsavedChanges } from './cache'
+import { flushOfflineQueue } from './offline/service'
+import { flushTaskCache } from './cache'
 import { syncCustomLists } from './custom-list-service'
 import { syncSyncedPrefs } from './synced-preferences'
 import { parseHiddenArg, shouldStartHidden } from './login-item-settings'
@@ -33,6 +33,7 @@ import { cleanAttachmentTempDir } from './attachment-temp'
 import { registerWebSecurity } from './web-security'
 import { APP_ID } from './app-id'
 import { cancelVoiceSession } from './voice/service'
+import { shutdownAi } from './ai/ipc'
 
 let mainWindow: BrowserWindow | null = null
 let quickEntryWindow: BrowserWindow | null = null
@@ -847,12 +848,14 @@ if (!gotLock) {
 
   // The offline queue and task cache are written asynchronously. If a write is still in flight or
   // queued when the user quits, hold the quit until it is on disk, then quit again.
+  // The assistant's speech engine closes its native handles first (ggml's Metal teardown asserts on
+  // an open one) and its files are written.
   let offlineStoresFlushed = false
   app.on('before-quit', (event) => {
     appIsQuitting = true
-    if (offlineStoresFlushed || !(offlineQueueHasUnsavedChanges() || taskCacheHasUnsavedChanges())) return
+    if (offlineStoresFlushed) return
     event.preventDefault()
-    void Promise.all([flushOfflineQueue(), flushTaskCache()]).finally(() => {
+    void Promise.all([flushOfflineQueue(), flushTaskCache(), shutdownAi()]).finally(() => {
       offlineStoresFlushed = true
       app.quit()
     })

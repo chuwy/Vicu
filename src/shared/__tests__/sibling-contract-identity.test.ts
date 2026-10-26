@@ -28,10 +28,17 @@ const PAIRS: Pair[] = [
   same('test-fixtures/routine-archive-v1.json'),
   same('test-fixtures/description-format-v1.json'),
   same('test-fixtures/design-tokens-v1.json'),
+  same('test-fixtures/ai-tools-v1.json'),
   { desktop: 'test-fixtures/custom-list-sync-v1.json', android: 'shared/src/commonTest/resources/custom-list-sync-v1.json' },
   same('docs/cross-app-semantics-v1.md'),
   same('docs/description-format-v1.md'),
   same('docs/design-system-v1.md'),
+  same('docs/ai-assistant-v1.md'),
+  // The local speech engine's C API over whisper.cpp (docs/ai-assistant-v1.md section 3), the same
+  // sources in both apps.
+  same('native/speech/vicu_speech.h'),
+  same('native/speech/vicu_speech.cpp'),
+  same('native/speech/CMakeLists.txt'),
 ]
 
 function normalised(path: string): string {
