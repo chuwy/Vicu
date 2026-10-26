@@ -49,7 +49,7 @@ Voice has two ways in (`docs/voice-input.md`):
   palette. The words become one task through quick add and are added at once, with Undo. The
   model is never used, whether or not smart dictation is on.
 - **Smart dictation**: tap the voice shortcut instead of holding it, or hold + and slide up to the
-  lock, or "Dictate tasks" in the command palette. The microphone stays on until you press Done.
+  sparkle, or "Dictate tasks" in the command palette. The microphone stays on until you press Done.
   Words you said before the lock are kept.
 
 ## Smart dictation
