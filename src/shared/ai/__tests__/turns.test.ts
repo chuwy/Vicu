@@ -15,6 +15,8 @@ describe('turn settings', () => {
   it('come from the fixture', () => {
     expect(SPEECH.turn).toEqual(aiFixture.speech.turn)
     expect(openMicSettings()).toEqual({ endOfTurnMs: aiFixture.speech.turn.end_of_turn_ms, idleMs: aiFixture.speech.turn.idle_s * 1000 })
+    // A brain dump (4.8) listens longer before it turns off.
+    expect(openMicSettings(true)).toEqual({ endOfTurnMs: aiFixture.speech.turn.end_of_turn_ms, idleMs: aiFixture.speech.turn.dump_idle_s * 1000 })
     expect(vadTurnSettings()).toEqual({
       threshold: aiFixture.speech.vad.threshold,
       minSpeechMs: aiFixture.speech.vad.min_speech_ms,
@@ -171,6 +173,20 @@ describe('open microphone with local speech (turns from the voice detector)', ()
     expect(mic.tick(IDLE * 4 - 1)).toEqual([])
     expect(mic.tick(IDLE * 4)).toEqual([{ type: 'off' }])
     expect(mic.phase).toBe('off')
+  })
+
+  it('a brain dump turns off after dump_idle_s instead, also when switched on while listening', () => {
+    const dumpIdle = aiFixture.speech.turn.dump_idle_s * 1000
+    const dumping = new OpenMic({ ...settings, idleMs: dumpIdle })
+    dumping.start(0, { vad: true })
+    expect(dumping.tick(IDLE * 2)).toEqual([])
+    expect(dumping.tick(dumpIdle)).toEqual([{ type: 'off' }])
+
+    const mic = started(0)
+    mic.setIdleMs(dumpIdle)
+    expect(mic.tick(IDLE)).toEqual([])
+    mic.setIdleMs(IDLE)
+    expect(mic.tick(IDLE + 1)).toEqual([{ type: 'off' }])
   })
 
   it('stopping sends the last words, then goes off', () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { Lock, Mic } from 'lucide-react'
+import { Mic, Sparkles } from 'lucide-react'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useAddVoiceTask } from '@/hooks/use-add-voice-task'
 import { useDateFormat } from '@/hooks/use-date-format'
@@ -166,8 +166,8 @@ function VoiceCard({ hotkey, context }: { hotkey?: string; context: VoiceTaskCon
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[55] flex flex-col items-center gap-2 px-4">
       {showLock && (
         <p className="vicu-voice-card flex items-center gap-1.5 rounded-chip border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-1 text-caption text-[var(--text-secondary)] shadow-sm" data-voice-lock="">
-          <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-          Slide up to lock: smart dictation
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          Slide up for smart dictation
         </p>
       )}
       <section

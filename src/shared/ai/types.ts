@@ -88,6 +88,8 @@ export interface AiSettings {
   }
   /** Talk reads answers aloud with the system voice. */
   speakAnswers: boolean
+  /** The smart dictation sheet's Brain dump switch, as last set there (4.8). */
+  brainDump: boolean
 }
 
 /** What a window sees: the settings and whether a key is saved, never the key. */
@@ -162,6 +164,8 @@ export interface KeptTranscript {
   list: { name: string; projectId: number | null; defaultDue: string | null } | null
   /** Break into steps: the parent task. */
   parentTaskId?: number | null
+  /** A brain dump's dump (4.8.6): Retry organizes it again, Edit goes back to it. */
+  brainDump?: boolean
 }
 
 // --- Local speech -------------------------------------------------------------------------

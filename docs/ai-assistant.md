@@ -30,7 +30,8 @@ Under Thinking:
    (needed for Ask). **Test connection** runs it again.
 
 Then, under **Features**, turn on **Smart dictation**, **Ask** and **Talk**. Each says where to
-find it and has **Try it**. Turning one on whose model has not been tested yet tests it first and
+find it and has **Try it**. **Brain dump** is listed there too, with Try it; it has no switch of
+its own there, because it is a switch in the smart dictation sheet (see Brain dump below). Turning one on whose model has not been tested yet tests it first and
 turns it on when it passes. When the model cannot run it, the switch stays off and says why (the
 test's own problem, or that the feature needs a structured answer or a tool call: choose another
 model); turning it on again tests again, for example once a local server is running.
@@ -76,6 +77,30 @@ Nothing is added until you press Add.
 - If a request fails (no connection, the model did not answer), the transcript is kept, also
   across a restart, so you can try again or add it as one plain task.
 
+## Brain dump
+
+For a long ramble, turn on **Brain dump** in the smart dictation sheet (it is offered until
+something has been sent, and the sheet remembers it on this computer; the note under the switch
+says what it does). You can also choose "Brain dump" in the command palette. Then talk, or type,
+for as long as you like: what you say is added to the end of the dump, which you can edit, and
+nothing is sent. The microphone stays on for five minutes without speech, and stops when the dump
+reaches 20,000 characters. Press **Organize** to send the whole dump at once.
+
+The answer is a plan: the tasks grouped under the project they go in, with notes, steps,
+priority, dates and labels, and any **new projects and subprojects** the model suggests where none
+of yours fit (marked New, with where they go, such as "in Home"). A suggested project that you
+already have is used instead of made again. Rename a new project in place, or remove it: its tasks
+and subprojects move to where it would have gone. Fix the cards as in smart dictation; a card's
+project list also offers the new projects. Anything you say or type after the plan waits in a
+field until you press **Update**, which sends it as a change to the plan ("put the shed tasks in
+Home", "add: book the dentist"); what changed is highlighted.
+
+**Add** creates the new projects first and then the tasks. New projects need a connection; if one
+cannot be created, nothing is added, the projects already made are removed again, and the plan
+stays on screen. One message says what was added ("Added 2 projects and 14 tasks") with Undo,
+which removes the tasks and then the projects. If organizing fails, the dump is kept, also across
+a restart: **Retry** sends it again, **Edit** goes back to it.
+
 ## Ask and Talk
 
 Press the **Ask** button (the sparkle) next to Search at the top of the sidebar, Mod+J (Cmd+J on a
@@ -110,8 +135,9 @@ and resumed, and a model can be deleted again.
 
 ## What stays where
 
-- Sent to the provider: for dictation, the words (never audio) with the names of your projects,
-  labels and places and today's date and time; for Ask, your messages and what its tools look up.
+- Sent to the provider: for dictation and brain dump, the words (never audio) with the names of
+  your projects, labels and places and today's date and time; for Ask, your messages and what its
+  tools look up.
 - On this computer only: the last five conversations and any transcript kept after a failed
   request. They are deleted when you sign out, or with Delete conversations in Settings,
   Assistant, Privacy.

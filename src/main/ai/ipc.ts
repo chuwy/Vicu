@@ -1,7 +1,7 @@
 import { handleTrusted } from '../secure-ipc'
 import type { AiSettingsPatch, AskTurnRequest, KeptTranscript } from '../../shared/ai/types'
 import { clearAiAccountData, dropKeptTranscript, flushAiLocalData, getConversations, getKeptTranscripts, keepTranscript, saveConversations } from './local-data'
-import { aiAskTurn, aiDictate, aiListModels, aiTestConnection, cancelAllAskTurns, cancelAskTurn } from './service'
+import { aiAskTurn, aiBrainDump, aiDictate, aiListModels, aiTestConnection, cancelAllAskTurns, cancelAskTurn } from './service'
 import { aiSettingsView, flushAiSettings, patchAiSettings, setProviderKey } from './settings-store'
 import {
   cancelModelDownload,
@@ -34,12 +34,14 @@ export function registerAiIpc(): void {
   })
   handleTrusted('ai:list-models', () => aiListModels())
   handleTrusted('ai:test-connection', (_event, model: unknown) => aiTestConnection(typeof model === 'string' ? model : ''))
-  handleTrusted('ai:dictate', async (_event, input: { requestId?: unknown; edit?: unknown; user?: unknown }) => {
+  // A brain dump (4.8) is a dictation request with its own prompts and schema (`brainDump`).
+  handleTrusted('ai:dictate', async (_event, input: { requestId?: unknown; edit?: unknown; user?: unknown; brainDump?: unknown }) => {
     const id = typeof input?.requestId === 'string' ? input.requestId : ''
     const controller = new AbortController()
     if (id) dictations.set(id, controller)
     try {
-      return await aiDictate({ edit: input?.edit === true, user: typeof input?.user === 'string' ? input.user : '' }, controller.signal)
+      const request = { edit: input?.edit === true, user: typeof input?.user === 'string' ? input.user : '' }
+      return await (input?.brainDump === true ? aiBrainDump(request, controller.signal) : aiDictate(request, controller.signal))
     } finally {
       if (id) dictations.delete(id)
     }

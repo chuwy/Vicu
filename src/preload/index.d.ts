@@ -235,8 +235,11 @@ export interface ElectronAPI {
     setKey(key: string | null): Promise<AiSettingsView>
     listModels(): Promise<AiResult<string[]>>
     testConnection(model: string): Promise<AiResult<ConnectionTestResult>>
-    /** One dictation request; the answer is checked against the schema (and repaired once) in main. */
-    dictate(input: { requestId: string; edit: boolean; user: string }): Promise<AiResult<unknown>>
+    /**
+     * One dictation request; the answer is checked against the schema (and repaired once) in main.
+     * `brainDump`: a brain dump's Organize or Update (4.8) instead.
+     */
+    dictate(input: { requestId: string; edit: boolean; user: string; brainDump?: boolean }): Promise<AiResult<unknown>>
     cancelDictation(requestId: string): Promise<boolean>
     askStart(request: AskTurnRequest): Promise<boolean>
     askCancel(turnId: string): Promise<boolean>

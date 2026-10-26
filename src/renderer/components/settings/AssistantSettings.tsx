@@ -475,13 +475,21 @@ function FeaturesCard({ settings, tests }: { settings: AiSettingsView; tests: Mo
       <div className="space-y-3">
         <FeatureRow
           label="Smart dictation"
-          how="Tap the voice shortcut, or hold + and slide up to the lock, then keep talking: tasks appear as cards while you talk. Also Break into steps (right-click a task) and Make tasks from text (command palette)."
+          how="Tap the voice shortcut, or hold + and slide up to the sparkle, then keep talking: tasks appear as cards while you talk. Also Break into steps (right-click a task) and Make tasks from text (command palette)."
           blocked={dictation.blocked}
           testing={dictation.testing ? dictation.model : null}
           problem={dictation.problem}
           checked={settings.features.dictation && dictation.can}
           onChange={(on) => void (on ? turnOn('dictation', { dictation: true }) : save({ features: { dictation: false } }))}
           onTry={ready.dictation ? () => useDictationStore.getState().startLive() : null}
+        />
+        <FeatureRow
+          label="Brain dump"
+          how="Slide up from a held + or tap the voice shortcut, then turn on Brain dump in the sheet (or choose Brain dump in the command palette). Talk or type as long as you like; Organize sorts it all into projects, subprojects, tasks, subtasks and notes for you to check."
+          blocked={dictation.blocked ?? (!settings.features.dictation || !dictation.can ? 'Turn on Smart dictation first.' : null)}
+          testing={null}
+          problem={null}
+          onTry={ready.dictation ? () => useDictationStore.getState().startLive({ brainDump: true }) : null}
         />
         <FeatureRow
           label="Ask"
@@ -517,8 +525,9 @@ interface FeatureRowProps {
   testing: string | null
   /** Why its model cannot run it, or why the test could not run; turning it on tests again. */
   problem: string | null
-  checked: boolean
-  onChange: (on: boolean) => void
+  /** The feature's switch; a feature without one (Brain dump: a switch in its sheet) leaves both out. */
+  checked?: boolean
+  onChange?: (on: boolean) => void
   /** Opens the feature; null while it cannot run. */
   onTry: (() => void) | null
 }
@@ -537,7 +546,7 @@ function FeatureRow({ label, how, blocked, testing, problem, checked, onChange, 
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {onTry && <Button variant="secondary" aria-label={`Try ${label}`} onClick={onTry}>Try it</Button>}
-        <Switch aria-label={label} checked={checked} disabled={blocked !== null || testing !== null} onCheckedChange={onChange} />
+        {onChange && <Switch aria-label={label} checked={checked === true} disabled={blocked !== null || testing !== null} onCheckedChange={onChange} />}
       </div>
     </div>
   )

@@ -1,11 +1,14 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
+import { checkBrainDumpAnswer, type BrainDumpAnswer } from '../../../../shared/ai/brain-dump'
 import { checkDictationAnswer, type CheckContext, type DictationAnswer } from '../../../../shared/ai/dictation'
 import { readSaid } from '../said-parser'
 
 // docs/ai-assistant-v1.md section 4.3 against `dictation.checks` of test-fixtures/ai-tools-v1.json,
-// with the desktop's real quick-add parser reading `when.said`. The vectors' `said` dates were
+// and section 4.8.3 against `brainDump.checks` (the same context; the list's default due date is
+// given but a brain dump does not use it), with the desktop's real quick-add parser reading
+// `when.said`. The vectors' `said` dates were
 // worked out by hand from semantics 5.1; a vector the parser reads differently is listed in
 // PARSER_DISAGREEMENTS with the reason, and reported as a todo instead of failing.
 
@@ -28,7 +31,11 @@ interface CheckVector {
  */
 const PARSER_DISAGREEMENTS: Record<string, Record<string, string>> = {}
 
-function contextFor(vector: CheckVector): CheckContext {
+interface BrainDumpVector extends Omit<CheckVector, 'answer'> {
+  answer: BrainDumpAnswer
+}
+
+function contextFor(vector: Omit<CheckVector, 'answer'>): CheckContext {
   const context = vector.context ?? fixture.dictation.context
   return {
     reference: vector.reference,
@@ -54,6 +61,23 @@ describe(`dictation checks (fixture vectors, real parser, ${zone})`, () => {
         .toEqual({ ...expected, drafts: keep(expected.drafts), dropped: keep(expected.dropped) })
     })
   }
+
+  for (const vector of fixture.brainDump.checks as BrainDumpVector[]) {
+    it(`brain dump: ${vector.name}`, () => {
+      expect(checkBrainDumpAnswer(vector.answer, contextFor(vector))).toEqual(vector.expect)
+    })
+  }
+
+  it('brain dump drafts have the dictation shape with project_ref after project_id', () => {
+    for (const vector of fixture.brainDump.checks as BrainDumpVector[]) {
+      const result = checkBrainDumpAnswer(vector.answer, contextFor(vector))
+      expect(Object.keys(result)).toEqual(['projects', 'drafts', 'dropped', 'unclear'])
+      for (const draft of result.drafts) {
+        expect(Object.keys(draft)).toEqual(['ref', 'title', 'notes', 'due', 'project_id', 'project_ref', 'labels', 'priority', 'repeat', 'reminder', 'place', 'subtasks', 'guessed'])
+      }
+      for (const project of result.projects) expect(Object.keys(project)).toEqual(['ref', 'title', 'parent_id', 'parent_ref'])
+    }
+  })
 
   it('reads every said phrase of the vectors with the parser as the vectors expect', () => {
     // A per-phrase view of the same vectors, so a disagreement names the words.

@@ -119,8 +119,9 @@ export interface OpenMicSettings {
   idleMs: number
 }
 
-export function openMicSettings(): OpenMicSettings {
-  return { endOfTurnMs: SPEECH.turn.end_of_turn_ms, idleMs: SPEECH.turn.idle_s * 1000 }
+/** The fixture's settings; a brain dump (4.8) turns off after `dump_idle_s` instead of `idle_s`. */
+export function openMicSettings(dump = false): OpenMicSettings {
+  return { endOfTurnMs: SPEECH.turn.end_of_turn_ms, idleMs: (dump ? SPEECH.turn.dump_idle_s : SPEECH.turn.idle_s) * 1000 }
 }
 
 /**
@@ -172,7 +173,7 @@ export interface OpenMicStart {
  * end of the voice; not while a request runs).
  */
 export class OpenMic {
-  private readonly settings: OpenMicSettings
+  private settings: OpenMicSettings
   private phaseNow: OpenMicPhase = 'off'
   private vad = false
   private carried = ''
@@ -294,6 +295,11 @@ export class OpenMic {
 
   setInterruptible(value: boolean): void {
     this.interruptible = value
+  }
+
+  /** How long it listens without speech before it turns off (a brain dump switched on or off, 4.8). */
+  setIdleMs(idleMs: number): void {
+    this.settings = { ...this.settings, idleMs }
   }
 
   /** The device reads an answer aloud (true) or has finished (false). */

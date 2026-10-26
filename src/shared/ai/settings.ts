@@ -16,6 +16,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   refusedFields: {},
   speech: { modelId: null, language: 'auto' },
   speakAnswers: true,
+  brainDump: false,
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -54,6 +55,7 @@ export function normaliseAiSettings(raw: unknown): AiSettings {
     refusedFields,
     speech: { modelId, language },
     speakAnswers: o.speakAnswers !== false,
+    brainDump: o.brainDump === true,
   }
 }
 

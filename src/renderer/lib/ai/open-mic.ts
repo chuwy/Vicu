@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { OpenMic, type OpenMicEffect, type OpenMicStart } from '../../../shared/ai/turns'
+import { OpenMic, openMicSettings, type OpenMicEffect, type OpenMicStart } from '../../../shared/ai/turns'
 import type { VoiceErrorCode } from '../../../shared/voice-types'
 import type { RecognizerHandlers, VoiceRecognizer } from '../voice/recognizer'
 import { toast } from '@/stores/toast-store'
@@ -153,13 +153,16 @@ function turnOff(keepRecognizer = false): void {
   owner?.onOff?.()
 }
 
-/** Turns the microphone on for `owner`, or takes over a running recogniser session. */
-export function startOpenMic(owner: OpenMicOwner, next: OpenMicClient, adopt?: AdoptedSession): void {
+/**
+ * Turns the microphone on for `owner`, or takes over a running recogniser session. `dump`: a brain
+ * dump (4.8), which listens for `speech.turn.dump_idle_s` without speech before it turns off.
+ */
+export function startOpenMic(owner: OpenMicOwner, next: OpenMicClient, adopt?: AdoptedSession, options: { dump?: boolean } = {}): void {
   if (machine) {
     machine.cancel()
     turnOff(adopt !== undefined)
   }
-  machine = new OpenMic()
+  machine = new OpenMic(openMicSettings(options.dump === true))
   client = next
   useOpenMicStore.setState({ owner, status: 'starting', words: '' })
   timer = setInterval(() => {
@@ -189,6 +192,11 @@ export function cancelOpenMic(): void {
 /** The device reads an answer aloud (true) or has finished (false). */
 export function openMicVoice(speaking: boolean): void {
   if (machine) run(machine.voice(now(), speaking))
+}
+
+/** The brain dump switch changed while the microphone is on: the idle time that turns it off follows. */
+export function setOpenMicDump(dump: boolean): void {
+  machine?.setIdleMs(openMicSettings(dump).idleMs)
 }
 
 /** False while the running request must not be cancelled by talking (a card waits, a change was applied). */

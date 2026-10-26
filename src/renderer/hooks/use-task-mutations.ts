@@ -825,11 +825,11 @@ export function useUncompleteTask() {
 
 // --- Projects ---
 
-export function useCreateProject() {
+export function useCreateProject(options?: MutationHookOptions) {
   const qc = useQueryClient()
 
   return useMutation({
-    meta: metaFor('create the project'),
+    meta: metaFor('create the project', options),
     mutationFn: async (project: CreateProjectPayload) => {
       const result = await api.createProject(project)
       if (!result.success) throw apiError(result)
@@ -1018,13 +1018,13 @@ export function useMoveProject() {
   })
 }
 
-export function useDeleteProject() {
+export function useDeleteProject(options?: MutationHookOptions) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const matches = useMatches()
 
   return useMutation({
-    meta: metaFor('delete the project'),
+    meta: metaFor('delete the project', options),
     mutationFn: async (id: number) => {
       const result = await api.deleteProject(id)
       if (!result.success) throw apiError(result)

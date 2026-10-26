@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   ASK_TOOLS,
+  BRAIN_DUMP_ANSWER_SCHEMA,
   DICTATION_ANSWER_SCHEMA,
   PROBE,
   PROMPTS,
   askSystemPrompt,
+  brainDumpSystemPrompt,
   dictationSystemPrompt,
   enabledAskTools,
   promptModeSystem,
@@ -19,6 +21,7 @@ import { aiFixture } from './fixture'
 describe('model-facing schemas obey schemaSubset', () => {
   const schemas: Array<[string, unknown]> = [
     ['dictation.answerSchema', DICTATION_ANSWER_SCHEMA],
+    ['brainDump.answerSchema', BRAIN_DUMP_ANSWER_SCHEMA],
     ['probe.structured.schema', PROBE.structured.schema],
     ['probe.tool.parameters', PROBE.tool.tool.parameters],
     ...ASK_TOOLS.map((tool): [string, unknown] => [`ask.tools.${tool.name}`, tool.parameters]),
@@ -31,6 +34,7 @@ describe('model-facing schemas obey schemaSubset', () => {
 
   it('reads the schemas from the fixture itself', () => {
     expect(DICTATION_ANSWER_SCHEMA).toEqual(aiFixture.dictation.answerSchema)
+    expect(BRAIN_DUMP_ANSWER_SCHEMA).toEqual(aiFixture.brainDump.answerSchema)
     expect(ASK_TOOLS).toEqual(aiFixture.ask.tools)
   })
 
@@ -55,6 +59,13 @@ describe('answer validation', () => {
     expect(firstSchemaProblem({ answer: 5, extra: 1 }, PROBE.structured.schema)).toBe('the answer has an unknown field "extra"')
   })
 
+  it('accepts every brain dump vector answer, and names a missing project_ref', () => {
+    for (const vector of aiFixture.brainDump.checks) expect(firstSchemaProblem(vector.answer, BRAIN_DUMP_ANSWER_SCHEMA)).toBeNull()
+    const broken = structuredClone(aiFixture.brainDump.checks[0].answer)
+    delete broken.tasks[0].project_ref
+    expect(firstSchemaProblem(broken, BRAIN_DUMP_ANSWER_SCHEMA)).toBe('tasks[0] is missing "project_ref"')
+  })
+
   it('checks nullable fields and nested drafts', () => {
     const draft = aiFixture.dictation.checks[0].answer
     expect(firstSchemaProblem(draft, DICTATION_ANSWER_SCHEMA)).toBeNull()
@@ -75,15 +86,17 @@ describe('answer validation', () => {
 
 describe('prompts', () => {
   it('joins the lines with \\n and sends them exactly', () => {
-    for (const name of ['dictation', 'dictationEdit', 'ask', 'talk'] as const) {
+    for (const name of ['dictation', 'dictationEdit', 'brainDump', 'brainDumpEdit', 'ask', 'talk'] as const) {
       expect(promptText(name)).toBe(aiFixture.prompts[name].lines.join('\n'))
       expect(PROMPTS[name].version).toBe(aiFixture.prompts[name].version)
     }
   })
 
-  it('adds the edit and talk prompts after a blank line', () => {
+  it('adds the edit, brain dump and talk prompts after a blank line', () => {
     expect(dictationSystemPrompt(false)).toBe(promptText('dictation'))
     expect(dictationSystemPrompt(true)).toBe(`${promptText('dictation')}\n\n${promptText('dictationEdit')}`)
+    expect(brainDumpSystemPrompt(false)).toBe(`${promptText('dictation')}\n\n${promptText('brainDump')}`)
+    expect(brainDumpSystemPrompt(true)).toBe(`${promptText('dictation')}\n\n${promptText('brainDump')}\n\n${promptText('brainDumpEdit')}`)
     expect(askSystemPrompt(false)).toBe(promptText('ask'))
     expect(askSystemPrompt(true)).toBe(`${promptText('ask')}\n\n${promptText('talk')}`)
   })

@@ -6,6 +6,8 @@ interface SwitchProps {
   disabled?: boolean
   /** Names the switch when it is not inside a <label> that already does. */
   'aria-label'?: string
+  /** A note that says what the switch does. */
+  'aria-describedby'?: string
   className?: string
 }
 
@@ -21,6 +23,7 @@ export function Switch({ checked, onCheckedChange, disabled, className, ...rest 
       role="switch"
       aria-checked={checked}
       aria-label={rest['aria-label']}
+      aria-describedby={rest['aria-describedby']}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(

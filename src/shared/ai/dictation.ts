@@ -1,6 +1,7 @@
 /**
  * Dictation (docs/ai-assistant-v1.md section 4): the request's context and user message (4.1), the
- * eleven checks every draft goes through (4.3), and the drafts block of an edit by voice (4.4).
+ * eleven checks every draft goes through (4.3; a brain dump's tasks too, 4.8.3, see brain-dump.ts),
+ * and the drafts block of an edit by voice (4.4).
  * Pinned by `dictation.checks` in test-fixtures/ai-tools-v1.json; Vicu mobile implements the same
  * rules.
  *
@@ -10,6 +11,7 @@
  */
 import { addLocalDays, type LocalDate } from '../due-dates'
 import { AI_LIMITS, DICTATION_FIELDS, type DraftField } from './contract'
+import type { BrainDumpDraft } from './brain-dump'
 
 // --- The model's answer (4.2) ------------------------------------------------------------
 
@@ -66,6 +68,13 @@ export interface CheckedDraft {
   subtasks: string[]
   /** Fields Vicu filled in itself or the model was unsure of, in the order of `dictation.fields`. */
   guessed: DraftField[]
+}
+
+/** A checked draft of dictation or of a brain dump (whose `project_id` is null when `project_ref` is set). */
+export type AnyCheckedDraft = CheckedDraft | BrainDumpDraft
+
+function projectRefOf(draft: AnyCheckedDraft): string | null {
+  return 'project_ref' in draft ? draft.project_ref : null
 }
 
 export interface DroppedField {
@@ -205,12 +214,46 @@ export function readWhen(
 
 /** Runs the checks of section 4.3 on a model's answer. */
 export function checkDictationAnswer(answer: DictationAnswer, ctx: CheckContext): CheckResult {
+  const { drafts, dropped } = checkTasks(answer.tasks, ctx, { draftsMax: AI_LIMITS.drafts_max })
+  // Without a project_ref resolver every draft has a project of the context.
+  const checked = drafts.map(({ project_ref: _ref, ...draft }): CheckedDraft => ({ ...draft, project_id: draft.project_id ?? ctx.default_project_id }))
+  return { drafts: checked, dropped, unclear: unclearNotes(answer.unclear) }
+}
+
+/** The model's `unclear` notes, strings only. */
+export function unclearNotes(notes: unknown): string[] {
+  return (Array.isArray(notes) ? notes : []).filter((note): note is string => typeof note === 'string')
+}
+
+/** Where a brain dump's `project_ref` leads (4.8.3 step 5): a kept new project, a project of the context, or nowhere. */
+export type ProjectRefTarget = { ref: string } | { id: number } | null
+
+/** How a brain dump's task checks differ from dictation's (4.8.3 step 5). */
+export interface TaskCheckOptions {
+  /** At most this many drafts: `drafts_max`, or a brain dump's `brain_dump_tasks_max`. */
+  draftsMax: number
+  /** A brain dump gives no task the list's default due date. */
+  noDefaultDue?: boolean
+  /** A brain dump: where a non-empty `project_ref` leads, decided before step 5. */
+  projectRef?: (ref: string) => ProjectRefTarget
+}
+
+/**
+ * The checks of 4.3 on the drafts of an answer. Each draft has `project_ref` after `project_id`:
+ * null unless a brain dump's `project_ref` named a kept new project (then `project_id` is null).
+ */
+export function checkTasks(
+  answerTasks: readonly DraftAnswer[] | unknown,
+  ctx: CheckContext,
+  options: TaskCheckOptions,
+): { drafts: BrainDumpDraft[]; dropped: DroppedField[] } {
   const dropped: DroppedField[] = []
   const referenceMinute = minuteOf(ctx.reference)
+  const all = (Array.isArray(answerTasks) ? answerTasks : []) as Array<DraftAnswer & { project_ref?: unknown }>
 
-  // 1. Drafts: at most 25; refs renumbered by position when any is empty or repeated.
-  const tasks = answer.tasks.slice(0, AI_LIMITS.drafts_max)
-  for (const extra of answer.tasks.slice(AI_LIMITS.drafts_max)) {
+  // 1. Drafts: at most 25 (a brain dump: 60); refs renumbered by position when any is empty or repeated.
+  const tasks = all.slice(0, options.draftsMax)
+  for (const extra of all.slice(options.draftsMax)) {
     dropped.push({ ref: extra.ref, field: 'task', value: extra.title })
   }
   const seen = new Set<string>()
@@ -222,7 +265,7 @@ export function checkDictationAnswer(answer: DictationAnswer, ctx: CheckContext)
   }
   const refs = tasks.map((task, i) => (renumber ? `d${i + 1}` : task.ref))
 
-  const drafts: CheckedDraft[] = []
+  const drafts: BrainDumpDraft[] = []
   tasks.forEach((task, index) => {
     const ref = refs[index]
     const guessed = new Set<string>()
@@ -246,11 +289,29 @@ export function checkDictationAnswer(answer: DictationAnswer, ctx: CheckContext)
     let due = reading.due
     if (reading.guessed) guessed.add('when')
     if (reading.dropped !== undefined) drop('when', reading.dropped)
-    if (due === null && ctx.defaultDue) due = `${ctx.defaultDue}T23:59:59`
+    if (due === null && ctx.defaultDue && !options.noDefaultDue) due = `${ctx.defaultDue}T23:59:59`
+
+    // A brain dump's project_ref first (4.8.3): a kept new project, or the context project a new
+    // one was merged into; any other ref leaves step 5 to decide, marked guessed. Empty is null.
+    let projectRef: string | null = null
+    let projectId: number | null = ctx.default_project_id
+    let decided = false
+    if (options.projectRef && task.project_ref !== null && task.project_ref !== undefined && task.project_ref !== '') {
+      const target = typeof task.project_ref === 'string' ? options.projectRef(task.project_ref) : null
+      if (target && 'ref' in target) {
+        projectRef = target.ref
+        projectId = null
+        decided = true
+      } else if (target) {
+        projectId = target.id
+        decided = true
+      } else {
+        guessed.add('project')
+      }
+    }
 
     // 5. Project.
-    let projectId = ctx.default_project_id
-    if (task.project_id !== null && task.project_id !== undefined) {
+    if (!decided && task.project_id !== null && task.project_id !== undefined) {
       if (ctx.projects.some((project) => project.id === task.project_id)) projectId = task.project_id
       else guessed.add('project')
     }
@@ -333,6 +394,7 @@ export function checkDictationAnswer(answer: DictationAnswer, ctx: CheckContext)
       notes,
       due,
       project_id: projectId,
+      project_ref: projectRef,
       labels,
       priority,
       repeat,
@@ -343,8 +405,7 @@ export function checkDictationAnswer(answer: DictationAnswer, ctx: CheckContext)
     })
   })
 
-  const unclear = (Array.isArray(answer.unclear) ? answer.unclear : []).filter((note): note is string => typeof note === 'string')
-  return { drafts, dropped, unclear }
+  return { drafts, dropped }
 }
 
 // --- The request (4.1) -------------------------------------------------------------------
@@ -425,7 +486,7 @@ export function dictationUserMessage(contextJson: string, transcript: string, dr
  * edits by hand, labels as names, the due date back as `when` with `said` null.
  */
 export function draftsAsAnswer(
-  drafts: readonly CheckedDraft[],
+  drafts: readonly AnyCheckedDraft[],
   placeName: (placeId: string) => string | null,
 ): DraftsBlock {
   return {
@@ -460,13 +521,13 @@ export function draftsAsAnswer(
 }
 
 /** The fields whose value differs between two versions of a draft (highlighted after an edit by voice). */
-export function changedFields(before: CheckedDraft, after: CheckedDraft): DraftField[] {
+export function changedFields(before: AnyCheckedDraft, after: AnyCheckedDraft): DraftField[] {
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
   const changed: DraftField[] = []
   if (before.title !== after.title) changed.push('title')
   if (before.notes !== after.notes) changed.push('notes')
   if (before.due !== after.due) changed.push('when')
-  if (before.project_id !== after.project_id) changed.push('project')
+  if (before.project_id !== after.project_id || projectRefOf(before) !== projectRefOf(after)) changed.push('project')
   if (!same(before.labels.map((l) => lower(l.title)), after.labels.map((l) => lower(l.title)))) changed.push('labels')
   if (before.priority !== after.priority) changed.push('priority')
   if (!same(before.repeat, after.repeat)) changed.push('repeat')

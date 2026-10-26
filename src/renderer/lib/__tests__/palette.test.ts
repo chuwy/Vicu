@@ -19,11 +19,11 @@ const ids = (list: { id: string }[]) => list.map((i) => i.id)
 
 describe('buildPaletteItems', () => {
   it('lists actions first, then smart lists, projects and labels', () => {
-    expect(ids(items).map((id) => id.split(':')[0])).toEqual(['cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'list', 'list', 'list', 'project', 'project', 'label'])
+    expect(ids(items).map((id) => id.split(':')[0])).toEqual(['cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'list', 'list', 'list', 'project', 'project', 'label'])
   })
 
-  it('has the New task, Say a task, Dictate tasks, Ask, Make tasks, Refresh, Toggle theme and Settings actions', () => {
-    expect(items.filter((i) => i.kind === 'Action').map((i) => i.title)).toEqual(['New task', 'Say a task', 'Dictate tasks', 'Ask Vicu', 'Make tasks from text', 'Refresh', 'Toggle theme', 'Settings'])
+  it('has the New task, Say a task, Dictate tasks, Brain dump, Ask, Make tasks, Refresh, Toggle theme and Settings actions', () => {
+    expect(items.filter((i) => i.kind === 'Action').map((i) => i.title)).toEqual(['New task', 'Say a task', 'Dictate tasks', 'Brain dump', 'Ask Vicu', 'Make tasks from text', 'Refresh', 'Toggle theme', 'Settings'])
   })
 })
 
@@ -31,7 +31,7 @@ describe('rankPalette', () => {
   it('shows only actions and smart lists with no query', () => {
     const shown = rankPalette(items, '', [task(1, 'x')])
     expect(shown.every((i) => i.kind === 'Action' || i.kind === 'List')).toBe(true)
-    expect(shown).toHaveLength(11)
+    expect(shown).toHaveLength(12)
   })
 
   it('puts the Logbook list first for "logbook"', () => {

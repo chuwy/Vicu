@@ -17,6 +17,7 @@ import {
   probe as fixtureProbe,
   speech as fixtureSpeech,
   dictation as fixtureDictation,
+  brainDump as fixtureBrainDump,
   ask as fixtureAsk,
   talk as fixtureTalk,
   prompts as fixturePrompts,
@@ -84,6 +85,8 @@ export interface VadSettings {
 export interface TurnSettings {
   end_of_turn_ms: number
   idle_s: number
+  /** A brain dump's microphone turns off after this long without speech instead (4.8). */
+  dump_idle_s: number
 }
 
 export interface AskTool {
@@ -128,6 +131,9 @@ export const AI_LIMITS = fixtureLimits as unknown as Readonly<{
   conversation_max_messages: number
   request_max_messages: number
   context_refresh_minutes: number
+  brain_dump_projects_max: number
+  brain_dump_tasks_max: number
+  brain_dump_max_tokens: number
 }>
 export const PROTOCOLS = fixtureProtocols as unknown as Record<WireProtocol, { chat: string; models: string }>
 export const PROVIDER_PRESETS = fixtureProviders as unknown as ProviderPreset[]
@@ -154,13 +160,14 @@ export const DICTATION_CONTEXT_KEYS = fixtureDictation.contextKeys as unknown as
 export const DICTATION_ANSWER_SCHEMA = fixtureDictation.answerSchema as unknown as JsonSchema
 /** The draft fields in their order (`guessed` and `unsure` use these names). */
 export const DICTATION_FIELDS = fixtureDictation.fields as unknown as DraftField[]
+export const BRAIN_DUMP_ANSWER_SCHEMA = fixtureBrainDump.answerSchema as unknown as JsonSchema
 export const ASK_TASK_SUMMARY_SCHEMA = fixtureAsk.taskSummary as unknown as JsonSchema
 export const ASK_TOOLS = fixtureAsk.tools as unknown as AskTool[]
 export const PROPOSAL_STATUSES = fixtureAsk.proposalResult.status as unknown as Array<'applied' | 'declined' | 'partly_applied' | 'failed'>
 export const SKIP_REASONS = fixtureAsk.proposalResult.skipReasons as unknown as Array<'not_found' | 'read_only' | 'invalid'>
 export const TASK_MARK = fixtureAsk.taskMark as unknown as string
 export const TALK_CONFIRM = fixtureTalk.confirm as unknown as Record<string, { yes: string[]; no: string[] }>
-export const PROMPTS = fixturePrompts as unknown as Record<'dictation' | 'dictationEdit' | 'ask' | 'talk', Prompt>
+export const PROMPTS = fixturePrompts as unknown as Record<'dictation' | 'dictationEdit' | 'brainDump' | 'brainDumpEdit' | 'ask' | 'talk', Prompt>
 export const AI_MESSAGES = fixtureMessages as unknown as { promptSchemaIntro: string; repair: string; finalAnswer: string }
 
 export type DraftField = 'title' | 'notes' | 'when' | 'project' | 'labels' | 'priority' | 'repeat' | 'reminder' | 'place' | 'subtasks'
@@ -186,6 +193,15 @@ export function promptText(name: keyof typeof PROMPTS): string {
 /** System text of a dictation request; an edit appends the `dictationEdit` prompt after a blank line (4.4). */
 export function dictationSystemPrompt(edit: boolean): string {
   return edit ? `${promptText('dictation')}\n\n${promptText('dictationEdit')}` : promptText('dictation')
+}
+
+/**
+ * System text of a brain dump (4.8.1): the `dictation` prompt, a blank line and the `brainDump`
+ * prompt; an Update (4.8.4) appends the `brainDumpEdit` prompt after another blank line.
+ */
+export function brainDumpSystemPrompt(edit: boolean): string {
+  const organize = `${promptText('dictation')}\n\n${promptText('brainDump')}`
+  return edit ? `${organize}\n\n${promptText('brainDumpEdit')}` : organize
 }
 
 /** System text of an Ask conversation; Talk adds the `talk` prompt after a blank line (5.1). */

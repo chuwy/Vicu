@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_AI_SETTINGS, canRunFeature, featureNeeds, featureProblem, modelKey, modelsInUse, untestedModels } from '../settings'
+import { DEFAULT_AI_SETTINGS, canRunFeature, featureNeeds, featureProblem, modelKey, modelsInUse, normaliseAiSettings, untestedModels } from '../settings'
 import type { AiSettings, ConnectionTestResult } from '../types'
 
 // Settings, Assistant tests a model by itself (docs/ai-assistant.md): which models still need the
@@ -66,5 +66,14 @@ describe('what a test says per feature', () => {
     expect(featureProblem('ask', result(true, false))).toBe('Ask needs a model that can call tools. Choose another model.')
     expect(featureProblem('ask', result(false, false))).toBe('Ask needs a model that can give a structured answer. Choose another model.')
     expect(featureNeeds('dictation')).toBe('Smart dictation needs a model that can give a structured answer. Choose another model.')
+  })
+})
+
+describe('the Brain dump switch (4.8)', () => {
+  it('is off by default and kept only as a real true', () => {
+    expect(DEFAULT_AI_SETTINGS.brainDump).toBe(false)
+    expect(normaliseAiSettings({}).brainDump).toBe(false)
+    expect(normaliseAiSettings({ brainDump: 'yes' }).brainDump).toBe(false)
+    expect(normaliseAiSettings({ ...DEFAULT_AI_SETTINGS, brainDump: true }).brainDump).toBe(true)
   })
 })

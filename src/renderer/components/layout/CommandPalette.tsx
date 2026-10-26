@@ -98,8 +98,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       void navigate({ to: '/settings' })
     } else if (command === 'voice') {
       useVoiceStore.getState().begin('command', 'latched')
-    } else if (command === 'dictate') {
-      if (ai.dictation) useDictationStore.getState().startLive()
+    } else if (command === 'dictate' || command === 'brain-dump') {
+      if (ai.dictation) useDictationStore.getState().startLive(command === 'brain-dump' ? { brainDump: true } : {})
       else toast.info('Smart dictation is off. Turn it on in Settings, Assistant.')
     } else if (command === 'ask') {
       useAskStore.getState().setOpen(true)
@@ -169,7 +169,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     if (action.type === 'command' && action.command === 'toggle-theme') return SunMoon
     if (action.type === 'command' && action.command === 'refresh') return RefreshCw
     if (action.type === 'command' && action.command === 'voice') return Mic
-    if (action.type === 'command' && (action.command === 'ask' || action.command === 'make-tasks' || action.command === 'dictate')) return Sparkles
+    if (action.type === 'command' && (action.command === 'ask' || action.command === 'make-tasks' || action.command === 'dictate' || action.command === 'brain-dump')) return Sparkles
     return ICONS[kind]
   }
 
