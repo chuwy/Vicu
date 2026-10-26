@@ -6,7 +6,7 @@
     <title>Vicu · A calm, fast task manager for Vikunja</title>
     <meta
       name="description"
-      content="Vicu is a task manager for your own Vikunja server, on Windows, macOS, Linux, Android, iPhone and iPad. Capture from anywhere, plan your day in Today, and keep every device in step. Free and open source."
+      content="Vicu is a task manager for your own Vikunja server, on Windows, macOS, Linux, Android, iPhone and iPad. Capture from anywhere, plan your day in Today, turn a ramble into tasks with an optional assistant on the AI model you choose, and keep every device in step. Free and open source."
     />
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
@@ -99,6 +99,7 @@
         <nav class="nav" aria-label="Sections">
           <a href="#tour">Tour</a>
           <a href="#capture">Capture</a>
+          <a href="#assistant">Assistant</a>
           <a href="#organize">Organize</a>
           <a href="#mobile">Mobile</a>
           <a href="#desktop">Desktop</a>
@@ -193,23 +194,6 @@
               <p>What you finished, grouped by the day you did it.</p>
             </li>
           </ol>
-          <div class="trio reveal">
-            <article class="trio-card">
-              <span class="tag">Your server</span>
-              <h3 class="h3">Vikunja</h3>
-              <p>Your tasks live on your own Vikunja server or Vikunja Cloud. Vicu has no server or account of its own and collects nothing.</p>
-            </article>
-            <article class="trio-card trio-card--center">
-              <span class="tag">Your computer</span>
-              <h3 class="h3">Vicu for desktop</h3>
-              <p>Windows, macOS and Linux. Quick Entry and Quick View from any app, voice input, keyboard first.</p>
-            </article>
-            <article class="trio-card">
-              <span class="tag">Your phone</span>
-              <h3 class="h3">Vicu for mobile</h3>
-              <p>Android, iPhone and iPad. Widgets, swipe gestures, Siri, location reminders, and it works offline.</p>
-            </article>
-          </div>
         </div>
       </section>
 
@@ -266,7 +250,7 @@
             <div class="phone">
               <img src="assets/img/screens/android-project-light.webp" width="780" height="1733" loading="lazy" alt="A shared project on Android: Trip to Lisbon with who is assigned and comment counts." />
             </div>
-            <p class="caption"><span><strong>Areas and projects</strong> with progress rings, sections, and a sort order per project that syncs to your other devices.</span><span>Android</span></p>
+            <p class="caption"><span><strong>Areas and projects</strong>, grouped under categories if you like, with progress rings, sections, and a sort order per project that syncs to your other devices.</span><span>Android</span></p>
           </div>
 
           <div class="tab-panel" role="tabpanel" id="panel-task" aria-labelledby="tab-task" hidden>
@@ -420,18 +404,90 @@
         </div>
       </section>
 
+      <!-- Assistant -->
+      <section class="section section--alt" id="assistant" aria-labelledby="assistant-title">
+        <div class="wrap">
+          <div class="split">
+            <div class="stack stack--lg">
+              <div class="stack">
+                <p class="kicker" style="--k: var(--c-review)">Assistant</p>
+                <h2 id="assistant-title" class="h2">Talk it through. Get tasks back.</h2>
+              </div>
+              <p class="lead">
+                An optional assistant on the AI model you choose. Say what is on your mind and it comes back as tasks with
+                dates, projects, labels and steps, for you to check before anything is added.
+              </p>
+              <ul class="checks" style="--k: var(--c-review)">
+                <li><strong>Smart dictation.</strong> Keep talking; each pause turns into task cards. Say "make the first one Friday" and the cards follow.</li>
+                <li><strong>Brain dump.</strong> Ramble or type for as long as you like, then Organize sorts it into tasks, in your projects or in new ones where none fit.</li>
+                <li><strong>Ask.</strong> "What is overdue in Work?" Short answers, and any change comes as a card you apply or decline, with Undo.</li>
+                <li><strong>Talk.</strong> Turn on the microphone in Ask and just talk. The answer is read aloud, and it keeps listening.</li>
+                <li><strong>Break into steps</strong> on any task, or turn pasted or shared text, such as an email, into tasks.</li>
+              </ul>
+              <p class="muted" style="font-size: 14px">Quick capture stays as it was: hold + and let go for one task, without the model.</p>
+            </div>
+            <div class="dictation reveal" role="img" aria-label="Smart dictation: the words Buy milk, call the plumber on Friday about the leak, and book the dentist next month have become three task cards with their dates, project and label. The dentist's date is outlined as a guess. An Add 3 tasks button waits below.">
+              <div class="dictation-head">
+                <svg class="i" aria-hidden="true"><use href="#i-mic" /></svg>
+                <span>Smart dictation</span>
+                <span class="dictation-live">Listening</span>
+              </div>
+              <p class="dictation-heard">"Buy milk, call the plumber on Friday about the leak, and book the dentist next month."</p>
+              <div class="draft">
+                <p class="draft-title"><span class="circle"></span>Buy milk</p>
+                <div class="draft-chips"><span class="chip t--label">errand</span></div>
+              </div>
+              <div class="draft">
+                <p class="draft-title"><span class="circle"></span>Call the plumber about the leak</p>
+                <div class="draft-chips"><span class="chip t--date">Friday</span><span class="chip t--proj">Home</span></div>
+              </div>
+              <div class="draft">
+                <p class="draft-title"><span class="circle"></span>Book the dentist</p>
+                <div class="draft-chips"><span class="chip t--date chip--guess">Next month</span><span class="chip t--proj">Health</span></div>
+              </div>
+              <div class="dictation-foot">
+                <span>A dashed outline marks a guess.</span>
+                <span class="btn btn--primary btn--small">Add 3 tasks</span>
+              </div>
+            </div>
+          </div>
+          <div class="cards cards--3 reveal" style="margin-top: 40px">
+            <article class="card" style="--k: var(--c-review)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sparkle" /></svg></span>
+              <h3>Your model, your key</h3>
+              <p>OpenAI, Anthropic, Google Gemini, OpenRouter, any OpenAI-compatible server, or a model on your own machine with Ollama or Open WebUI.</p>
+            </article>
+            <article class="card" style="--k: var(--c-logbook)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock" /></svg></span>
+              <h3>Nothing sent without asking</h3>
+              <p>Off until you set it up. Requests go straight from your device to your provider, and Vicu shows what each feature sends before you agree.</p>
+            </article>
+            <article class="card" style="--k: var(--c-anytime)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-mic" /></svg></span>
+              <h3>Speech on your device</h3>
+              <p>Download a speech model and your voice is recognized on your computer or phone, offline. Only the text goes to the model.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
       <!-- Organize -->
-      <section class="section section--alt" id="organize" aria-labelledby="organize-title">
+      <section class="section" id="organize" aria-labelledby="organize-title">
         <div class="wrap">
           <div class="section-head">
             <p class="kicker" style="--k: var(--c-review)">Organize</p>
             <h2 id="organize-title" class="h2">As much structure as you want, and no more.</h2>
           </div>
-          <div class="cards reveal">
+          <div class="cards cards--3 reveal">
             <article class="card" style="--k: var(--c-inbox)">
               <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-folder" /></svg></span>
               <h3>Areas and projects</h3>
               <p>Top-level areas with projects inside, progress rings and open counts. Drag to nest or reorder, with Undo.</p>
+            </article>
+            <article class="card" style="--k: var(--c-upcoming)">
+              <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-grid" /></svg></span>
+              <h3>Project categories</h3>
+              <p>Group your top-level projects under headers like Work, Home or Side projects. Drag a project past a header to move it; categories sync to every device.</p>
             </article>
             <article class="card" style="--k: var(--c-anytime)">
               <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sections" /></svg></span>
@@ -489,7 +545,7 @@
       </section>
 
       <!-- Working with tasks -->
-      <section class="section" id="tasks" aria-labelledby="tasks-title">
+      <section class="section section--alt" id="tasks" aria-labelledby="tasks-title">
         <div class="wrap split">
           <div class="stack stack--lg">
             <div class="stack">
@@ -514,7 +570,7 @@
       </section>
 
       <!-- Reminders and sharing -->
-      <section class="section section--alt" id="together" aria-labelledby="together-title">
+      <section class="section" id="together" aria-labelledby="together-title">
         <div class="wrap">
           <div class="section-head">
             <p class="kicker" style="--k: var(--c-routines)">Reminders and sharing</p>
@@ -556,7 +612,7 @@
       </section>
 
       <!-- Mobile -->
-      <section class="section" id="mobile" aria-labelledby="mobile-title">
+      <section class="section section--alt" id="mobile" aria-labelledby="mobile-title">
         <div class="wrap">
           <div class="section-head section-head--center">
             <p class="kicker" style="--k: var(--c-upcoming)">Mobile</p>
@@ -606,7 +662,7 @@
       </section>
 
       <!-- Desktop -->
-      <section class="section section--alt" id="desktop" aria-labelledby="desktop-title">
+      <section class="section" id="desktop" aria-labelledby="desktop-title">
         <div class="wrap">
           <div class="split">
             <div class="stack stack--lg">
@@ -636,14 +692,14 @@
             <div><dt>Due today</dt><dd><kbd>Ctrl</kbd><kbd>T</kbd></dd></div>
             <div><dt>Move a task up or down</dt><dd><kbd>Alt</kbd><kbd>Shift</kbd><kbd>↑</kbd><kbd>↓</kbd></dd></div>
             <div><dt>Comments</dt><dd><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd></dd></div>
-            <div><dt>Refresh from the server</dt><dd><kbd>F5</kbd></dd></div>
+            <div><dt>Ask Vicu</dt><dd><kbd>Ctrl</kbd><kbd>J</kbd></dd></div>
           </dl>
           <p class="muted" style="font-size: 13.5px; margin-top: 12px">On a Mac, Ctrl is Cmd and Quick Entry is <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Space</kbd>. Every shortcut can be changed in Settings.</p>
         </div>
       </section>
 
       <!-- Sync -->
-      <section class="section" id="sync" aria-labelledby="sync-title">
+      <section class="section section--alt" id="sync" aria-labelledby="sync-title">
         <div class="wrap">
           <div class="section-head">
             <p class="kicker" style="--k: var(--c-anytime)">Sync and offline</p>
@@ -663,7 +719,7 @@
             <article class="card" style="--k: var(--c-review)">
               <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-sparkle" /></svg></span>
               <h3>Settings that follow you</h3>
-              <p>Your Inbox, task orders, custom lists, places and location reminders are the same on every device.</p>
+              <p>Your Inbox, task orders, project categories, custom lists, places and location reminders are the same on every device.</p>
             </article>
             <article class="card" style="--k: var(--c-logbook)">
               <span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock" /></svg></span>
@@ -675,7 +731,7 @@
       </section>
 
       <!-- Look and feel -->
-      <section class="section section--alt" id="look" aria-labelledby="look-title">
+      <section class="section" id="look" aria-labelledby="look-title">
         <div class="wrap split split--flip">
           <div class="stack stack--lg">
             <div class="stack">
@@ -697,7 +753,7 @@
       </section>
 
       <!-- Download -->
-      <section class="section" id="download" aria-labelledby="download-title">
+      <section class="section section--alt" id="download" aria-labelledby="download-title">
         <div class="wrap">
           <div class="section-head section-head--center">
             <p class="kicker">Get Vicu</p>
@@ -733,7 +789,7 @@
               <svg class="i" aria-hidden="true"><use href="#i-android" /></svg>
               <h3>Android</h3>
               <p>Android 8 or later. Google Play beta, or the APK.</p>
-              <a class="btn btn--primary btn--small" href="https://github.com/rendyhd/Vicu-Mobile#download">Get the beta</a>
+              <a class="btn btn--primary btn--small" href="https://github.com/rendyhd/Vicu-Mobile#get-vicu">Get the beta</a>
               <a class="alt" href="https://github.com/rendyhd/Vicu-Mobile/releases/latest">Download the APK</a>
             </div>
           </div>
@@ -755,7 +811,7 @@
       </section>
 
       <!-- FAQ -->
-      <section class="section section--alt" id="faq" aria-labelledby="faq-title">
+      <section class="section" id="faq" aria-labelledby="faq-title">
         <div class="wrap">
           <div class="section-head">
             <p class="kicker" style="--k: var(--c-inbox)">Questions</p>
@@ -787,6 +843,10 @@
               <div><p>Vikunja has no place for an app's own data, so Vicu keeps custom lists, routines and synced settings in tasks it marks done and hides. You may see them elsewhere, for example "Vicu preferences"; leave them in place.</p></div>
             </details>
             <details>
+              <summary>Do I need an AI model to use Vicu?</summary>
+              <div><p>No. The assistant is optional and off until you set it up; everything else, voice input included, works without it. If you turn it on, you bring your own provider and key, or a model running on your own machine, and requests go straight from your device to that provider. The key stays on the device and is never synced.</p></div>
+            </details>
+            <details>
               <summary>Does voice input work everywhere?</summary>
               <div><p>On Android, iPhone, iPad, macOS and Windows. On Linux, holding + opens the composer instead.</p></div>
             </details>
@@ -798,7 +858,7 @@
         </div>
       </section>
 
-      <section class="section" aria-labelledby="cta-title">
+      <section class="section section--alt" aria-labelledby="cta-title">
         <div class="wrap cta">
           <img src="assets/img/brand/vicu-256.webp" alt="" width="84" height="84" loading="lazy" />
           <h2 id="cta-title" class="h2">Clear your head. Keep your day.</h2>
