@@ -10,7 +10,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/assets/img/screens/desktop-today-dark.webp">
-  <img alt="Vicu on the desktop, showing Today" width="1600" height="1000" src="site/assets/img/screens/desktop-today.webp">
+  <img alt="Vicu on the desktop, showing Today" src="site/assets/img/screens/desktop-today.webp">
 </picture>
 
 ## Get Vicu
@@ -80,7 +80,7 @@ Prefer Vikunja's syntax? Switch to `*label` and `+project` in **Settings, Genera
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/assets/img/screens/desktop-list-editor-dark.webp">
-  <img alt="Building a custom list" width="1600" height="1000" src="site/assets/img/screens/desktop-list-editor.webp">
+  <img alt="Building a custom list" src="site/assets/img/screens/desktop-list-editor.webp">
 </picture>
 
 ## Working with tasks
