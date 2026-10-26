@@ -11,15 +11,20 @@ import {
 } from '../../shared/ai/dictation'
 import { DICTATION_FIELDS, type DraftField } from '../../shared/ai/contract'
 import type { AiError, KeptTranscript } from '../../shared/ai/types'
+import { joinWords } from '../../shared/ai/turns'
 import { contextProjects, defaultProjectFor, dictationContextFor, type AiWorkspace, type ListInfo } from '@/lib/ai/workspace'
 import { readSaid } from '@/lib/ai/said-parser'
+import { cancelOpenMic, startOpenMic, useOpenMicStore, type AdoptedSession, type OpenMicClient } from '@/lib/ai/open-mic'
 import { announce } from '@/stores/announcer-store'
+import { useVoiceStore } from '@/stores/voice-store'
 
 // Smart dictation (docs/ai-assistant-v1.md section 4): the transcript, one request, the checks,
-// and the draft cards the user changes and adds (DictationHost draws them and adds them). Also
-// "Make tasks from this" (text from outside) and "Break into steps" (a task's notes, the answer's
-// tasks become its subtasks), and editing the cards by voice (4.4). A failed request keeps the
-// transcript on the device until it is added or discarded (4.6).
+// and the draft cards the user changes and adds (DictationHost draws them and adds them). Spoken,
+// it keeps the microphone open (3.7): the first turn is the dictation request, each later turn an
+// edit of the cards (4.4), and talking again cancels a request still running so its words go out
+// with the new ones. Also "Make tasks from this" (text from outside) and "Break into steps" (a
+// task's notes, the answer's tasks become its subtasks). A failed request keeps the transcript on
+// the device until it is added or discarded (4.6).
 
 export interface DraftCard {
   draft: CheckedDraft
@@ -29,7 +34,8 @@ export interface DraftCard {
   dropped: DroppedField[]
 }
 
-export type DictationPhase = 'idle' | 'requesting' | 'cards' | 'failed' | 'empty' | 'adding'
+/** `live`: the panel is open and listening, nothing has been sent yet. */
+export type DictationPhase = 'idle' | 'live' | 'requesting' | 'cards' | 'failed' | 'empty' | 'adding'
 
 export interface DictationParent {
   id: number
@@ -52,12 +58,20 @@ interface DictationState {
   error: string | null
   /** The kept transcript (4.6) this panel shows, if any. */
   keptId: string | null
-  /** An edit by voice running: its words while heard, then the request. */
-  edit: { phase: 'idle' | 'listening' | 'requesting'; words: string; error: string | null }
+  /** An edit by voice: its request while it runs, or why it failed. */
+  edit: { phase: 'idle' | 'requesting'; words: string; error: string | null }
   open: (input: { transcript: string; list: ListInfo | null; source: DictationSource; parent?: DictationParent | null; reference?: string; keptId?: string | null }) => void
+  /**
+   * Spoken smart dictation: opens the panel listening (or keeps the one open) with the microphone
+   * on. `adopt` takes over a quick capture that was locked, with the words it heard.
+   */
+  startLive: (input?: { list?: ListInfo | null; adopt?: AdoptedSession }) => void
+  /** Turns the microphone on in the open panel. */
+  listen: () => void
   retry: () => void
-  editByVoice: (instruction: string) => void
-  setEditListening: (words: string | null) => void
+  editByVoice: (instruction: string) => Promise<void>
+  /** Stops the request that is running (its answer is ignored): back to listening, or the cards as they were. */
+  cancelRequest: () => void
   updateDraft: (ref: string, change: Partial<CheckedDraft>) => void
   removeDraft: (ref: string) => void
   setPhase: (phase: DictationPhase) => void
@@ -69,10 +83,14 @@ export interface DictationDeps {
   workspace: () => AiWorkspace
   /** The locale slash dates are read with. */
   locale: () => string
+  /** The list on screen, whose defaults new tasks get. */
+  list: () => ListInfo | null
 }
 
 let deps: DictationDeps | null = null
 let requestCounter = 0
+/** The request whose answer is waited for; a cancelled or replaced one is ignored when it comes. */
+let activeRequest: string | null = null
 
 /** Set by DictationHost, which knows the window's caches. */
 export function setDictationDeps(next: DictationDeps | null): void {
@@ -97,15 +115,18 @@ export const useDictationStore = create<DictationState>((set, get) => {
     const ws = deps.workspace()
     const state = get()
     const id = `dictation-${Date.now()}-${++requestCounter}`
+    activeRequest = id
     const contextJson = dictationContextFor(ws, state.list, state.reference)
     const drafts = edit !== null
       ? draftsAsAnswer(state.cards.map((card) => card.draft), (placeId) => ws.places.find((p) => p.id === placeId)?.name ?? null)
       : undefined
     const user = dictationUserMessage(contextJson, edit ?? state.transcript, drafts)
     const result = await window.api.ai.dictate({ requestId: id, edit: edit !== null, user })
-    // Closed or replaced while it ran.
+    // Closed, cancelled by talking on, or replaced while it ran.
+    if (activeRequest !== id) return
+    activeRequest = null
     const now = get()
-    if (now.phase === 'idle' || now.reference !== state.reference || now.transcript !== state.transcript) return
+    if (now.phase === 'idle') return
 
     if (!result.success) {
       if (edit !== null) {
@@ -170,6 +191,26 @@ export const useDictationStore = create<DictationState>((set, get) => {
     announce(cards.length === 1 ? '1 task to check' : `${cards.length} tasks to check`)
   }
 
+  /** A turn's words to the model: the dictation request, or an edit once there are cards. */
+  const client: OpenMicClient = {
+    onTurn: async (text) => {
+      const state = get()
+      if (state.phase === 'cards') return get().editByVoice(text)
+      if (state.phase === 'adding' || state.phase === 'idle') return
+      // Nothing made yet: the request again, with what was said before a failure, an empty answer,
+      // or a Retry still running.
+      if (state.phase === 'requesting' && activeRequest) void window.api.ai.cancelDictation(activeRequest)
+      const transcript = state.phase === 'live' ? text : joinWords(state.transcript, text)
+      set({ phase: 'requesting', transcript, reference: localDateTimeOf(new Date()), unclear: [], error: null })
+      await run(null)
+    },
+    onInterrupt: () => get().cancelRequest(),
+    onOff: () => {
+      // Turned off before anything was said: nothing to show.
+      if (get().phase === 'live') get().close()
+    },
+  }
+
   return {
     phase: 'idle',
     source: 'voice',
@@ -200,23 +241,58 @@ export const useDictationStore = create<DictationState>((set, get) => {
       void run(null)
     },
 
+    startLive: (input = {}) => {
+      if (get().phase === 'idle') {
+        set({
+          phase: 'live',
+          source: 'voice',
+          transcript: '',
+          reference: localDateTimeOf(new Date()),
+          list: input.list !== undefined ? input.list : deps?.list() ?? null,
+          parent: null,
+          cards: [],
+          unclear: [],
+          error: null,
+          keptId: null,
+          edit: EMPTY_EDIT,
+        })
+      }
+      // A quick capture still running gives way, unless it is the one handed over.
+      if (!input.adopt) useVoiceStore.getState().cancel()
+      startOpenMic('dictation', client, input.adopt)
+      announce('Listening. Say your tasks; pause and they appear as cards.')
+    },
+
+    listen: () => {
+      if (get().phase === 'idle' || useOpenMicStore.getState().owner === 'dictation') return
+      useVoiceStore.getState().cancel()
+      startOpenMic('dictation', client)
+    },
+
     retry: () => {
       if (get().phase !== 'failed' && get().phase !== 'empty') return
       set({ phase: 'requesting', error: null })
       void run(null)
     },
 
-    editByVoice: (instruction) => {
+    cancelRequest: () => {
+      const id = activeRequest
+      if (!id) return
+      activeRequest = null
+      void window.api.ai.cancelDictation(id)
+      if (get().phase === 'requesting') set({ phase: 'live', transcript: '' })
+      else set({ edit: EMPTY_EDIT })
+    },
+
+    editByVoice: async (instruction) => {
       const words = instruction.trim()
       if (!words || get().phase !== 'cards') {
         set({ edit: EMPTY_EDIT })
         return
       }
       set({ edit: { phase: 'requesting', words, error: null } })
-      void run(words)
+      await run(words)
     },
-
-    setEditListening: (words) => set({ edit: words === null ? EMPTY_EDIT : { phase: 'listening', words, error: null } }),
 
     updateDraft: (ref, change) => set((state) => ({
       cards: state.cards.map((card) => card.draft.ref === ref
@@ -228,17 +304,23 @@ export const useDictationStore = create<DictationState>((set, get) => {
         : card),
     })),
 
-    removeDraft: (ref) => set((state) => {
-      const cards = state.cards.filter((card) => card.draft.ref !== ref)
-      return { cards, phase: cards.length === 0 ? 'idle' : state.phase }
-    }),
+    removeDraft: (ref) => {
+      const cards = get().cards.filter((card) => card.draft.ref !== ref)
+      if (cards.length > 0) set({ cards })
+      // Still listening: the next words start over.
+      else if (useOpenMicStore.getState().owner === 'dictation') set({ cards, phase: 'live', transcript: '', unclear: [] })
+      else get().close()
+    },
 
     setPhase: (phase) => set({ phase }),
 
     close: (options) => {
       const { keptId } = get()
+      if (activeRequest) void window.api.ai.cancelDictation(activeRequest)
+      activeRequest = null
       if (options?.discard && keptId) void window.api.ai.dropKeptTranscript(keptId)
       set({ phase: 'idle', cards: [], unclear: [], error: null, transcript: '', keptId: null, edit: EMPTY_EDIT, parent: null })
+      if (useOpenMicStore.getState().owner === 'dictation') cancelOpenMic()
     },
   }
 })

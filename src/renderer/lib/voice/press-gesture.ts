@@ -9,22 +9,26 @@
 //   CANCEL_DOWN_PX, or CANCEL_DISTANCE_PX in any direction) arms the cancel: releasing there
 //   throws the words away, and coming back disarms it. Escape, a lost pointer or a blurred
 //   window cancel at once. The click that follows a hold is swallowed.
+// - When the press may lock (smart dictation is ready), sliding up by LOCK_UP_PX while holding
+//   locks it at once: the hold ends, listening goes on as smart dictation, and letting go changes
+//   nothing (docs/ai-assistant-v1.md section 4).
 
 export const HOLD_MS = 400
 export const PRESS_SLOP_PX = 8
 export const CANCEL_DOWN_PX = 60
 export const CANCEL_DISTANCE_PX = 140
+export const LOCK_UP_PX = 60
 
 export type PressState =
   | { phase: 'idle' }
   /** Down, not yet a hold. */
-  | { phase: 'pressed'; startAt: number; x: number; y: number }
+  | { phase: 'pressed'; startAt: number; x: number; y: number; lockable: boolean }
   /** Moved before the hold: an ordinary press from here on. */
   | { phase: 'passive' }
-  | { phase: 'holding'; x: number; y: number; away: boolean }
+  | { phase: 'holding'; x: number; y: number; away: boolean; lockable: boolean }
 
 export type PressEvent =
-  | { type: 'down'; at: number; x: number; y: number }
+  | { type: 'down'; at: number; x: number; y: number; lockable?: boolean }
   | { type: 'move'; x: number; y: number }
   /** The hold timer fired (or any later check of the clock). */
   | { type: 'tick'; at: number }
@@ -43,6 +47,8 @@ export type PressEffect =
   | 'add'
   /** Throw the utterance away. */
   | 'cancel'
+  /** Slid up to the lock: listening goes on as smart dictation. */
+  | 'lock'
 
 export interface PressStep {
   state: PressState
@@ -69,7 +75,7 @@ export function pressStep(state: PressState, event: PressEvent): PressStep {
     case 'down':
       // A second button while holding changes nothing.
       if (state.phase === 'holding') return step(state)
-      return step({ phase: 'pressed', startAt: event.at, x: event.x, y: event.y })
+      return step({ phase: 'pressed', startAt: event.at, x: event.x, y: event.y, lockable: event.lockable === true })
 
     case 'move':
       if (state.phase === 'pressed') {
@@ -78,6 +84,7 @@ export function pressStep(state: PressState, event: PressEvent): PressStep {
       }
       if (state.phase === 'holding') {
         const away = isAway(state.x, state.y, event.x, event.y)
+        if (state.lockable && !away && state.y - event.y >= LOCK_UP_PX) return step(PRESS_IDLE, 'lock', true)
         if (away === state.away) return step(state)
         return step({ ...state, away }, away ? 'arm-cancel' : 'disarm-cancel')
       }
@@ -85,7 +92,7 @@ export function pressStep(state: PressState, event: PressEvent): PressStep {
 
     case 'tick':
       if (state.phase === 'pressed' && event.at - state.startAt >= HOLD_MS) {
-        return step({ phase: 'holding', x: state.x, y: state.y, away: false }, 'start')
+        return step({ phase: 'holding', x: state.x, y: state.y, away: false, lockable: state.lockable }, 'start')
       }
       return step(state)
 

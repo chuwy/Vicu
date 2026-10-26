@@ -188,13 +188,22 @@ export interface SpeechStartOptions {
   language?: string
   /** The vocabulary hint (3.4), or null. */
   hint?: string | null
+  /** An open microphone (3.7): `audio.max_seconds` count per turn instead of for the whole recording. */
+  openMic?: boolean
 }
 
+/**
+ * A recording's events. Every recording also reports its turns (3.7): `speech` when a turn has
+ * `vad.min_speech_ms` of speech, `turn` at a pause of `turn.end_of_turn_ms` after it once its phrases
+ * are transcribed; `partial` and `final` carry the current turn's words besides the whole text.
+ */
 export type SpeechEvent =
   | { type: 'ready' }
-  /** The transcript of the phrases finished so far. */
-  | { type: 'partial'; text: string }
-  | { type: 'final'; text: string }
+  /** The transcript of the phrases finished so far, and of those since the last turn. */
+  | { type: 'partial'; text: string; turn: string }
+  | { type: 'speech' }
+  | { type: 'turn'; text: string }
+  | { type: 'final'; text: string; turn: string }
   | { type: 'error'; message: string }
 
 export interface SpeechEventEnvelope {

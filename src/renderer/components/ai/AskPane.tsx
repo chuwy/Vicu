@@ -21,18 +21,17 @@ import {
   useUncompleteTask,
   useUpdateTask,
 } from '@/hooks/use-task-mutations'
-import { appRecognizer } from '@/lib/ai/recognizers'
+import { openMicHearing, openMicOwner, setOpenMicInterruptible, stopOpenMic, useOpenMicStore } from '@/lib/ai/open-mic'
+import { speakAnswer, stopSpeaking } from '@/lib/ai/speech-output'
 import { defaultProjectFor, listInfoOf, pathOf } from '@/lib/ai/workspace'
 import { proposalSize } from '@/lib/ai/proposals'
 import { formatDateChip } from '@/lib/date-utils'
 import { isDateOnly, isNoDueDate, toLocalDate } from '@/lib/due-dates'
-import { useAskStore, setAskDeps, type PendingProposal } from '@/stores/ask-store'
+import { startTalk, useAskStore, setAskDeps, type PendingProposal } from '@/stores/ask-store'
 import { useUIStore } from '@/stores/ui-store'
 import { useVoiceListStore } from '@/stores/voice-list-store'
-import { toast } from '@/stores/toast-store'
 import { answerParts } from '../../../shared/ai/ask'
 import { instantOfLocal } from '../../../shared/ai/dictation'
-import { spokenConfirmation } from '../../../shared/ai/talk'
 import type { ChatMessage } from '../../../shared/ai/types'
 import type { Task } from '@/lib/vikunja-types'
 
@@ -41,18 +40,11 @@ function userWords(text: string): string {
   return text.replace(/^<context>\n[\s\S]*?\n<\/context>\n/, '')
 }
 
-function speak(text: string): void {
-  if (!text || typeof window.speechSynthesis === 'undefined') return
-  window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = navigator.language
-  window.speechSynthesis.speak(utterance)
-}
-
 /**
  * Ask and Talk (docs/ai-assistant-v1.md sections 5 and 6). Always mounted in AppShell, so a
- * conversation keeps running while the pane is closed; the pane opens from the command palette,
- * or Mod+J. The tools and the writes are wired here, where the window's caches and mutations are.
+ * conversation keeps running while the pane is closed; the pane opens from the Ask button next to
+ * Search, the command palette, or Mod+J. The tools and the writes are wired here, where the
+ * window's caches and mutations are. Talk is the microphone button: an open microphone (3.7).
  */
 export function AskHost() {
   const ready = useAiReady()
@@ -82,7 +74,10 @@ export function AskHost() {
       list,
       defaultProjectId: () => defaultProjectFor(live.current.ws, list()),
       speak: (text) => {
-        if (live.current.aiSettings?.speakAnswers !== false) speak(text)
+        if (live.current.aiSettings?.speakAnswers === false) return
+        // Already talking again: the answer stays on screen, unread.
+        if (openMicOwner() === 'ask' && openMicHearing()) return
+        speakAnswer(text)
       },
       tools: () => ({
         ws: live.current.ws,
@@ -119,6 +114,9 @@ export function AskHost() {
     })
     return () => setAskDeps(null)
   }, [])
+
+  // Talking does not interrupt while a card waits (it answers it, 6.1) or after one was decided.
+  useEffect(() => useAskStore.subscribe((s) => setOpenMicInterruptible(s.pending === null && !s.decided)), [])
 
   // Mod+J shows or hides Ask.
   useEffect(() => {
@@ -159,7 +157,7 @@ function AskPane({ ready }: { ready: { ask: boolean; talk: boolean } }) {
   }, [conversation?.messages.length, streaming, pending])
 
   const close = () => {
-    window.speechSynthesis?.cancel()
+    stopSpeaking()
     state.setOpen(false)
   }
 
@@ -210,6 +208,7 @@ function AskPane({ ready }: { ready: { ask: boolean; talk: boolean } }) {
         {!conversation || conversation.messages.length === 0 ? (
           <p className="text-meta text-[var(--text-secondary)]">
             Ask about your tasks: “What is due this week?”, “Move the dentist to Friday”, “What did I finish yesterday?”
+            {ready.talk && ' Or turn on the microphone and just talk.'}
           </p>
         ) : (
           conversation.messages.map((stored, i) => <MessageView key={i} message={stored.message} knownIds={knownIds} />)
@@ -225,7 +224,7 @@ function AskPane({ ready }: { ready: { ask: boolean; talk: boolean } }) {
         {error && <p className="text-meta text-danger" role="alert">{error}</p>}
       </div>
       <div className="border-t border-[var(--border-color)] p-3">
-        {talk && ready.talk && <TalkButton />}
+        {ready.talk && <HeardLine />}
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -242,6 +241,7 @@ function AskPane({ ready }: { ready: { ask: boolean; talk: boolean } }) {
             }}
             className="min-h-[2.5rem] flex-1 resize-none rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1.5 text-task-title text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
           />
+          {ready.talk && <MicButton />}
           {busy && !pending ? (
             <IconButton label="Stop" onClick={() => state.cancel()}><Square className="h-4 w-4" /></IconButton>
           ) : (
@@ -285,12 +285,12 @@ function AskFrame({ children, onClose, toolbar }: { children: React.ReactNode; o
   )
 }
 
-function IconButton({ label, onClick, disabled, pressed, children }: { label: string; onClick: () => void; disabled?: boolean; pressed?: boolean; children: React.ReactNode }) {
+function IconButton({ label, title, onClick, disabled, pressed, children }: { label: string; title?: string; onClick: () => void; disabled?: boolean; pressed?: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
       aria-label={label}
-      title={label}
+      title={title ?? label}
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
@@ -447,73 +447,39 @@ function ProposalCard({ card, which }: { card: PendingProposal; which: 'pending'
   )
 }
 
-/** Push to talk (6): hold to speak; with a card open, a yes or no answers it (6.1). */
-function TalkButton() {
-  const [listening, setListening] = useState(false)
-  const [words, setWords] = useState('')
-  const held = useRef(false)
-
-  const start = () => {
-    window.speechSynthesis?.cancel()
-    setListening(true)
-    setWords('')
-    void appRecognizer().start({
-      onReady: () => {},
-      onPartial: setWords,
-      onFinal: (text) => {
-        setListening(false)
-        setWords('')
-        const ask = useAskStore.getState()
-        const card = ask.pending ?? ask.lingering
-        if (card) {
-          const answer = spokenConfirmation(text, navigator.language.slice(0, 2).toLowerCase())
-          if (answer !== 'other') {
-            void ask.decide(answer === 'yes', ask.pending ? 'pending' : 'lingering')
-            return
-          }
-        }
-        if (text.trim()) void ask.send(text)
-      },
-      onError: (_code, message) => {
-        setListening(false)
-        toast.error(message || 'Voice input stopped.')
-      },
-    })
+/**
+ * Talk (6): the microphone stays on (3.7) and each pause sends what was said; with a card open a
+ * yes or no answers it (6.1). While an answer is read aloud it pauses; pressing it then stops the
+ * voice and listens at once.
+ */
+function MicButton() {
+  const status = useOpenMicStore((m) => (m.owner === 'ask' ? m.status : 'off'))
+  const on = status !== 'off'
+  const title = status === 'paused' ? 'Stop reading and listen' : on ? 'Turn off the microphone' : 'Turn on the microphone and talk'
+  const toggle = () => {
+    if (status === 'paused') stopSpeaking()
+    else if (on) stopOpenMic()
+    else startTalk()
   }
-
   return (
-    <div className="mb-2 flex items-center gap-2">
-      <button
-        type="button"
-        aria-pressed={listening}
-        onPointerDown={(e) => {
-          if (e.button !== 0) return
-          held.current = true
-          start()
-        }}
-        onPointerUp={() => {
-          if (held.current) appRecognizer().stop()
-          held.current = false
-        }}
-        onKeyDown={(e) => {
-          if ((e.key === ' ' || e.key === 'Enter') && !e.repeat && !listening) {
-            e.preventDefault()
-            start()
-          }
-        }}
-        onKeyUp={(e) => {
-          if (e.key === ' ' || e.key === 'Enter') appRecognizer().stop()
-        }}
-        className={cn(
-          'inline-flex min-h-8 items-center gap-2 rounded-control px-3 text-meta font-medium',
-          listening ? 'bg-accent-fill text-on-accent' : 'border border-[var(--border-color)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]',
-        )}
-      >
-        <Mic className="h-4 w-4" aria-hidden="true" />
-        {listening ? 'Listening… let go to send' : 'Hold to talk'}
-      </button>
-      {words && <span className="min-w-0 truncate text-caption text-[var(--text-secondary)]">{words}</span>}
-    </div>
+    <IconButton label="Microphone" title={title} pressed={on} onClick={toggle}>
+      <Mic className="h-4 w-4" />
+    </IconButton>
   )
 }
 
+/** What the open microphone hears, or why it waits. */
+function HeardLine() {
+  const { owner, status, words } = useOpenMicStore()
+  if (owner !== 'ask') return null
+  const text = words || (status === 'starting' ? 'Starting…' : status === 'paused' ? 'Reading the answer…' : 'Listening…')
+  return (
+    <p className="mb-2 flex items-start gap-2 text-caption" role="status" data-heard-line="">
+      <span className="relative mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden="true">
+        {status === 'listening' && <span className="vicu-voice-pulse absolute inset-0 rounded-full bg-accent-blue/25" />}
+        <Mic className="relative h-3.5 w-3.5 text-accent-blue" />
+      </span>
+      <span className={cn('min-w-0 break-words', words ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]')}>{text}</span>
+    </p>
+  )
+}

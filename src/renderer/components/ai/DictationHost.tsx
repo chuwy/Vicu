@@ -9,11 +9,13 @@ import { useDateFormat } from '@/hooks/use-date-format'
 import { useDeleteTask } from '@/hooks/use-task-mutations'
 import { useAddDrafts } from '@/hooks/use-add-drafts'
 import { api } from '@/lib/api'
-import { appRecognizer } from '@/lib/ai/recognizers'
-import { contextProjects, pathOf } from '@/lib/ai/workspace'
+import { cancelOpenMic, stopOpenMic, useOpenMicStore } from '@/lib/ai/open-mic'
+import { contextProjects, listInfoOf, pathOf } from '@/lib/ai/workspace'
 import { formatDateChip } from '@/lib/date-utils'
+import { toLocalDate } from '@/lib/due-dates'
 import { UNDO_TOAST_MS, toast, useToastStore } from '@/stores/toast-store'
-import { setDictationDeps, useDictationStore, type DraftCard } from '@/stores/dictation-store'
+import { setDictationDeps, useDictationStore, type DraftCard, type DictationPhase } from '@/stores/dictation-store'
+import { useVoiceListStore } from '@/stores/voice-list-store'
 import { instantOfLocal, type CheckedDraft } from '../../../shared/ai/dictation'
 import type { DraftField } from '../../../shared/ai/contract'
 import type { Task } from '@/lib/vikunja-types'
@@ -48,17 +50,24 @@ function droppedValue(value: unknown): string {
 
 /**
  * Smart dictation's draft cards (docs/ai-assistant-v1.md section 4): what the model made of the
- * words, checked, editable by hand and by voice, added in one go. Mounted once, in AppShell. Also
- * shows a transcript kept after a failed request (4.6) when the app starts.
+ * words, checked, editable by hand and by voice, added in one go. While the microphone is open
+ * (3.7) the panel shows the words being heard; each pause sends them, so cards appear and change
+ * while the person talks. Mounted once, in AppShell. Also shows a transcript kept after a failed
+ * request (4.6) when the app starts.
  */
 export function DictationHost() {
   const phase = useDictationStore((s) => s.phase)
   const ws = useAiWorkspace()
-  const wsRef = useRef(ws)
-  wsRef.current = ws
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const live = useRef({ ws, pathname })
+  live.current = { ws, pathname }
 
   useEffect(() => {
-    setDictationDeps({ workspace: () => wsRef.current, locale: () => navigator.language })
+    setDictationDeps({
+      workspace: () => live.current.ws,
+      locale: () => navigator.language,
+      list: () => listInfoOf(live.current.pathname, live.current.ws, useVoiceListStore.getState().defaults, toLocalDate),
+    })
     return () => setDictationDeps(null)
   }, [])
 
@@ -114,6 +123,9 @@ function DictationPanel() {
   const addAll = async () => {
     const drafts = useDictationStore.getState().cards.map((card) => card.draft)
     if (drafts.length === 0) return
+    // Add means done: the microphone and an edit still running stop here.
+    if (useOpenMicStore.getState().owner === 'dictation') cancelOpenMic()
+    useDictationStore.getState().cancelRequest()
     useDictationStore.getState().setPhase('adding')
     let parentTask: Task | null = null
     if (parent) {
@@ -153,8 +165,10 @@ function DictationPanel() {
     if (added) close(true)
   }
 
+  const micOn = useOpenMicStore((m) => m.owner === 'dictation')
   const heading = source === 'steps' && parent
     ? `Steps for “${parent.title}”`
+    : phase === 'live' ? (micOn ? 'Listening…' : 'Dictate tasks')
     : phase === 'requesting' ? 'Making tasks…'
     : phase === 'failed' ? 'The tasks could not be made'
     : phase === 'empty' ? 'Nothing to add'
@@ -174,7 +188,7 @@ function DictationPanel() {
         <header className="flex items-center gap-2 border-b border-[var(--border-color)] px-4 py-3">
           <Sparkles className="h-4 w-4 text-accent-blue" aria-hidden="true" />
           <h2 className="flex-1 text-card-title text-[var(--text-primary)]">{heading}</h2>
-          {phase === 'cards' && <EditByVoiceButton />}
+          {phase !== 'adding' && <MicToggle />}
           <button
             type="button"
             aria-label="Close"
@@ -186,6 +200,15 @@ function DictationPanel() {
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          {phase === 'live' && (
+            <div className="space-y-2">
+              <HeardLine phase={phase} />
+              <p className="text-caption text-[var(--text-secondary)]">
+                {micOn ? 'Pause and the tasks appear as cards; keep talking to add more or change them.' : 'Turn on the microphone to say your tasks.'}
+              </p>
+            </div>
+          )}
+
           {phase === 'requesting' && (
             <div className="flex items-start gap-2 text-meta text-[var(--text-secondary)]" role="status">
               <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
@@ -195,6 +218,7 @@ function DictationPanel() {
 
           {(phase === 'failed' || phase === 'empty') && (
             <div className="space-y-2">
+              <HeardLine phase={phase} />
               {phase === 'failed' && error && <p className="text-meta text-danger" role="alert">{error}</p>}
               {phase === 'empty' && <p className="text-meta text-[var(--text-secondary)]">The model found no tasks in what you said.</p>}
               <blockquote className="whitespace-pre-wrap break-words rounded-control border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-task-title text-[var(--text-primary)]">
@@ -206,12 +230,13 @@ function DictationPanel() {
 
           {(phase === 'cards' || phase === 'adding') && (
             <div className="space-y-3">
-              {edit.phase !== 'idle' && (
+              {edit.phase === 'requesting' && (
                 <p className="flex items-center gap-2 text-meta text-[var(--text-secondary)]" role="status">
-                  {edit.phase === 'requesting' ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Mic className="h-4 w-4" aria-hidden="true" />}
-                  <span>{edit.words || 'Say what to change…'}</span>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  <span>{edit.words}</span>
                 </p>
               )}
+              {phase === 'cards' && <HeardLine phase={phase} />}
               {edit.error && <p className="text-meta text-danger" role="alert">{edit.error}</p>}
               <ul className="space-y-2" aria-label="Tasks to add">
                 {cards.map((card) => (
@@ -233,10 +258,12 @@ function DictationPanel() {
               <Button variant="primary" onClick={() => useDictationStore.getState().retry()}>Retry</Button>
             </>
           )}
-          {phase === 'requesting' && <Button variant="quiet" onClick={() => close(true)}>Cancel</Button>}
+          {(phase === 'requesting' || phase === 'live') && <Button variant="quiet" onClick={() => close(true)}>Cancel</Button>}
+          {phase === 'live' && micOn && <Button variant="primary" onClick={() => stopOpenMic()}>Done</Button>}
           {(phase === 'cards' || phase === 'adding') && (
             <>
               <Button variant="quiet" onClick={() => close(true)}>Cancel</Button>
+              {micOn && phase === 'cards' && <Button variant="secondary" onClick={() => stopOpenMic()}>Done</Button>}
               <Button variant="primary" disabled={phase === 'adding' || cards.length === 0} onClick={() => void addAll()}>
                 {phase === 'adding' ? 'Adding…' : cards.length === 1 ? 'Add task' : `Add ${cards.length} tasks`}
               </Button>
@@ -259,60 +286,44 @@ function UnclearNotes({ notes }: { notes: readonly string[] }) {
   )
 }
 
-/** Holding the microphone with cards on screen records an instruction about them (4.4); a click latches. */
-function EditByVoiceButton() {
-  const edit = useDictationStore((s) => s.edit)
-  const listening = edit.phase === 'listening'
-  const heldRef = useRef(false)
-  const startedAt = useRef(0)
-
-  const start = () => {
-    if (useDictationStore.getState().edit.phase !== 'idle') return
-    startedAt.current = Date.now()
-    useDictationStore.getState().setEditListening('')
-    void appRecognizer().start({
-      onReady: () => {},
-      onPartial: (text) => useDictationStore.getState().setEditListening(text),
-      onFinal: (text) => useDictationStore.getState().editByVoice(text),
-      onError: (_code, message) => {
-        useDictationStore.getState().setEditListening(null)
-        toast.error(message || 'Voice input stopped.')
-      },
-    })
-  }
-
+/** The microphone of smart dictation (3.7): on, it listens until Done; each pause sends the words. */
+function MicToggle() {
+  const status = useOpenMicStore((m) => (m.owner === 'dictation' ? m.status : 'off'))
+  const on = status !== 'off'
   return (
     <button
       type="button"
-      aria-pressed={listening}
-      aria-label={listening ? 'Stop and change the tasks' : 'Change the tasks by voice'}
-      title="Hold to change the tasks by voice"
-      disabled={edit.phase === 'requesting'}
-      onPointerDown={(event) => {
-        if (event.button !== 0) return
-        heldRef.current = true
-        if (!listening) start()
-      }}
-      onPointerUp={() => {
-        if (!heldRef.current) return
-        heldRef.current = false
-        // A short press latches: listening goes on until the next click.
-        if (Date.now() - startedAt.current > 400) appRecognizer().stop()
-      }}
-      onClick={(event) => {
-        // Pointer presses are handled above; a keyboard press (Enter, Space) toggles.
-        if (event.detail !== 0) return
-        if (listening) appRecognizer().stop()
-        else start()
-      }}
+      aria-pressed={on}
+      aria-label="Microphone"
+      title={on ? 'Turn off the microphone (Done)' : 'Turn on the microphone to add or change tasks by voice'}
+      onClick={() => (on ? stopOpenMic() : useDictationStore.getState().listen())}
       className={cn(
-        'inline-flex h-7 items-center gap-1.5 rounded-control px-2 text-meta font-medium',
-        listening ? 'bg-accent-fill text-on-accent' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
+        'inline-flex h-7 w-7 items-center justify-center rounded-control',
+        on ? 'bg-accent-fill text-on-accent' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
       )}
     >
       <Mic className="h-4 w-4" aria-hidden="true" />
-      {listening ? 'Listening' : 'Change'}
     </button>
+  )
+}
+
+/** The words of the turn being heard (and those of a request that talking cancelled). */
+function HeardLine({ phase }: { phase: DictationPhase }) {
+  const { owner, status, words } = useOpenMicStore()
+  if (owner !== 'dictation') return null
+  const prompt = status === 'starting'
+    ? 'Starting…'
+    : phase === 'cards'
+      ? 'Keep talking to add tasks or change them: “make the first one Friday”'
+      : 'Say your tasks, like “Buy milk, and call the plumber on Friday”'
+  return (
+    <p className="flex items-start gap-2 text-meta" role="status" data-heard-line="">
+      <span className="relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+        {status === 'listening' && <span className="vicu-voice-pulse absolute inset-0 rounded-full bg-accent-blue/25" />}
+        <Mic className="relative h-4 w-4 text-accent-blue" />
+      </span>
+      <span className={cn('min-w-0 break-words', words ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]')}>{words || prompt}</span>
+    </p>
   )
 }
 

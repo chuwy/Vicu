@@ -50,7 +50,8 @@ describe('speech session', () => {
     }
     await session.stop()
     expect(events[0]).toEqual({ type: 'ready' })
-    expect(events.at(-1)).toEqual({ type: 'final', text: 'phrase 0 (1.4s) phrase 2 (1s)' })
+    // Pauses of 1 s are just short of a turn's end (31 windows of 32 ms): one turn.
+    expect(events.at(-1)).toEqual({ type: 'final', text: 'phrase 0 (1.4s) phrase 2 (1s)', turn: 'phrase 0 (1.4s) phrase 2 (1s)' })
     expect(log.filter((l) => l.startsWith('transcribe'))).toEqual(['transcribe 0 null Inbox.', 'transcribe 1 null Inbox.', 'transcribe 2 null Inbox.'])
     await engine.closeAll()
     expect(log.slice(-2)).toEqual(['model-close', 'vad-close'])
@@ -66,6 +67,46 @@ describe('speech session', () => {
     session.cancel()
     await session.stop()
     expect(events.map((e) => e.type)).toEqual(['ready'])
+    await engine.closeAll()
+  })
+
+  it('reports turns (3.7): speech, then the turn with its words once its phrases are transcribed', async () => {
+    const { native } = fakeNative([60, 1, 1])
+    const engine = new SpeechEngine(native, '/vad.bin')
+    const events: SpeechEvent[] = []
+    const session = new SpeechSession(engine, { modelPath: '/m.bin', engine: 0, language: 'auto', hint: null }, (e) => events.push(e))
+    session.start()
+    // One turn of two phrases (a 0.7 s pause between them), a pause that ends it, then a third phrase.
+    for (const part of [audio(1, true), audio(0.7, false), audio(1, true), audio(1.2, false), audio(0.6, true)]) {
+      for (let i = 0; i < part.length; i += 1600) session.addAudio(part.subarray(i, i + 1600))
+    }
+    await session.stop()
+    const summary = events.map((e) => (e.type === 'turn' ? `turn:${e.text}` : e.type === 'partial' ? `partial:${e.turn}` : e.type === 'final' ? `final:${e.turn}` : e.type))
+    expect(summary).toEqual([
+      'ready',
+      'speech',
+      'partial:phrase 0 (1.2s)',
+      'partial:phrase 0 (1.2s)',
+      'turn:phrase 0 (1.2s)',
+      'speech',
+      'partial:phrase 2 (0.8s)',
+      'final:phrase 2 (0.8s)',
+    ])
+    await engine.closeAll()
+  })
+
+  it('with an open microphone, 600 s count per turn: the turn ends and the recording goes on', async () => {
+    const { native } = fakeNative([])
+    const engine = new SpeechEngine(native, '/vad.bin')
+    const events: SpeechEvent[] = []
+    const session = new SpeechSession(engine, { modelPath: '/m.bin', engine: 0, language: 'auto', hint: null, openMic: true }, (e) => events.push(e))
+    session.start()
+    const minute = audio(60, true)
+    for (let i = 0; i < 11; i++) session.addAudio(minute)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(events.some((e) => e.type === 'turn')).toBe(true)
+    expect(events.some((e) => e.type === 'final')).toBe(false)
+    session.cancel()
     await engine.closeAll()
   })
 

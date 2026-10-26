@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { answerParts, askContextJson, askRefreshJson, needsContextRefresh, requestWindow, spokenText } from '../ask'
+import { answerParts, askContextJson, askRefreshJson, isStaleConversation, lastActivity, needsContextRefresh, requestWindow, spokenText } from '../ask'
+import { AI_LIMITS } from '../contract'
 import type { ChatMessage } from '../types'
+import { aiFixture } from './fixture'
 
 // docs/ai-assistant-v1.md section 5.1.
 describe('Ask context', () => {
@@ -17,6 +19,23 @@ describe('Ask context', () => {
     expect(needsContextRefresh('2026-10-06T10:00:00', '2026-10-06T10:31:00')).toBe(true)
     expect(needsContextRefresh('2026-10-06T23:59:00', '2026-10-07T00:01:00')).toBe(true)
     expect(askRefreshJson('2026-10-07T00:01:12')).toBe('{"now":"2026-10-07T00:01","weekday":"Wednesday"}')
+  })
+})
+
+describe('a conversation left idle', () => {
+  const minutes = aiFixture.limits.context_refresh_minutes as number
+  const at = (ms: number) => ({ at: ms, message: { role: 'user', text: 'hi' } as ChatMessage })
+
+  it('is counted from its last message, else from its last change', () => {
+    expect(lastActivity({ updatedAt: 9_000, messages: [at(1_000), at(5_000)] })).toBe(5_000)
+    expect(lastActivity({ updatedAt: 9_000, messages: [] })).toBe(9_000)
+  })
+
+  it('makes Ask start a new conversation after context_refresh_minutes', () => {
+    expect(AI_LIMITS.context_refresh_minutes).toBe(minutes)
+    const conversation = { updatedAt: 0, messages: [at(1_000)] }
+    expect(isStaleConversation(conversation, 1_000 + minutes * 60_000)).toBe(false)
+    expect(isStaleConversation(conversation, 1_000 + minutes * 60_000 + 1)).toBe(true)
   })
 })
 

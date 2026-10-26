@@ -7,6 +7,27 @@ the `!` today shortcut and the parser settings are the same as when typing. Andr
 their own voice paths (the `vicu-android` repo, `docs/voice-input.md` there); the reading of the
 text is the same.
 
+## Quick capture and smart dictation
+
+Everything below is **quick capture**: one task, read by quick add and added at once, with Undo.
+It never goes to the assistant's model, also with smart dictation on. With smart dictation on and
+ready (Settings, Assistant; `docs/ai-assistant.md`), a capture can be **locked** into smart
+dictation instead: the running recogniser and the words heard so far go to the dictation panel,
+the microphone stays open, and each pause sends what was said (`docs/ai-assistant-v1.md`
+sections 3.7 and 4). The lock is offered only while smart dictation is ready; otherwise the
+gestures behave as before.
+
+- **Slide up from a held +**: while holding, a small "Slide up to lock: smart dictation" chip shows
+  above the card; moving the pointer up by 60 px (`LOCK_UP_PX`, mirroring the 60 px slide down to
+  cancel) locks at once, and letting go afterwards changes nothing. Not while the cancel is armed.
+- **Tap the voice shortcut** (released within 300 ms): smart dictation instead of the latched quick
+  capture. Pressing the shortcut again is Done.
+- **"Dictate tasks"** in the command palette starts smart dictation directly.
+
+`stores/voice-store.ts` (`lock`, `latch`, `setVoiceLock`) does the handover; VoiceHost registers
+the lock while dictation is ready. With local speech the words of turns that ended before the lock
+are carried into the first request, and when nobody is talking at that moment they go out at once.
+
 ## Starting it
 
 - **Hold +.** Press and hold the + of a list (the header button or the "New task" row) for 400 ms.
@@ -21,7 +42,8 @@ text is the same.
   off until the user records one: there is no default combination, the field says "Not set", and
   Clear turns it off again. Hold it while Vicu is in front to talk and let go to add (push to
   talk). Tap it instead (released within 300 ms) and listening stays on until the shortcut is
-  pressed again, Enter, or the card's Add button; Esc cancels. Letting go of any key of the
+  pressed again, Enter, or the card's Add button; Esc cancels (with smart dictation ready, a tap
+  locks into smart dictation, above). Letting go of any key of the
   combination ends a hold, because macOS does not send the key-up of a letter while Command is
   down. `lib/voice/shortcut-hold.ts` is the state machine, `hooks/use-voice-shortcut.ts` feeds it
   window key events. Settings warns when the combination is also an enabled Quick Entry or Quick
@@ -94,8 +116,8 @@ packaged build (`npm run voice:helper && npx electron-builder --mac --dir`).
 
 ## Tests
 
-`lib/voice/__tests__/` (the press gesture, the shortcut hold, the text-to-task mapping and
-confirmation, the recognizer's session handling, the shortcut conflicts),
+`lib/voice/__tests__/` (the press gesture with the lock, the shortcut hold, the text-to-task
+mapping and confirmation, the recognizer's session handling, the shortcut conflicts),
 `lib/__tests__/accelerator.test.ts` and `src/main/__tests__/voice-helper.test.ts` (the line
 protocol and the helper session with a fake process). The helpers themselves are not run in
 tests; `vicu-speech-macos --check` prints availability without asking for anything.

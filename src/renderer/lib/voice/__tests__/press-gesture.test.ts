@@ -3,6 +3,7 @@ import {
   CANCEL_DISTANCE_PX,
   CANCEL_DOWN_PX,
   HOLD_MS,
+  LOCK_UP_PX,
   PRESS_IDLE,
   PRESS_SLOP_PX,
   pressStep,
@@ -113,6 +114,35 @@ describe('press gesture on +', () => {
       { type: 'up', at: 900 },
     ])
     expect(effects(steps)).toEqual(['none', 'start', 'none', 'add'])
+  })
+
+  it('sliding up to the lock hands the capture to smart dictation: letting go changes nothing', () => {
+    const steps = run([
+      { type: 'down', at: 0, x: 100, y: 100, lockable: true },
+      { type: 'tick', at: HOLD_MS },
+      { type: 'move', x: 104, y: 100 - LOCK_UP_PX + 1 },
+      { type: 'move', x: 104, y: 100 - LOCK_UP_PX },
+      { type: 'up', at: 1500 },
+    ])
+    expect(effects(steps)).toEqual(['none', 'start', 'none', 'lock', 'none'])
+    expect(steps[3].swallowClick).toBe(true)
+    expect(steps[3].state).toEqual(PRESS_IDLE)
+  })
+
+  it('there is no lock when smart dictation is not ready, and none while the cancel is armed', () => {
+    const plain = run([
+      { type: 'down', at: 0, x: 100, y: 100 },
+      { type: 'tick', at: HOLD_MS },
+      { type: 'move', x: 100, y: 100 - LOCK_UP_PX - 20 },
+      { type: 'up', at: 900 },
+    ])
+    expect(effects(plain)).toEqual(['none', 'start', 'none', 'add'])
+    const away = run([
+      { type: 'down', at: 0, x: 100, y: 100, lockable: true },
+      { type: 'tick', at: HOLD_MS },
+      { type: 'move', x: 100 + CANCEL_DISTANCE_PX, y: 100 - LOCK_UP_PX },
+    ])
+    expect(effects(away)).toEqual(['none', 'start', 'arm-cancel'])
   })
 
   it('Escape, a lost pointer or a blurred window cancels a hold', () => {

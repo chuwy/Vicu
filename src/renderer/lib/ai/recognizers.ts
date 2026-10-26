@@ -1,4 +1,4 @@
-import { createRecognizer, type RecognizerHandlers, type VoiceRecognizer } from '../voice/recognizer'
+import { createRecognizer, type RecognizerHandlers, type RecognizerStartOptions, type VoiceRecognizer } from '../voice/recognizer'
 import type { SpeechStartOptions } from '../../../shared/ai/types'
 import { createLocalRecognizer } from './local-recognizer'
 
@@ -12,11 +12,11 @@ export function createAutoRecognizer(platform: VoiceRecognizer, local: VoiceReco
   let active: VoiceRecognizer | null = null
   return {
     availability: async (force) => ((await useLocal().catch(() => false)) ? local.availability(force) : platform.availability(force)),
-    start: async (handlers: RecognizerHandlers) => {
+    start: async (handlers: RecognizerHandlers, options?: RecognizerStartOptions) => {
       const chosen = (await useLocal().catch(() => false)) ? local : platform
       if (active && active !== chosen) active.cancel()
       active = chosen
-      return chosen.start(handlers)
+      return chosen.start(handlers, options)
     },
     stop: () => active?.stop(),
     cancel: () => active?.cancel(),

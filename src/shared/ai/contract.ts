@@ -80,6 +80,12 @@ export interface VadSettings {
   max_phrase_s: number
 }
 
+/** The open microphone's turns (3.7). */
+export interface TurnSettings {
+  end_of_turn_ms: number
+  idle_s: number
+}
+
 export interface AskTool {
   name: string
   kind: 'read' | 'proposal'
@@ -132,6 +138,7 @@ export const PROBE = fixtureProbe as unknown as {
 export const SPEECH = fixtureSpeech as unknown as {
   audio: { sample_rate_hz: number; channels: number; bits: number; max_seconds: number }
   vad: VadSettings
+  turn: TurnSettings
   decode: {
     temperature: number
     temperature_fallback: boolean

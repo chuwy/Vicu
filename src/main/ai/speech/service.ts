@@ -174,6 +174,7 @@ export async function startSpeechSession(
     engine: model.engine === 'parakeet' ? VS_ENGINE_PARAKEET : VS_ENGINE_WHISPER,
     language,
     hint,
+    openMic: options.openMic === true,
   }, (event) => {
     send(id, sender, event)
     if ((event.type === 'final' || event.type === 'error') && active?.id === id) active = null

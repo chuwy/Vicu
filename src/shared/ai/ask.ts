@@ -5,7 +5,7 @@
  */
 import { AI_LIMITS } from './contract'
 import { weekdayName } from './dictation'
-import type { ChatMessage } from './types'
+import type { ChatMessage, StoredConversation } from './types'
 
 export interface AskListContext {
   name: string
@@ -45,6 +45,19 @@ export function needsContextRefresh(previous: string, now: string): boolean {
     return h * 60 + m
   }
   return toMinutes(now) - toMinutes(previous) > AI_LIMITS.context_refresh_minutes
+}
+
+/** When a conversation was last used: its last message, else its last change (ms since the epoch). */
+export function lastActivity(conversation: Pick<StoredConversation, 'updatedAt' | 'messages'>): number {
+  return conversation.messages[conversation.messages.length - 1]?.at ?? conversation.updatedAt
+}
+
+/**
+ * Ask opens on a new, empty conversation when the last one has been idle for more than
+ * `context_refresh_minutes`; the old one stays in the history.
+ */
+export function isStaleConversation(conversation: Pick<StoredConversation, 'updatedAt' | 'messages'>, nowMs: number): boolean {
+  return nowMs - lastActivity(conversation) > AI_LIMITS.context_refresh_minutes * 60_000
 }
 
 export function withContext(contextJson: string, text: string): string {

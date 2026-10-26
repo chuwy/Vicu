@@ -1,29 +1,37 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Download, Loader2, Pause, Trash2, XCircle } from 'lucide-react'
 import { Button } from '@/components/shared/Button'
 import { Switch } from '@/components/shared/Switch'
 import { Dialog } from '@/components/overlay/Dialog'
 import { cn } from '@/lib/cn'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import {
   AI_SETTINGS_QUERY_KEY,
   SPEECH_STATUS_QUERY_KEY,
+  useAiReady,
   useAiSettings,
   useSaveAiSettings,
   useSpeechStatus,
 } from '@/hooks/use-ai'
-import { useAskStore } from '@/stores/ask-store'
+import { startTalk, useAskStore } from '@/stores/ask-store'
+import { useDictationStore } from '@/stores/dictation-store'
 import { toast } from '@/stores/toast-store'
 import { PROVIDER_PRESETS, SPEECH, providerPreset } from '../../../shared/ai/contract'
 import {
+  canRunFeature,
   capabilitiesOf,
   consentKey,
   effectiveAddress,
+  featureNeeds,
+  featureProblem,
   hasConsent,
   isCleartextToRemoteHost,
   isSetUp,
+  untestedModels,
+  type ModelFeature,
 } from '../../../shared/ai/settings'
-import type { AiSettingsView, ConnectionTestResult, SpeechDownloadProgress } from '../../../shared/ai/types'
+import type { AiSettingsPatch, AiSettingsView, ConnectionTestResult, SpeechDownloadProgress } from '../../../shared/ai/types'
 
 const CARD = 'rounded-card border border-[var(--border-color)] bg-[var(--bg-primary)] p-5'
 const INPUT = 'w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]'
@@ -41,25 +49,138 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Settings, Assistant (docs/ai-assistant-v1.md sections 2, 3 and 7): the provider, its address and
- * key, the models per feature, Test connection, the feature switches, the consent sheet, and local
- * speech's models. Everything here belongs to this device: it is not synced and stays when you sign
- * out; the key is kept by the main process in the system's secret store and never shown again.
+ * Settings, Assistant (docs/ai-assistant-v1.md sections 2, 3 and 7), in the two halves the
+ * assistant has: Thinking (the provider, its address and key, the model, Test connection, the
+ * consent sheet) and Hearing (local speech's models). Between them the features, each with where
+ * to find it and Try it. A model is tested by itself once it is chosen and requests can go out, and
+ * when a feature that needs it is turned on. Everything here belongs to this device: it is not
+ * synced and stays when you sign out; the key is kept by the main process in the system's secret
+ * store and never shown again.
  */
 export function AssistantSettings() {
   const { data: settings } = useAiSettings()
+  const tests = useModelTests(settings)
   if (!settings) return null
   return (
     <>
-      <ProviderCard settings={settings} />
-      <ModelsCard settings={settings} />
+      <ThinkingCard settings={settings} tests={tests} />
+      <FeaturesCard settings={settings} tests={tests} />
       <SpeechCard settings={settings} />
       <PrivacyCard />
+      {tests.consentDialog}
     </>
   )
 }
 
-function ProviderCard({ settings }: { settings: AiSettingsView }) {
+type TestOutcome = ConnectionTestResult | string
+
+interface ConsentRequest {
+  view: AiSettingsView
+  agree: () => void
+  cancel: () => void
+}
+
+interface ModelTests {
+  /** Models whose test is running. */
+  testing: ReadonlySet<string>
+  /** The latest result per model while Settings is open. */
+  results: Record<string, TestOutcome>
+  /** Tests these models (asking for consent first, 7.1); null when the user did not agree. */
+  run: (view: AiSettingsView, models: string[]) => Promise<Record<string, TestOutcome> | null>
+  /** After a model, key, address or provider was saved: tests the models in use that have no result yet. */
+  testUntested: (view: AiSettingsView) => void
+  /** Runs `action` once the user agreed to send data to this provider; a local server skips it. */
+  withConsent: (view: AiSettingsView, action: () => void, onCancel?: () => void) => void
+  consentDialog: React.ReactNode
+}
+
+/** Test connection for Settings: one run per model at a time, the results kept for the cards. */
+function useModelTests(settings: AiSettingsView | undefined): ModelTests {
+  const save = useSaveAiSettings()
+  const qc = useQueryClient()
+  const [testing, setTesting] = useState<ReadonlySet<string>>(new Set())
+  const [results, setResults] = useState<Record<string, TestOutcome>>({})
+  const [consent, setConsent] = useState<ConsentRequest | null>(null)
+  /** The question on screen, mirrored so a newer one can answer the older with a cancel. */
+  const asking = useRef<ConsentRequest | null>(null)
+  const running = useRef(new Map<string, Promise<TestOutcome>>())
+
+  const testOne = (model: string): Promise<TestOutcome> => {
+    const current = running.current.get(model)
+    if (current) return current
+    const promise = window.api.ai.testConnection(model)
+      .then((result): TestOutcome => (result.success ? result.data : result.error.message))
+      .catch((err: unknown): TestOutcome => (err instanceof Error ? err.message : 'The test failed.'))
+      .then(async (outcome) => {
+        running.current.delete(model)
+        setTesting(new Set(running.current.keys()))
+        setResults((all) => ({ ...all, [model]: outcome }))
+        await qc.invalidateQueries({ queryKey: AI_SETTINGS_QUERY_KEY })
+        return outcome
+      })
+    running.current.set(model, promise)
+    setTesting(new Set(running.current.keys()))
+    return promise
+  }
+
+  const ask = (next: ConsentRequest | null) => {
+    asking.current = next
+    setConsent(next)
+  }
+
+  const withConsent = (view: AiSettingsView, action: () => void, onCancel: () => void = () => {}) => {
+    if (hasConsent(view)) {
+      action()
+      return
+    }
+    asking.current?.cancel()
+    ask({ view, agree: action, cancel: onCancel })
+  }
+
+  const run = (view: AiSettingsView, models: string[]) => new Promise<Record<string, TestOutcome> | null>((resolve) => {
+    const wanted = [...new Set(models.map((m) => m.trim()).filter(Boolean))]
+    withConsent(view, () => {
+      void (async () => {
+        const out: Record<string, TestOutcome> = {}
+        for (const model of wanted) out[model] = await testOne(model)
+        resolve(out)
+      })()
+    }, () => resolve(null))
+  })
+
+  const preset = consent?.view.provider ? providerPreset(consent.view.provider) : undefined
+  const consentDialog = (
+    <ConsentDialog
+      open={consent !== null}
+      providerName={preset?.name ?? 'the provider'}
+      onCancel={() => {
+        consent?.cancel()
+        ask(null)
+      }}
+      onAgree={async () => {
+        const pending = consent
+        ask(null)
+        if (!pending) return
+        await save({ consented: [...new Set([...(settings?.consented ?? pending.view.consented), consentKey(pending.view)])] })
+        pending.agree()
+      }}
+    />
+  )
+
+  return {
+    testing,
+    results,
+    run,
+    testUntested: (view) => {
+      const models = untestedModels(view, view.hasKey)
+      if (models.length > 0) void run(view, models)
+    },
+    withConsent,
+    consentDialog,
+  }
+}
+
+function ThinkingCard({ settings, tests }: { settings: AiSettingsView; tests: ModelTests }) {
   const save = useSaveAiSettings()
   const qc = useQueryClient()
   const preset = settings.provider ? providerPreset(settings.provider) : undefined
@@ -68,18 +189,21 @@ function ProviderCard({ settings }: { settings: AiSettingsView }) {
   const [showKey, setShowKey] = useState(false)
   useEffect(() => setAddress(settings.address), [settings.address, settings.provider])
 
+  // One model for everything by default: the preset's dictation suggestion (the quicker one).
   const chooseProvider = async (id: string) => {
     const next = providerPreset(id)
     if (!next) {
       await save({ provider: null })
       return
     }
-    await save({
+    const model = next.suggested.dictation ?? next.suggested.ask ?? ''
+    const view = await save({
       provider: next.id,
       address: next.address ?? '',
-      models: { dictation: next.suggested.dictation ?? '', ask: next.suggested.ask ?? '' },
+      models: { dictation: model, ask: model },
       features: { dictation: false, ask: false, talk: false },
     })
+    tests.testUntested(view)
   }
 
   const saveKey = async (value: string | null) => {
@@ -87,6 +211,7 @@ function ProviderCard({ settings }: { settings: AiSettingsView }) {
     qc.setQueryData(AI_SETTINGS_QUERY_KEY, view)
     setKey('')
     toast.success(value ? 'Key saved' : 'Key removed')
+    if (value) tests.testUntested(view)
   }
 
   const shownAddress = preset?.addressEditable ? address : effectiveAddress(settings)
@@ -94,9 +219,12 @@ function ProviderCard({ settings }: { settings: AiSettingsView }) {
 
   return (
     <section className={CARD} aria-labelledby="ai-provider-heading">
-      <h2 id="ai-provider-heading" className="mb-1 text-sm font-semibold text-[var(--text-primary)]">Assistant</h2>
-      <p className="mb-4 text-xs text-[var(--text-secondary)]">
-        Bring your own model for smart dictation, Ask and Talk. Requests go straight from this computer to the provider you choose, with your key; Vicu has no server in between and shows no prices.
+      <h2 id="ai-provider-heading" className="mb-1 text-sm font-semibold text-[var(--text-primary)]">Thinking</h2>
+      <p className="text-xs text-[var(--text-primary)]">
+        The model that turns your words into tasks and answers your questions. It runs at your provider.
+      </p>
+      <p className="mb-4 mt-1 text-xs text-[var(--text-secondary)]">
+        Requests go straight from this computer to the provider you choose, with your key; Vicu has no server in between and shows no prices.
       </p>
       <div className="space-y-3">
         <div>
@@ -123,7 +251,7 @@ function ProviderCard({ settings }: { settings: AiSettingsView }) {
                 disabled={!preset.addressEditable}
                 placeholder="https://example.com/v1"
                 onChange={(e) => setAddress(e.target.value)}
-                onBlur={() => { if (preset.addressEditable && address !== settings.address) void save({ address }) }}
+                onBlur={() => { if (preset.addressEditable && address !== settings.address) void save({ address }).then(tests.testUntested) }}
                 className={cn(INPUT, !preset.addressEditable && 'text-[var(--text-secondary)]')}
               />
               {warn && (
@@ -163,6 +291,8 @@ function ProviderCard({ settings }: { settings: AiSettingsView }) {
                 Kept in this computer’s secret store, like your Vikunja sign-in. It is never synced or shown again.
               </p>
             </div>
+
+            <ModelFields settings={settings} tests={tests} />
           </>
         )}
       </div>
@@ -170,154 +300,246 @@ function ProviderCard({ settings }: { settings: AiSettingsView }) {
   )
 }
 
-function ModelsCard({ settings }: { settings: AiSettingsView }) {
+/**
+ * The model: one for dictation and Ask (`models.dictation` and `models.ask` the same), unless "Use a
+ * different model for Ask" is on. A stored Ask model that differs shows the switch on; turning it
+ * off gives Ask the main model again. A saved model without a test result is tested at once.
+ */
+function ModelFields({ settings, tests }: { settings: AiSettingsView; tests: ModelTests }) {
   const save = useSaveAiSettings()
-  const qc = useQueryClient()
   const preset = settings.provider ? providerPreset(settings.provider) : undefined
   const [models, setModels] = useState<string[] | null>(null)
   const [loadingModels, setLoadingModels] = useState(false)
   const [modelError, setModelError] = useState<string | null>(null)
-  const [testing, setTesting] = useState(false)
-  const [results, setResults] = useState<Record<string, ConnectionTestResult | string>>({})
-  const [consentFor, setConsentFor] = useState<null | (() => void)>(null)
-  const [dictationModel, setDictationModel] = useState(settings.models.dictation)
+  const [mainModel, setMainModel] = useState(settings.models.dictation)
   const [askModel, setAskModel] = useState(settings.models.ask)
+  const [separate, setSeparate] = useState(settings.models.ask !== settings.models.dictation)
   const listId = useId()
   // Each field follows its own saved value only, so saving one never clears what is being typed in the other.
-  useEffect(() => setDictationModel(settings.models.dictation), [settings.models.dictation])
+  useEffect(() => setMainModel(settings.models.dictation), [settings.models.dictation])
   useEffect(() => setAskModel(settings.models.ask), [settings.models.ask])
+  useEffect(() => {
+    if (settings.models.ask !== settings.models.dictation) setSeparate(true)
+  }, [settings.models.ask, settings.models.dictation])
 
   if (!preset) return null
   const setUp = isSetUp(settings, settings.hasKey)
+  const askInUse = separate ? askModel : mainModel
 
-  /** Runs `action` once the user agreed to send data to this provider (7.1); a local server skips it. */
-  const withConsent = (action: () => void) => {
-    if (hasConsent(settings)) action()
-    else setConsentFor(() => action)
+  const saveModels = (patch: AiSettingsPatch['models']) => void save({ models: patch }).then(tests.testUntested)
+
+  const saveMain = () => {
+    const model = mainModel.trim()
+    if (model === settings.models.dictation && (separate || model === settings.models.ask)) return
+    saveModels(separate ? { dictation: model } : { dictation: model, ask: model })
   }
 
-  const loadModels = () => withConsent(async () => {
-    setLoadingModels(true)
-    setModelError(null)
-    const result = await window.api.ai.listModels()
-    setLoadingModels(false)
-    if (result.success) setModels(result.data)
-    else setModelError(result.error.message)
+  const chooseSeparate = (on: boolean) => {
+    setSeparate(on)
+    if (!on && settings.models.ask !== settings.models.dictation) saveModels({ ask: settings.models.dictation })
+  }
+
+  const loadModels = () => tests.withConsent(settings, () => {
+    void (async () => {
+      setLoadingModels(true)
+      setModelError(null)
+      const result = await window.api.ai.listModels()
+      setLoadingModels(false)
+      if (result.success) setModels(result.data)
+      else setModelError(result.error.message)
+    })()
   })
 
-  const test = () => withConsent(async () => {
-    setTesting(true)
-    const next: Record<string, ConnectionTestResult | string> = {}
-    for (const model of [...new Set([dictationModel, askModel].map((m) => m.trim()).filter(Boolean))]) {
-      const result = await window.api.ai.testConnection(model)
-      next[model] = result.success ? result.data : result.error.message
-    }
-    setResults(next)
-    setTesting(false)
-    await qc.invalidateQueries({ queryKey: AI_SETTINGS_QUERY_KEY })
-  })
+  const shownModels = [...new Set([mainModel, askInUse].map((m) => m.trim()).filter(Boolean))]
+  const testing = shownModels.filter((model) => tests.testing.has(model))
 
-  const dictationCaps = capabilitiesOf(settings, settings.models.dictation)
-  const askCaps = capabilitiesOf(settings, settings.models.ask)
-  const canDictate = !!dictationCaps?.structured
-  const canAsk = !!askCaps?.structured && !!askCaps?.tools
+  const askSuggestion = preset.suggested.ask && preset.suggested.ask !== mainModel.trim() ? preset.suggested.ask : null
 
   return (
-    <section className={CARD} aria-labelledby="ai-models-heading">
-      <h2 id="ai-models-heading" className="mb-4 text-sm font-semibold text-[var(--text-primary)]">Models</h2>
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" disabled={!setUp || loadingModels} onClick={loadModels}>
-            {loadingModels ? 'Loading…' : 'Load models'}
-          </Button>
-          {models && <span className="text-xs text-[var(--text-secondary)]">{models.length} models</span>}
-          {modelError && <span className="text-xs text-danger">{modelError} You can still type a model name.</span>}
-        </div>
-        <datalist id={listId}>{(models ?? []).map((m) => <option key={m} value={m} />)}</datalist>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={LABEL} htmlFor="ai-model-dictation">Dictation model</label>
-            <input
-              id="ai-model-dictation"
-              list={listId}
-              value={dictationModel}
-              placeholder={preset.suggested.dictation ?? 'Model name'}
-              onChange={(e) => setDictationModel(e.target.value)}
-              onBlur={() => { if (dictationModel !== settings.models.dictation) void save({ models: { dictation: dictationModel.trim() } }) }}
-              className={INPUT}
-            />
-          </div>
-          <div>
-            <label className={LABEL} htmlFor="ai-model-ask">Ask and Talk model</label>
-            <input
-              id="ai-model-ask"
-              list={listId}
-              value={askModel}
-              placeholder={preset.suggested.ask ?? 'Model name'}
-              onChange={(e) => setAskModel(e.target.value)}
-              onBlur={() => { if (askModel !== settings.models.ask) void save({ models: { ask: askModel.trim() } }) }}
-              className={INPUT}
-            />
-          </div>
-        </div>
-
-        <div>
-          <Button variant="primary" disabled={!setUp || testing || (!dictationModel.trim() && !askModel.trim())} onClick={test}>
-            {testing ? 'Testing…' : 'Test connection'}
-          </Button>
-          {!setUp && <p className="mt-1 text-xs text-[var(--text-secondary)]">{preset.key === 'required' && !settings.hasKey ? 'Save a key first.' : 'Enter an address first.'}</p>}
-          {Object.entries(results).map(([model, result]) => <TestResult key={model} model={model} result={result} />)}
-        </div>
-
-        <div className="space-y-2 border-t border-[var(--border-color)] pt-3">
-          <FeatureSwitch
-            label="Smart dictation"
-            hint={canDictate ? 'Speak or paste several tasks at once; check them on cards before they are added.' : 'Needs a dictation model that passed Test connection.'}
-            checked={settings.features.dictation && canDictate}
-            disabled={!canDictate}
-            onChange={(on) => void save({ features: { dictation: on } })}
-          />
-          <FeatureSwitch
-            label="Ask"
-            hint={canAsk ? 'Chat with your tasks (Mod+J). Changes are proposed on cards you apply.' : 'Needs a model that gave a structured answer and called the test tool.'}
-            checked={settings.features.ask && canAsk}
-            disabled={!canAsk}
-            onChange={(on) => void save({ features: { ask: on } })}
-          />
-          <FeatureSwitch
-            label="Talk"
-            hint="Ask by voice: hold to talk in Ask; answers are read aloud with the system voice."
-            checked={settings.features.talk && settings.features.ask && canAsk}
-            disabled={!canAsk || !settings.features.ask}
-            onChange={(on) => void save({ features: { talk: on } })}
-          />
-        </div>
+    <div className="space-y-3 border-t border-[var(--border-color)] pt-3">
+      <div className="flex items-center gap-2">
+        <Button variant="secondary" disabled={!setUp || loadingModels} onClick={loadModels}>
+          {loadingModels ? 'Loading…' : 'Load models'}
+        </Button>
+        {models && <span className="text-xs text-[var(--text-secondary)]">{models.length} models</span>}
+        {modelError && <span className="text-xs text-danger">{modelError} You can still type a model name.</span>}
       </div>
+      <datalist id={listId}>{(models ?? []).map((m) => <option key={m} value={m} />)}</datalist>
+      <div>
+        <label className={LABEL} htmlFor="ai-model">Model</label>
+        <input
+          id="ai-model"
+          list={listId}
+          value={mainModel}
+          placeholder={preset.suggested.dictation ?? preset.suggested.ask ?? 'Model name'}
+          onChange={(e) => setMainModel(e.target.value)}
+          onBlur={saveMain}
+          className={INPUT}
+        />
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+          {separate ? 'Used for smart dictation.' : 'Used for smart dictation, Ask and Talk.'}
+        </p>
+      </div>
+      <label className="flex items-center justify-between gap-4">
+        <span className="text-sm text-[var(--text-primary)]">Use a different model for Ask</span>
+        <Switch checked={separate} onCheckedChange={chooseSeparate} />
+      </label>
+      {separate && (
+        <div>
+          <label className={LABEL} htmlFor="ai-model-ask">Ask model</label>
+          <input
+            id="ai-model-ask"
+            list={listId}
+            value={askModel}
+            placeholder={preset.suggested.ask ?? 'Model name'}
+            onChange={(e) => setAskModel(e.target.value)}
+            onBlur={() => { if (askModel.trim() !== settings.models.ask) saveModels({ ask: askModel.trim() }) }}
+            className={INPUT}
+          />
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Used for Ask and Talk.{askSuggestion ? ` Suggested: ${askSuggestion}.` : ''}
+          </p>
+        </div>
+      )}
 
-      <ConsentDialog
-        open={consentFor !== null}
-        providerName={preset.name}
-        onCancel={() => setConsentFor(null)}
-        onAgree={async () => {
-          const action = consentFor
-          setConsentFor(null)
-          await save({ consented: [...new Set([...settings.consented, consentKey(settings)])] })
-          action?.()
-        }}
-      />
+      <div>
+        <Button variant="primary" disabled={!setUp || testing.length > 0 || shownModels.length === 0} onClick={() => void tests.run(settings, shownModels)}>
+          {testing.length > 0 ? 'Testing…' : 'Test connection'}
+        </Button>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]" role="status">
+          {!setUp
+            ? (preset.key === 'required' && !settings.hasKey ? 'Save a key first.' : 'Enter an address first.')
+            : testing.length > 0 ? `Testing ${testing.join(' and ')}…` : 'A model is tested by itself once you choose it.'}
+        </p>
+        {shownModels.filter((model) => tests.results[model] !== undefined).map((model) => <TestResult key={model} model={model} result={tests.results[model]} />)}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The features, each with where to find it and Try it (on once it can run). Turning one on whose
+ * model has no passing test result tests it first and turns it on when it passes; a model that
+ * cannot run it says why, and turning it on again tests again (a model that could not be reached
+ * is stored as unable). Quick capture (hold + and let go) needs none of them and is never sent to
+ * the model.
+ */
+function FeaturesCard({ settings, tests }: { settings: AiSettingsView; tests: ModelTests }) {
+  const save = useSaveAiSettings()
+  const ready = useAiReady()
+  const preset = settings.provider ? providerPreset(settings.provider) : undefined
+  const setUp = isSetUp(settings, settings.hasKey)
+  const askKeys = shortcutHint('Mod+J', window.api.platform === 'darwin')
+
+  const stateOf = (feature: ModelFeature) => {
+    const model = (feature === 'dictation' ? settings.models.dictation : settings.models.ask).trim()
+    const caps = capabilitiesOf(settings, model)
+    const result = model ? tests.results[model] : undefined
+    const can = canRunFeature(feature, caps)
+    let blocked: string | null = null
+    if (!preset) blocked = 'Choose a provider under Thinking first.'
+    else if (!setUp) blocked = preset.key === 'required' && !settings.hasKey ? 'Save a key under Thinking first.' : 'Enter an address under Thinking first.'
+    else if (!model) blocked = 'Choose a model under Thinking first.'
+    const testing = model !== '' && tests.testing.has(model)
+    let problem: string | null = null
+    if (!blocked && !testing) {
+      if (caps && !can) problem = (result !== undefined ? featureProblem(feature, result) : null) ?? featureNeeds(feature, caps)
+      // The test could not run at all (a refused key): the model stays untested.
+      else if (!caps && typeof result === 'string') problem = featureProblem(feature, result)
+    }
+    return { model, can, blocked, testing, problem }
+  }
+
+  /** On: at once when the model can run it, else after its test passes. */
+  const turnOn = async (feature: ModelFeature, patch: AiSettingsPatch['features']) => {
+    const state = stateOf(feature)
+    if (state.can) {
+      await save({ features: patch })
+      return
+    }
+    const outcome = await tests.run(settings, [state.model])
+    const result = outcome?.[state.model]
+    if (result !== undefined && featureProblem(feature, result) === null) await save({ features: patch })
+  }
+
+  const dictation = stateOf('dictation')
+  const ask = stateOf('ask')
+  const talkBlocked = ask.blocked ?? (!settings.features.ask || !ask.can ? 'Turn on Ask first.' : null)
+
+  return (
+    <section className={CARD} aria-labelledby="ai-features-heading">
+      <h2 id="ai-features-heading" className="mb-1 text-sm font-semibold text-[var(--text-primary)]">Features</h2>
+      <p className="mb-3 text-xs text-[var(--text-secondary)]">
+        Holding + (or the voice shortcut) and letting go always adds one task at once, without the model.
+      </p>
+      <div className="space-y-3">
+        <FeatureRow
+          label="Smart dictation"
+          how="Tap the voice shortcut, or hold + and slide up to the lock, then keep talking: tasks appear as cards while you talk. Also Break into steps (right-click a task) and Make tasks from text (command palette)."
+          blocked={dictation.blocked}
+          testing={dictation.testing ? dictation.model : null}
+          problem={dictation.problem}
+          checked={settings.features.dictation && dictation.can}
+          onChange={(on) => void (on ? turnOn('dictation', { dictation: true }) : save({ features: { dictation: false } }))}
+          onTry={ready.dictation ? () => useDictationStore.getState().startLive() : null}
+        />
+        <FeatureRow
+          label="Ask"
+          how={`Press the Ask button next to Search, or ${askKeys}. Changes are proposed on cards you apply.`}
+          blocked={ask.blocked}
+          testing={ask.testing ? ask.model : null}
+          problem={ask.problem}
+          checked={settings.features.ask && ask.can}
+          onChange={(on) => void (on ? turnOn('ask', { ask: true }) : save({ features: { ask: false } }))}
+          onTry={ready.ask ? () => useAskStore.getState().setOpen(true) : null}
+        />
+        <FeatureRow
+          label="Talk"
+          how="Turn on the microphone in Ask and just talk; answers are read aloud and it keeps listening."
+          blocked={talkBlocked}
+          testing={null}
+          problem={null}
+          checked={settings.features.talk && settings.features.ask && ask.can}
+          onChange={(on) => void save({ features: { talk: on } })}
+          onTry={ready.talk ? () => startTalk() : null}
+        />
+      </div>
     </section>
   )
 }
 
-function FeatureSwitch({ label, hint, checked, disabled, onChange }: { label: string; hint: string; checked: boolean; disabled: boolean; onChange: (on: boolean) => void }) {
+interface FeatureRowProps {
+  label: string
+  how: string
+  /** Why it cannot be turned on, or null. */
+  blocked: string | null
+  /** The model being tested for it, or null. */
+  testing: string | null
+  /** Why its model cannot run it, or why the test could not run; turning it on tests again. */
+  problem: string | null
+  checked: boolean
+  onChange: (on: boolean) => void
+  /** Opens the feature; null while it cannot run. */
+  onTry: (() => void) | null
+}
+
+function FeatureRow({ label, how, blocked, testing, problem, checked, onChange, onTry }: FeatureRowProps) {
   return (
-    <label className="flex items-start justify-between gap-4">
-      <span>
-        <span className={cn('block text-sm', disabled ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]')}>{label}</span>
-        <span className="block text-xs text-[var(--text-secondary)]">{hint}</span>
-      </span>
-      <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} />
-    </label>
+    <div className="flex items-start justify-between gap-4" data-feature={label}>
+      <div className="min-w-0">
+        <p className={cn('text-sm', blocked ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]')}>{label}</p>
+        <p className="text-xs text-[var(--text-secondary)]">{how}</p>
+        <p role="status" className={cn('text-xs', problem && !testing && !blocked ? 'text-danger' : 'text-[var(--text-secondary)]')}>
+          {testing ? (
+            <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Testing {testing}…</span>
+          ) : blocked ?? problem}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {onTry && <Button variant="secondary" aria-label={`Try ${label}`} onClick={onTry}>Try it</Button>}
+        <Switch aria-label={label} checked={checked} disabled={blocked !== null || testing !== null} onCheckedChange={onChange} />
+      </div>
+    </div>
   )
 }
 
@@ -383,9 +605,12 @@ function SpeechCard({ settings }: { settings: AiSettingsView }) {
 
   return (
     <section className={CARD} aria-labelledby="ai-speech-heading">
-      <h2 id="ai-speech-heading" className="mb-1 text-sm font-semibold text-[var(--text-primary)]">Speech on this computer</h2>
-      <p className="mb-3 text-xs text-[var(--text-secondary)]">
-        With a speech model downloaded, voice input, dictation and Talk turn speech into text on this computer; audio never leaves it. Without one, the system recogniser is used{window.api.platform === 'linux' ? ' (Linux has none)' : ''}.
+      <h2 id="ai-speech-heading" className="mb-1 text-sm font-semibold text-[var(--text-primary)]">Hearing</h2>
+      <p className="text-xs text-[var(--text-primary)]">
+        Turns your voice into text on this computer; audio never leaves it. Without a downloaded model, the system’s speech recognition is used{window.api.platform === 'linux' ? ' (Linux has none)' : ''}.
+      </p>
+      <p className="mb-3 mt-1 text-xs text-[var(--text-secondary)]">
+        Used by every voice feature: quick capture, smart dictation and Talk. Only the text goes to the model under Thinking.
       </p>
       {status && !status.engine && (
         <p className="mb-3 text-xs text-danger">Local speech is not part of this build of Vicu.</p>

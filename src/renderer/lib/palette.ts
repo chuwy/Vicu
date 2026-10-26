@@ -4,7 +4,7 @@ import type { Label, Project, Task } from './vikunja-types'
 // What the command palette lists and how a query picks from it. Pure: the component turns an
 // action into a navigation or a change.
 
-export type PaletteCommand = 'new-task' | 'voice' | 'ask' | 'make-tasks' | 'refresh' | 'toggle-theme' | 'settings'
+export type PaletteCommand = 'new-task' | 'voice' | 'dictate' | 'ask' | 'make-tasks' | 'refresh' | 'toggle-theme' | 'settings'
 
 export type PaletteAction =
   | { type: 'command'; command: PaletteCommand }
@@ -40,7 +40,9 @@ export function buildPaletteItems({ smartLists, projects, labels }: PaletteSourc
     { id: 'cmd:new-task', kind: 'Action', title: 'New task', keywords: 'add create', action: { type: 'command', command: 'new-task' } },
     // Voice input that needs no holding (docs/voice-input.md): listening until Enter, Esc cancels.
     { id: 'cmd:voice', kind: 'Action', title: 'Say a task', keywords: 'voice dictate speak speech microphone add', action: { type: 'command', command: 'voice' } },
-    // The AI assistant (docs/ai-assistant-v1.md): Ask, and dictation's "Make tasks from this".
+    // The AI assistant (docs/ai-assistant-v1.md): smart dictation with the microphone open, Ask,
+    // and dictation's "Make tasks from this".
+    { id: 'cmd:dictate', kind: 'Action', title: 'Dictate tasks', keywords: 'assistant ai voice smart dictation speak several microphone', action: { type: 'command', command: 'dictate' } },
     { id: 'cmd:ask', kind: 'Action', title: 'Ask Vicu', keywords: 'assistant ai chat question talk', action: { type: 'command', command: 'ask' } },
     { id: 'cmd:make-tasks', kind: 'Action', title: 'Make tasks from text', keywords: 'assistant ai paste notes email split', action: { type: 'command', command: 'make-tasks' } },
     { id: 'cmd:refresh', kind: 'Action', title: 'Refresh', keywords: 'reload sync update', action: { type: 'command', command: 'refresh' } },

@@ -7,7 +7,8 @@ import { isAcceleratorKey, matchesAccelerator, type KeyLike, type ParsedAccelera
 //   adds the task (push to talk).
 // - Tap it (let go within TAP_MAX_MS): listening stays on ("latched") until the shortcut is
 //   pressed again or Enter adds, or Escape cancels. Nothing has to be held, so it also works for
-//   someone who cannot hold keys.
+//   someone who cannot hold keys. With smart dictation ready the hook turns the latch into smart
+//   dictation instead (hooks/use-voice-shortcut.ts).
 // - Escape cancels in either mode. A window that loses focus while the keys are held cancels (the
 //   key-up will never arrive); a latched session keeps listening.
 

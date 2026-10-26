@@ -4,7 +4,7 @@
  * which features can run). Used by the main process, which owns them, and by Settings.
  */
 import { providerPreset, speechModel, type ProviderId } from './contract'
-import type { AiSettings, ModelCapabilities } from './types'
+import type { AiSettings, ConnectionTestResult, ModelCapabilities } from './types'
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   provider: null,
@@ -146,4 +146,47 @@ export function readyFeatures(settings: AiSettings, hasKey: boolean): { dictatio
   const askCaps = capabilitiesOf(settings, settings.models.ask)
   const ask = base && settings.features.ask && !!askCaps?.structured && askCaps.tools
   return { dictation, ask, talk: ask && settings.features.talk }
+}
+
+/** What a feature runs on: smart dictation, or Ask (Talk is Ask by voice). */
+export type ModelFeature = 'dictation' | 'ask'
+
+/** The models the features use, each once: the main (dictation) model, then Ask's when it differs. */
+export function modelsInUse(settings: Pick<AiSettings, 'models'>): string[] {
+  return [...new Set([settings.models.dictation, settings.models.ask].map((model) => model.trim()).filter(Boolean))]
+}
+
+/**
+ * The models in use that have no Test connection result yet, while requests can go out (set up,
+ * key saved or not needed). Settings tests these by itself after a model or a key is saved.
+ */
+export function untestedModels(settings: AiSettings, hasKey: boolean): string[] {
+  if (!isSetUp(settings, hasKey)) return []
+  return modelsInUse(settings).filter((model) => !capabilitiesOf(settings, model))
+}
+
+/** Whether a tested model can run the feature. */
+export function canRunFeature(feature: ModelFeature, caps: ModelCapabilities | undefined): boolean {
+  if (!caps?.structured) return false
+  return feature === 'dictation' || caps.tools
+}
+
+/** The plain reason a model cannot run a feature, when the test gave no text of its own. */
+export function featureNeeds(feature: ModelFeature, caps?: ModelCapabilities): string {
+  if (feature === 'dictation') return 'Smart dictation needs a model that can give a structured answer. Choose another model.'
+  if (caps && !caps.structured) return 'Ask needs a model that can give a structured answer. Choose another model.'
+  return 'Ask needs a model that can call tools. Choose another model.'
+}
+
+/**
+ * Why a Test connection result does not let a model run the feature, or null when it does: the
+ * test's own first problem (the request failing, the structured answer, then the tool call), else
+ * the plain reason.
+ */
+export function featureProblem(feature: ModelFeature, result: ConnectionTestResult | string): string | null {
+  if (typeof result === 'string') return result.trim() || featureNeeds(feature)
+  if (result.features[feature]) return null
+  const problems = [!result.structured.ok ? result.structured.error : undefined, feature === 'ask' && !result.tool.ok ? result.tool.error : undefined]
+  const first = problems.find((problem) => problem && problem.trim())
+  return first?.trim() ?? featureNeeds(feature, { structured: result.structured.ok ? result.structured.mode : null, tools: result.tool.ok })
 }

@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { Plus, Sparkles } from 'lucide-react'
 import { useDroppable } from '@dnd-kit/core'
 import { QuickFind } from '@/components/sidebar/QuickFind'
 import { SmartListNav } from '@/components/sidebar/SmartListNav'
@@ -9,6 +9,9 @@ import { SidebarFooter } from '@/components/sidebar/SidebarFooter'
 import { useSidebarActions } from '@/stores/sidebar-store'
 import { projectActions } from '@/stores/project-actions-store'
 import { useRootDropActive } from '@/stores/project-drop-store'
+import { useAskStore } from '@/stores/ask-store'
+import { useAiReady } from '@/hooks/use-ai'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { cn } from '@/lib/cn'
 
 const PROJECT_ROOT_ID = 'project-root-sidebar'
@@ -42,13 +45,40 @@ function ProjectsHeader() {
   )
 }
 
+/** Ask, next to Search (docs/ai-assistant.md): shown while Ask is ready; Mod+J does the same. */
+function AskButton() {
+  const ready = useAiReady()
+  const open = useAskStore((s) => s.open)
+  if (!ready.ask) return null
+  return (
+    <button
+      type="button"
+      aria-label="Ask"
+      aria-pressed={open}
+      title={`Ask (${shortcutHint('Mod+J', window.api.platform === 'darwin')})`}
+      onClick={() => useAskStore.getState().setOpen(!open)}
+      className={cn(
+        'flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-[var(--border-color)] transition-colors',
+        open
+          ? 'bg-accent-blue/15 text-accent-blue'
+          : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]',
+      )}
+    >
+      <Sparkles className="h-4 w-4" aria-hidden="true" />
+    </button>
+  )
+}
+
 export function Sidebar() {
   const { openLabelDialog } = useSidebarActions()
 
   return (
     <div className="isolate flex h-full flex-col">
-      <div role="search" className="px-2 pt-2">
-        <QuickFind />
+      <div className="flex items-center gap-1.5 px-2 pt-2">
+        <div role="search" className="min-w-0 flex-1">
+          <QuickFind />
+        </div>
+        <AskButton />
       </div>
 
       <SmartListNav />

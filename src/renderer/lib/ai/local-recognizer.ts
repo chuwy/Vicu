@@ -8,7 +8,8 @@ import { startMicCapture, type MicCapture } from './mic-capture'
  * microphone is recorded here and streamed to the main process, which cuts phrases with the voice
  * detector and transcribes each one as it ends. Speaks the same recognizer interface as the
  * platform recognisers (lib/voice/recognizer.ts), so holding +, the voice shortcut, the palette and
- * Talk use it unchanged; the partial words are the phrases finished so far.
+ * the open microphone use it unchanged; the partial words are the phrases finished so far, and the
+ * turns the voice detector marks come along (section 3.7).
  */
 export interface LocalSpeechBridge {
   status(): Promise<SpeechStatus>
@@ -48,9 +49,11 @@ export function createLocalRecognizer(bridge: LocalSpeechBridge, options: LocalR
       const h = handlers
       if (!h || id !== sessionId) return
       switch (event.type) {
-        case 'ready': h.onReady(); break
-        case 'partial': h.onPartial(event.text); break
-        case 'final': finish(); h.onFinal(event.text); break
+        case 'ready': h.onReady({ turns: true }); break
+        case 'partial': h.onPartial(event.text, event.turn); break
+        case 'speech': h.onSpeech?.(); break
+        case 'turn': h.onTurn?.(event.text); break
+        case 'final': finish(); h.onFinal(event.text, event.turn); break
         case 'error': finish(); h.onError('failed', event.message); break
       }
     })
@@ -72,7 +75,7 @@ export function createLocalRecognizer(bridge: LocalSpeechBridge, options: LocalR
         ? { available: true, engine: 'local-speech', onDevice: true }
         : { available: false, engine: 'local-speech', onDevice: true, reason: 'No speech model is downloaded.' }
     },
-    start: async (next) => {
+    start: async (next, startOptions) => {
       ensureSubscribed()
       if (handlers) {
         const id = sessionId
@@ -80,7 +83,7 @@ export function createLocalRecognizer(bridge: LocalSpeechBridge, options: LocalR
         if (id !== null) void bridge.cancel(id)
       }
       handlers = next
-      const result = await bridge.start(options.startOptions())
+      const result = await bridge.start({ ...options.startOptions(), ...(startOptions?.openMic ? { openMic: true } : {}) })
       if (handlers !== next) {
         if (result.success) void bridge.cancel(result.sessionId)
         return false

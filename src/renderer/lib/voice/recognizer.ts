@@ -5,16 +5,27 @@ import type { VoiceAvailability, VoiceErrorCode, VoiceEvent, VoiceEventEnvelope 
 // partial words, a final text, stop, cancel, availability.
 
 export interface RecognizerHandlers {
-  onReady: () => void
-  onPartial: (text: string) => void
-  onFinal: (text: string) => void
+  /** `turns`: the engine reports its own turns (`onSpeech`, `onTurn`, the turn's words): local speech. */
+  onReady: (info?: { turns: boolean }) => void
+  /** The words so far, and with local speech those since the last turn. */
+  onPartial: (text: string, turn?: string) => void
+  onFinal: (text: string, turn?: string) => void
   onError: (code: VoiceErrorCode, message: string) => void
+  /** Local speech: a turn has speech (docs/ai-assistant-v1.md section 3.7). */
+  onSpeech?: () => void
+  /** Local speech: a pause ended a turn; its words. */
+  onTurn?: (text: string) => void
+}
+
+export interface RecognizerStartOptions {
+  /** An open microphone (3.7): local speech counts its time limit per turn. */
+  openMic?: boolean
 }
 
 export interface VoiceRecognizer {
   availability(force?: boolean): Promise<VoiceAvailability>
   /** Starts one utterance. Resolves false (after `onError`) when it could not start. */
-  start(handlers: RecognizerHandlers): Promise<boolean>
+  start(handlers: RecognizerHandlers, options?: RecognizerStartOptions): Promise<boolean>
   /** Finish: `onFinal` follows. Safe before `start` has resolved. */
   stop(): void
   /** Throw the utterance away; no handler runs after this. */

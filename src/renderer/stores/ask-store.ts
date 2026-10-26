@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { AI_LIMITS, AI_MESSAGES, askTool } from '../../shared/ai/contract'
 import { firstSchemaProblem, extractJsonObject } from '../../shared/ai/schema'
-import { askContextJson, askRefreshJson, needsContextRefresh, requestWindow, spokenText, withContext } from '../../shared/ai/ask'
+import { askContextJson, askRefreshJson, isStaleConversation, needsContextRefresh, requestWindow, spokenText, withContext } from '../../shared/ai/ask'
 import { localDateTimeOf } from '../../shared/ai/dictation'
 import type { AiError, AskTurnEvent, ChatMessage, StoredConversation, ToolCall, ToolResult } from '../../shared/ai/types'
 import { runReadTool, taskIdsIn, ToolError, toolErrorResult, getOverview, type ToolContext } from '@/lib/ai/ask-tools'
@@ -9,14 +9,19 @@ import { buildProposal, DECLINED, applyProposal, proposalSize, type ApplyDeps, t
 import { timeZone, type ListInfo } from '@/lib/ai/workspace'
 import { readSaid } from '@/lib/ai/said-parser'
 import { confirmDelete } from '@/lib/confirm-bridge'
+import { cancelOpenMic, openMicOwner, setOpenMicInterruptible, startOpenMic, type OpenMicClient } from '@/lib/ai/open-mic'
+import { stopSpeaking } from '@/lib/ai/speech-output'
+import { spokenConfirmation } from '../../shared/ai/talk'
 import { announce } from '@/stores/announcer-store'
 import { UNDO_TOAST_MS, toast, useToastStore } from '@/stores/toast-store'
+import { useVoiceStore } from '@/stores/voice-store'
 
 // Ask (docs/ai-assistant-v1.md section 5): one conversation at a time with the user's model, which
 // looks things up through the read tools and proposes changes as cards. The provider request runs
 // in main (ai:ask-start, streamed back as ai:ask-event); the tools, the cards and the writes run
 // here. Conversations stay on this device (the last 5, 100 messages each); requests send the last
-// 40 messages. Talk (section 6) is the same conversation with the talk prompt, spoken.
+// 40 messages. Talk (section 6) is the same conversation with the talk prompt, spoken, through the
+// open microphone (3.7): talking again while an answer runs interrupts it (`interrupt`).
 
 export interface PendingProposal {
   callId: string
@@ -56,6 +61,8 @@ interface AskState {
   error: string | null
   /** Talk: answers are spoken; the talk prompt is added. */
   talk: boolean
+  /** A card of the message being answered was applied or declined: talking no longer interrupts it. */
+  decided: boolean
   load: () => Promise<void>
   setOpen: (open: boolean) => void
   newChat: () => void
@@ -63,6 +70,12 @@ interface AskState {
   setTalk: (talk: boolean) => void
   send: (text: string) => Promise<void>
   cancel: () => void
+  /**
+   * The person talked again while the answer runs (3.7): it stops and the conversation goes back to
+   * before the message, which the open microphone sends again with the new words. Not while a card
+   * waits or after one was decided.
+   */
+  interrupt: () => void
   decide: (apply: boolean, which?: 'pending' | 'lingering') => Promise<void>
 }
 
@@ -70,7 +83,13 @@ let turnCounter = 0
 let cancelled = false
 /** The user wrote on while a card was open: the round ends with its results, and the new message follows. */
 let interrupted = false
+/** Talking interrupted the answer: the send rolls the conversation back when it ends. */
+let rollback = false
 let activeTurn: string | null = null
+
+const settled = async (busy: () => boolean) => {
+  while (busy()) await new Promise((resolve) => setTimeout(resolve, 20))
+}
 
 function newConversation(talk: boolean): StoredConversation {
   const now = Date.now()
@@ -196,6 +215,7 @@ export const useAskStore = create<AskState>((set, get) => {
     lingering: null,
     error: null,
     talk: false,
+    decided: false,
 
     load: async () => {
       if (get().loaded) return
@@ -205,7 +225,18 @@ export const useAskStore = create<AskState>((set, get) => {
 
     setOpen: (open) => {
       set({ open })
-      if (open) void get().load()
+      if (!open) {
+        if (openMicOwner() === 'ask') cancelOpenMic()
+        return
+      }
+      // A conversation left for longer than context_refresh_minutes is not picked up again: Ask
+      // opens on a new one and the old one stays in the history. Never while it is answering.
+      void get().load().then(() => {
+        const conversation = current()
+        if (get().open && !get().busy && conversation && isStaleConversation(conversation, Date.now())) {
+          set({ currentId: null, error: null, streaming: '', status: null, lingering: null })
+        }
+      })
     },
 
     newChat: () => {
@@ -234,17 +265,22 @@ export const useAskStore = create<AskState>((set, get) => {
         interrupted = true
         set({ pending: null, lingering: { ...open, superseded: true } })
         open.resolve(DECLINED(open.proposal))
-        // The round that waited for it records its results and ends; then this message goes.
-        while (get().busy) await new Promise((resolve) => setTimeout(resolve, 20))
       }
-      if (get().busy) return
+      // The round that waited for the card records its results and ends, an interrupted answer
+      // rolls back, an answer that goes on after a decided card finishes; then this message goes.
+      await settled(() => get().busy)
+      if (get().busy || !deps) return
       cancelled = false
       interrupted = false
+      rollback = false
       const ctx = deps.tools()
       const nowLocal = localDateTimeOf(ctx.now())
       const conversation = current()
       const talk = get().talk
-      set({ busy: true, error: null, streaming: '', status: null })
+      const conversationId = conversation?.id ?? null
+      // Where an interruption rolls back to: before this message.
+      const before = conversation?.messages.length ?? 0
+      set({ busy: true, error: null, streaming: '', status: null, decided: false })
       try {
         let message = text
         const previous = conversation?.messages.filter((m) => m.message.role === 'user').at(-1)
@@ -299,10 +335,23 @@ export const useAskStore = create<AskState>((set, get) => {
       } catch (err) {
         const error = err as AiError
         closeOpenCalls('stopped')
-        set({ error: errorText(error && typeof error === 'object' && 'kind' in error ? error : { kind: 'network', message: String(err) }) })
+        if (!rollback) set({ error: errorText(error && typeof error === 'object' && 'kind' in error ? error : { kind: 'network', message: String(err) }) })
       } finally {
-        set({ busy: false, status: null, streaming: '' })
+        if (rollback) {
+          rollback = false
+          const after = current()
+          if (after && (after.id === conversationId || conversationId === null)) update({ ...after, messages: after.messages.slice(0, before) })
+        }
+        set({ busy: false, status: null, streaming: '', decided: false })
       }
+    },
+
+    interrupt: () => {
+      if (!get().busy || get().pending || get().decided) return
+      rollback = true
+      cancelled = true
+      if (activeTurn) void window.api.ai.askCancel(activeTurn)
+      set({ status: null, streaming: '' })
     },
 
     cancel: () => {
@@ -316,6 +365,7 @@ export const useAskStore = create<AskState>((set, get) => {
     decide: async (apply, which = 'pending') => {
       const card = which === 'pending' ? get().pending : get().lingering
       if (!card || !deps) return
+      if (which === 'pending') set({ decided: true })
       if (!apply) {
         set(which === 'pending' ? { pending: null } : { lingering: null })
         card.resolve(DECLINED(card.proposal))
@@ -350,3 +400,34 @@ export const useAskStore = create<AskState>((set, get) => {
     },
   }
 })
+
+/**
+ * Talk's turns (3.7, 6): with a card open, a spoken yes or no answers it (6.1); anything else is
+ * the next message. Talking again while an answer runs interrupts it.
+ */
+const talkClient: OpenMicClient = {
+  onTurn: async (text) => {
+    const ask = useAskStore.getState()
+    const card = ask.pending ?? ask.lingering
+    if (card) {
+      const answer = spokenConfirmation(text, navigator.language.slice(0, 2).toLowerCase())
+      if (answer !== 'other') {
+        await ask.decide(answer === 'yes', ask.pending ? 'pending' : 'lingering')
+        return
+      }
+    }
+    await ask.send(text)
+  },
+  onInterrupt: () => useAskStore.getState().interrupt(),
+}
+
+/** Ask's microphone on (Talk): answers are spoken, and the person just keeps talking. */
+export function startTalk(): void {
+  stopSpeaking()
+  useVoiceStore.getState().cancel()
+  const ask = useAskStore.getState()
+  if (!ask.open) ask.setOpen(true)
+  if (!ask.talk) ask.setTalk(true)
+  startOpenMic('ask', talkClient)
+  setOpenMicInterruptible(ask.pending === null && !ask.decided)
+}

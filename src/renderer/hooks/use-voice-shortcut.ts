@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { matchesAccelerator, parseAccelerator } from '@/lib/accelerator'
+import { openMicOwner, stopOpenMic } from '@/lib/ai/open-mic'
 import { SHORTCUT_IDLE, shortcutStep, type ShortcutState, type ShortcutStep } from '@/lib/voice/shortcut-hold'
 import { useVoiceStore } from '@/stores/voice-store'
 
@@ -7,9 +8,11 @@ const isMac = window.api.platform === 'darwin'
 
 /**
  * The in-app voice shortcut (Settings, Keyboard Shortcuts; config `voice_hotkey`): hold it in the
- * main window to say a task, let go to add; tap it to keep listening until it is pressed again or
- * Enter (lib/voice/shortcut-hold.ts). Not a global shortcut: Electron's globalShortcut has no key
- * up, so holding cannot work outside the window (docs/voice-input.md).
+ * main window to say a task, let go to add (quick capture). Tap it to latch it instead: smart
+ * dictation keeps listening when it is ready (pressing the shortcut again is Done), otherwise quick
+ * capture listens until it is pressed again or Enter (lib/voice/shortcut-hold.ts). Not a global
+ * shortcut: Electron's globalShortcut has no key up, so holding cannot work outside the window
+ * (docs/voice-input.md).
  */
 export function useVoiceShortcut(spec: string | undefined): void {
   const accelerator = useMemo(() => parseAccelerator(spec, isMac), [spec])
@@ -24,6 +27,7 @@ export function useVoiceShortcut(spec: string | undefined): void {
     })
 
     const apply = (step: ShortcutStep, event: Event) => {
+      const latched = step.state.phase === 'latched' && state.phase !== 'latched'
       state = step.state
       if (step.consume) {
         event.preventDefault()
@@ -33,12 +37,19 @@ export function useVoiceShortcut(spec: string | undefined): void {
       if (step.effect === 'start') voice.begin('shortcut', 'hold')
       else if (step.effect === 'add') voice.finish()
       else if (step.effect === 'cancel') voice.cancel()
-      if (state.phase === 'latched') voice.setMode('latched')
+      if (latched) voice.latch()
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
       // Recording a new hotkey in Settings: the keys belong to the recorder.
       if (event.target instanceof Element && event.target.closest('[data-hotkey-recorder]')) return
+      // Smart dictation listening (a tapped shortcut locked it): the shortcut again is Done.
+      if (state.phase === 'idle' && openMicOwner() === 'dictation' && matchesAccelerator(accelerator, event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!event.repeat) stopOpenMic()
+        return
+      }
       const voice = useVoiceStore.getState()
       if (state.phase === 'idle' && voice.phase !== 'idle') {
         // Another capture is on (+ or the palette): the shortcut adds it when nothing is held.

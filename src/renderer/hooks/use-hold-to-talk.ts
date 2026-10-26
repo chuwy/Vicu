@@ -18,7 +18,8 @@ export interface HoldToTalkProps {
 /**
  * Hold the + (new task) button to say a task (docs/voice-input.md, lib/voice/press-gesture.ts).
  * Spread the result on the button: a click still runs the button's onClick, a hold of HOLD_MS
- * starts listening, letting go adds, moving well away and letting go (or Escape) cancels.
+ * starts listening, letting go adds, moving well away and letting go (or Escape) cancels, and
+ * sliding up locks it into smart dictation when that is ready.
  */
 export function useHoldToTalk(): HoldToTalkProps {
   const state = useRef<PressState>(PRESS_IDLE)
@@ -43,6 +44,7 @@ export function useHoldToTalk(): HoldToTalkProps {
       case 'disarm-cancel': voice.armCancel(false); break
       case 'add': voice.finish(); break
       case 'cancel': voice.cancel(); break
+      case 'lock': voice.lock(); break
     }
     if (next.state.phase === 'idle' || next.state.phase === 'passive') {
       if (timer.current !== null) clearTimeout(timer.current)
@@ -59,9 +61,10 @@ export function useHoldToTalk(): HoldToTalkProps {
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     swallowNextClick = false
-    if (event.button !== 0 || useVoiceStore.getState().phase !== 'idle') return
+    const voice = useVoiceStore.getState()
+    if (event.button !== 0 || voice.phase !== 'idle') return
     stopTracking()
-    run({ type: 'down', at: performance.now(), x: event.clientX, y: event.clientY })
+    run({ type: 'down', at: performance.now(), x: event.clientX, y: event.clientY, lockable: voice.lockable })
     timer.current = setTimeout(() => run({ type: 'tick', at: performance.now() }), HOLD_MS)
 
     const onMove = (e: PointerEvent) => run({ type: 'move', x: e.clientX, y: e.clientY })

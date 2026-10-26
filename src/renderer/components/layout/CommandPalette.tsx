@@ -20,6 +20,9 @@ import { cn } from '@/lib/cn'
 import { applyTheme } from '@/lib/theme'
 import { useAskStore } from '@/stores/ask-store'
 import { useAiUiStore } from '@/stores/ai-ui-store'
+import { useDictationStore } from '@/stores/dictation-store'
+import { toast } from '@/stores/toast-store'
+import { useAiReady } from '@/hooks/use-ai'
 import { buildPaletteItems, rankPalette, type PaletteCommand, type PaletteItem, type PaletteKind } from '@/lib/palette'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { useUIStore } from '@/stores/ui-store'
@@ -75,6 +78,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const { tasks } = useQuickFindTasks(query, 20)
   const listId = useId()
   const isDark = useIsDark()
+  const ai = useAiReady()
 
   const items = useMemo(
     () => buildPaletteItems({ smartLists, projects: projects?.flat ?? [], labels: labels ?? [] }),
@@ -94,6 +98,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       void navigate({ to: '/settings' })
     } else if (command === 'voice') {
       useVoiceStore.getState().begin('command', 'latched')
+    } else if (command === 'dictate') {
+      if (ai.dictation) useDictationStore.getState().startLive()
+      else toast.info('Smart dictation is off. Turn it on in Settings, Assistant.')
     } else if (command === 'ask') {
       useAskStore.getState().setOpen(true)
     } else if (command === 'make-tasks') {
@@ -162,7 +169,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     if (action.type === 'command' && action.command === 'toggle-theme') return SunMoon
     if (action.type === 'command' && action.command === 'refresh') return RefreshCw
     if (action.type === 'command' && action.command === 'voice') return Mic
-    if (action.type === 'command' && (action.command === 'ask' || action.command === 'make-tasks')) return Sparkles
+    if (action.type === 'command' && (action.command === 'ask' || action.command === 'make-tasks' || action.command === 'dictate')) return Sparkles
     return ICONS[kind]
   }
 

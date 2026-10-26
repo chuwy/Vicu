@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { Mic } from 'lucide-react'
+import { Lock, Mic } from 'lucide-react'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useAddVoiceTask } from '@/hooks/use-add-voice-task'
 import { useDateFormat } from '@/hooks/use-date-format'
@@ -13,7 +13,7 @@ import { tokenHighlightBackground } from '@/lib/token-chip-colors'
 import { cleanTranscript, voiceCardChips, type VoiceTaskContext } from '@/lib/voice/voice-task'
 import { useProjects } from '@/hooks/use-projects'
 import { useNewTaskRequestStore } from '@/stores/new-task-request-store'
-import { useVoiceStore } from '@/stores/voice-store'
+import { setVoiceLock, useVoiceStore } from '@/stores/voice-store'
 import { useDictationStore } from '@/stores/dictation-store'
 import { useAiReady, useAiWorkspace } from '@/hooks/use-ai'
 import { listInfoOf } from '@/lib/ai/workspace'
@@ -37,38 +37,32 @@ export function VoiceHost() {
   const addVoiceTask = useAddVoiceTask()
   const navigate = useNavigate()
 
-  // The final words: add them once. With the assistant's dictation on they become draft cards
-  // instead (docs/ai-assistant-v1.md section 4); with cards on screen they are an instruction
-  // about them (4.4). Without it, quick add reads them as one task, as before.
+  // A capture locks into smart dictation only while it is ready (docs/ai-assistant-v1.md
+  // section 4): the running recogniser and the words heard so far go to the draft cards.
   const ai = useAiReady()
   const ws = useAiWorkspace()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const live = useRef({ ws, pathname })
+  live.current = { ws, pathname }
+  useEffect(() => {
+    if (!ai.dictation) return
+    setVoiceLock((session, list) => {
+      useDictationStore.getState().startLive({ list: listInfoOf(live.current.pathname, live.current.ws, list, toLocalDate), adopt: session })
+    })
+    return () => setVoiceLock(null)
+  }, [ai.dictation])
+
+  // The final words: quick add reads them as one task and adds it at once, also with smart
+  // dictation on (quick capture, section 4).
   const adding = useRef<string | null>(null)
   useEffect(() => {
     if (phase !== 'adding' || finalText === null || adding.current === finalText) return
     adding.current = finalText
-    const dictation = useDictationStore.getState()
-    if (ai.dictation && dictation.phase === 'cards') {
-      dictation.editByVoice(finalText)
-      adding.current = null
-      useVoiceStore.getState().done()
-      return
-    }
-    if (ai.dictation && dictation.phase === 'idle') {
-      dictation.open({
-        transcript: finalText,
-        list: listInfoOf(pathname, ws, useVoiceStore.getState().list, toLocalDate),
-        source: 'voice',
-      })
-      adding.current = null
-      useVoiceStore.getState().done()
-      return
-    }
     void addVoiceTask(finalText, useVoiceStore.getState().list).finally(() => {
       adding.current = null
       useVoiceStore.getState().done()
     })
-  }, [phase, finalText, addVoiceTask, ai.dictation, pathname, ws])
+  }, [phase, finalText, addVoiceTask])
 
   // No speech engine here (Linux): open the composer instead, as the palette's New task does.
   const lastFallback = useRef(fallbackRequest)
@@ -140,6 +134,7 @@ function VoiceCard({ hotkey, context }: { hotkey?: string; context: VoiceTaskCon
   const mode = useVoiceStore((s) => s.mode)
   const rawText = useVoiceStore((s) => s.text)
   const cancelArmed = useVoiceStore((s) => s.cancelArmed)
+  const lockable = useVoiceStore((s) => s.lockable)
   const isDark = useIsDark()
   const dateFormat = useDateFormat()
 
@@ -157,6 +152,8 @@ function VoiceCard({ hotkey, context }: { hotkey?: string; context: VoiceTaskCon
       : cancelArmed ? 'Release to cancel' : 'Listening…'
 
   const shortcutName = hotkey ? formatAcceleratorForDisplay(hotkey, isMac) : ''
+  // Holding +: sliding up hands the words to smart dictation (press-gesture.ts).
+  const showLock = lockable && listening && mode === 'hold' && source === 'button' && !cancelArmed
   const hint = cancelArmed
     ? 'Move back to keep it · Esc to cancel'
     : mode === 'latched'
@@ -166,7 +163,13 @@ function VoiceCard({ hotkey, context }: { hotkey?: string; context: VoiceTaskCon
       : 'Let go to add · Esc to cancel'
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[55] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[55] flex flex-col items-center gap-2 px-4">
+      {showLock && (
+        <p className="vicu-voice-card flex items-center gap-1.5 rounded-chip border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-1 text-caption text-[var(--text-secondary)] shadow-sm" data-voice-lock="">
+          <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+          Slide up to lock: smart dictation
+        </p>
+      )}
       <section
         role="dialog"
         aria-modal="false"

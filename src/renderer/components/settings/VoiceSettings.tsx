@@ -41,6 +41,9 @@ export function VoiceSettings({ config, onChange }: VoiceSettingsProps) {
       <p className="mt-1 text-xs text-[var(--text-secondary)]">
         Hold the + button and say a task such as “Call mom tomorrow 3pm”. Let go to add it, press Esc to cancel. It goes where the list you are looking at puts new tasks, unless you name a project or date. With a shortcut set below, hold it the same way, or tap it to keep listening until you press it again or Enter. “Say a task” in the command palette works without holding anything.
       </p>
+      <p className="mt-1 text-xs text-[var(--text-secondary)]">
+        With smart dictation on (Settings, Assistant), tapping the shortcut or sliding up from a held + starts smart dictation instead: keep talking and the tasks appear as cards.
+      </p>
       <p className="mt-2 text-xs text-[var(--text-secondary)]" data-voice-engine="">{engineText(availability)}</p>
 
       <div className="mt-4">
