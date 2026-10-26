@@ -4,11 +4,13 @@ import type { DropZone } from '@/lib/project-moves'
 /**
  * Where a dragged project would land right now, set while it moves (AppShell) and read by the
  * rows that draw the drop line or the "into" highlight. `dndId` is the row's draggable id, so the
- * sidebar and the Settings list each mark only their own row.
+ * sidebar and the Settings list each mark only their own row. A category header (cross-app
+ * semantics 13) takes a project to the start of that category.
  */
 export type ProjectDropTarget =
   | { kind: 'row'; dndId: string; projectId: number; zone: DropZone }
   | { kind: 'root'; dndId: string }
+  | { kind: 'category'; dndId: string; categoryId: string }
 
 interface ProjectDropState {
   target: ProjectDropTarget | null
@@ -24,7 +26,7 @@ export function setProjectDropTarget(target: ProjectDropTarget | null): void {
       target !== null &&
       current.dndId === target.dndId &&
       current.kind === target.kind &&
-      (current.kind === 'root' || (target.kind === 'row' && current.zone === target.zone)))
+      (current.kind !== 'row' || (target.kind === 'row' && current.zone === target.zone)))
   if (!same) useProjectDropStore.setState({ target })
 }
 
@@ -35,4 +37,9 @@ export function useRowDropZone(dndId: string): DropZone | null {
 
 export function useRootDropActive(dndId: string): boolean {
   return useProjectDropStore((s) => s.target?.kind === 'root' && s.target.dndId === dndId)
+}
+
+/** Whether the drag is over this category header. */
+export function useCategoryDropActive(dndId: string): boolean {
+  return useProjectDropStore((s) => s.target?.kind === 'category' && s.target.dndId === dndId)
 }

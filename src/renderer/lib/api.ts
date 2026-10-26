@@ -226,6 +226,8 @@ export const api = {
   getSyncedPrefs: () => window.api.getSyncedPrefs(),
   /** A choice the user made; `null` resets it to the default on every device. */
   setSyncedPreference: (key: string, value: unknown) => window.api.setSyncedPreference(key, value),
+  /** Several choices at once (one change, one sync); `null` resets a key. */
+  setSyncedPreferences: (values: Record<string, unknown>) => window.api.setSyncedPreferences(values),
   syncSyncedPrefs: () => window.api.syncSyncedPrefs(),
   onSyncedPrefsChanged: (cb: (snapshot: SyncedPrefsSnapshot) => void) => window.api.onSyncedPrefsChanged(cb),
   /** Setup: the account's synced Inbox and Vikunja's default project, before the Inbox is asked for. */

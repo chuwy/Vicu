@@ -28,6 +28,7 @@ function userConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     window_bounds: { x: 10, y: 20, width: 1200, height: 800 },
     sidebar_width: 333,
     sidebar_collapsed_projects: [4, 9],
+    sidebar_collapsed_categories: ['work'],
     quick_entry_enabled: true,
     quick_view_enabled: true,
     quick_entry_hotkey: 'Ctrl+Alt+N',
@@ -102,6 +103,7 @@ const ACCOUNT_KEYS = [
   'custom_lists',
   'custom_lists_sync',
   'sidebar_collapsed_projects',
+  'sidebar_collapsed_categories',
 ] as const satisfies readonly (keyof AppConfig)[]
 
 function expectKeysKept(result: AppConfig, before: AppConfig, keys: readonly (keyof AppConfig)[]) {
@@ -183,6 +185,7 @@ describe('applyConnectionFields: another server or account', () => {
     expect(result.last_used_label_id).toBeUndefined()
     expect(result.last_username).toBeUndefined()
     expect(result.sidebar_collapsed_projects).toBeUndefined()
+    expect(result.sidebar_collapsed_categories).toBeUndefined()
     expect(result.standalone_mode).toBe(false)
     expect(result.viewer_filter).toMatchObject({ project_ids: [], sort_by: 'due_date' })
   })
@@ -191,6 +194,12 @@ describe('applyConnectionFields: another server or account', () => {
     expect(normalizeConfig({ sidebar_collapsed_projects: [9, 4, 4, 0, -2, 1.5, 'x', null] }).sidebar_collapsed_projects).toEqual([4, 9])
     expect(normalizeConfig({ sidebar_collapsed_projects: 'nope' }).sidebar_collapsed_projects).toBeUndefined()
     expect(normalizeConfig({}).sidebar_collapsed_projects).toBeUndefined()
+  })
+
+  it('sidebar_collapsed_categories keeps category ids, once each, sorted', () => {
+    expect(normalizeConfig({ sidebar_collapsed_categories: ['work', 'home', 'work', 'project', 'a.b', '', 3, null] }).sidebar_collapsed_categories)
+      .toEqual(['home', 'work'])
+    expect(normalizeConfig({ sidebar_collapsed_categories: 'nope' }).sidebar_collapsed_categories).toBeUndefined()
   })
 
   it('does not carry the old inbox project over', () => {

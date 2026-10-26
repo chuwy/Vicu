@@ -1,10 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronRight, Folder, GripVertical, MoreHorizontal, Plus, RefreshCw, RotateCcw } from 'lucide-react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { Button } from '@/components/shared/Button'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { ReviewSettingsPanel } from '@/components/review/ReviewSettingsPanel'
 import { ProjectMenu } from '@/components/projects/ProjectMenu'
+import { CategoryMenu } from '@/components/projects/CategoryMenu'
 import { parentOptions } from '@/components/projects/ProjectDialog'
 import {
   DropLine,
@@ -15,13 +16,16 @@ import {
 import { useAppConfig } from '@/hooks/use-app-config'
 import { buildProjectTree, useProjects, type ProjectTreeNode } from '@/hooks/use-projects'
 import { useSharedProjectActions } from '@/hooks/use-project-actions'
+import { useProjectCategories } from '@/hooks/use-project-categories'
 import { useTaskOrderSettings } from '@/hooks/use-task-order'
 import { cn } from '@/lib/cn'
 import { normalizeHex } from '@/lib/constants'
+import { groupsWithInbox } from '@/lib/project-groups'
 import { projectActions, useProjectActionsStore } from '@/stores/project-actions-store'
-import { useRootDropActive, useRowDropZone } from '@/stores/project-drop-store'
+import { useCategoryDropActive, useRootDropActive, useRowDropZone } from '@/stores/project-drop-store'
 import type { AppConfig, Project } from '@/lib/vikunja-types'
 import { TASK_ORDER_KEYS, TASK_ORDER_LABELS, parseTaskOrder } from '../../../shared/task-order'
+import type { ProjectCategory } from '../../../shared/project-categories'
 
 const ROOT_ID = 'project-root-settings'
 
@@ -147,6 +151,49 @@ function ProjectRow({ node, depth, inboxId, menuOpenFor, renamingId, onOpenMenu 
   )
 }
 
+type OpenCategoryMenu = (category: ProjectCategory, at: { point: { x: number; y: number } } | { anchor: HTMLElement }, opener: HTMLElement | null) => void
+
+/**
+ * A category above its projects in the Settings list (cross-app semantics 13): its name, quiet like
+ * the sidebar's, and its menu. A dragged project dropped on it goes to the start of the category.
+ */
+function CategoryRow({ category, menuOpen, onOpenMenu }: { category: ProjectCategory; menuOpen: boolean; onOpenMenu: OpenCategoryMenu }) {
+  const moreRef = useRef<HTMLButtonElement>(null)
+  const dndId = `project-category-settings-${category.id}`
+  const { setNodeRef } = useDroppable({ id: dndId, data: { type: 'project-category', categoryId: category.id } })
+  const dropActive = useCategoryDropActive(dndId)
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex min-h-8 items-center gap-2 border-b border-border/60 bg-[var(--bg-secondary)] pl-4 pr-2',
+        dropActive && INTO_CLASSES,
+        menuOpen && 'bg-[var(--bg-hover)]',
+      )}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onOpenMenu(category, { point: { x: event.clientX, y: event.clientY } }, moreRef.current)
+      }}
+    >
+      <span className="min-w-0 flex-1 truncate text-group font-medium text-text-secondary">
+        {category.name}
+        <span className="sr-only">, category</span>
+      </span>
+      <button
+        ref={moreRef}
+        type="button"
+        aria-label={`${category.name} actions`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onClick={() => moreRef.current && onOpenMenu(category, { anchor: moreRef.current }, moreRef.current)}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-[var(--text-secondary)] hover:bg-[var(--bg-selected)] hover:text-[var(--text-primary)]"
+      >
+        <MoreHorizontal aria-hidden="true" className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 function ArchivedRows({
   nodes,
   depth,
@@ -265,9 +312,13 @@ function ProjectListCard() {
   const renaming = useProjectActionsStore((s) => s.renaming)
   const [archivedOpen, setArchivedOpen] = useState(false)
   const [menu, setMenu] = useState<{ project: Project; point?: { x: number; y: number }; opener: HTMLElement | null } | null>(null)
+  const [categoryMenu, setCategoryMenu] = useState<{ category: ProjectCategory; point?: { x: number; y: number }; opener: HTMLElement | null } | null>(null)
   const anchorRef = useRef<HTMLElement | null>(null)
+  const categoryAnchorRef = useRef<HTMLElement | null>(null)
   const archivedTree = useMemo(() => buildProjectTree(data?.archived ?? []), [data?.archived])
   const inboxId = config?.inbox_project_id ?? 0
+  const { categories, layout } = useProjectCategories()
+  const groups = useMemo(() => (data ? groupsWithInbox(data.tree, layout, inboxId) : []), [data, layout, inboxId])
   const { setNodeRef: setRootRef } = useDroppable({ id: ROOT_ID, data: { type: 'project-root' } })
   const rootActive = useRootDropActive(ROOT_ID)
 
@@ -283,6 +334,14 @@ function ProjectListCard() {
       setMenu({ project, point: at.point, opener })
     }
   }
+  const openCategoryMenu: OpenCategoryMenu = (category, at, opener) => {
+    if ('anchor' in at) {
+      categoryAnchorRef.current = at.anchor
+      setCategoryMenu({ category, opener })
+    } else {
+      setCategoryMenu({ category, point: at.point, opener })
+    }
+  }
   const menuOpenFor = menu?.project.id ?? null
   const renamingId = renaming?.surface === 'settings' ? renaming.id : null
   const archivedCount = data?.archived.length ?? 0
@@ -296,7 +355,7 @@ function ProjectListCard() {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Projects</h2>
           <p className="text-xs text-[var(--text-secondary)]">
-            Drag a project to reorder it, or onto another project to put it inside. Right-click or use … for more.
+            Drag a project to reorder it, onto another project to put it inside, or onto a category. Right-click or use … for more.
           </p>
         </div>
         <button
@@ -309,6 +368,10 @@ function ProjectListCard() {
         >
           <RefreshCw aria-hidden="true" className={cn('h-4 w-4', isFetching && 'animate-spin')} />
         </button>
+        <Button variant="secondary" onClick={(event) => projectActions.openDialog({ kind: 'category-new' }, event.currentTarget)}>
+          <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+          New category
+        </Button>
         <Button variant="primary" onClick={(event) => projectActions.openDialog({ kind: 'create', parentId: 0 }, event.currentTarget)}>
           <Plus aria-hidden="true" className="h-3.5 w-3.5" />
           New project
@@ -319,17 +382,24 @@ function ProjectListCard() {
         <p className="px-4 py-5 text-sm text-[var(--text-secondary)]">Loading projects…</p>
       ) : error ? (
         <p className="px-4 py-5 text-sm text-danger">{error.message}</p>
-      ) : data?.tree.length ? (
-        data.tree.map((node) => (
-          <ProjectRow
-            key={node.id}
-            node={node}
-            depth={0}
-            inboxId={inboxId}
-            menuOpenFor={menuOpenFor}
-            renamingId={renamingId}
-            onOpenMenu={openMenu}
-          />
+      ) : data?.tree.length || categories.length > 0 ? (
+        groups.map(({ category, nodes }) => (
+          <Fragment key={category?.id ?? 'no-category'}>
+            {category && (
+              <CategoryRow category={category} menuOpen={categoryMenu?.category.id === category.id} onOpenMenu={openCategoryMenu} />
+            )}
+            {nodes.map((node) => (
+              <ProjectRow
+                key={node.id}
+                node={node}
+                depth={0}
+                inboxId={inboxId}
+                menuOpenFor={menuOpenFor}
+                renamingId={renamingId}
+                onOpenMenu={openMenu}
+              />
+            ))}
+          </Fragment>
         ))
       ) : (
         <p className="px-4 py-5 text-sm text-[var(--text-secondary)]">No active projects</p>
@@ -363,6 +433,18 @@ function ProjectListCard() {
           anchorRef={menu.point ? undefined : anchorRef}
           opener={menu.opener}
           onClose={() => setMenu(null)}
+        />
+      )}
+      {categoryMenu && (
+        <CategoryMenu
+          key={`${categoryMenu.category.id}:${categoryMenu.point ? `${categoryMenu.point.x}:${categoryMenu.point.y}` : 'button'}`}
+          category={categoryMenu.category}
+          index={categories.findIndex((category) => category.id === categoryMenu.category.id)}
+          count={categories.length}
+          anchorPoint={categoryMenu.point}
+          anchorRef={categoryMenu.point ? undefined : categoryAnchorRef}
+          opener={categoryMenu.opener}
+          onClose={() => setCategoryMenu(null)}
         />
       )}
     </div>

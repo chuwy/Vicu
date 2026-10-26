@@ -122,6 +122,7 @@ const api = {
   syncCustomLists: () => ipcRenderer.invoke('custom-lists:sync'),
   getSyncedPrefs: () => ipcRenderer.invoke('synced-prefs:get'),
   setSyncedPreference: (key: string, value: unknown) => ipcRenderer.invoke('synced-prefs:set', key, value),
+  setSyncedPreferences: (values: Record<string, unknown>) => ipcRenderer.invoke('synced-prefs:set-many', values),
   syncSyncedPrefs: () => ipcRenderer.invoke('synced-prefs:sync'),
   getSyncedPrefsStatus: () => ipcRenderer.invoke('synced-prefs:status'),
   readSetupPreferences: (url: string, token?: string) => ipcRenderer.invoke('synced-prefs:read-for-setup', url, token),

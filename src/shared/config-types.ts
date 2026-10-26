@@ -201,6 +201,11 @@ export interface AppConfig {
    * projects. Ids belong to one server, so this is dropped with the rest of the account's data.
    */
   sidebar_collapsed_projects?: number[]
+  /**
+   * Ids of the sidebar's project categories the person collapsed (cross-app semantics 13.3: per
+   * device, never synced). They belong to one account, so this is dropped with its data.
+   */
+  sidebar_collapsed_categories?: string[]
   custom_lists?: CustomList[]
   /** Owned by the custom list service in the main process; the renderer never writes it. */
   custom_lists_sync?: {

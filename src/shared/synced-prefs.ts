@@ -15,6 +15,14 @@ import {
   type SyncRevision,
 } from './hidden-tasks'
 import { DEFAULT_TASK_ORDER, GLOBAL_TASK_ORDER_KEY, parseTaskOrder, type TaskOrderKey } from './task-order'
+import {
+  CATEGORY_KEY_PREFIX,
+  categoryIdOfKey,
+  projectIdOfCategoryKey,
+  PROJECT_CATEGORY_KEY_PREFIX,
+  readCategoryPref,
+  readProjectCategoryPref,
+} from './project-categories'
 
 export const SYNCED_PREFS_VERSION = 1
 
@@ -297,6 +305,9 @@ export function readSyncedPref(values: Readonly<Record<string, unknown>>, key: s
   if (key.startsWith(PLACE_KEY_PREFIX) || key.startsWith(LOCATION_REMINDER_KEY_PREFIX)) return null
   if (routineIdOfKey(key, ROUTINE_REMINDERS_KEY_PREFIX) !== null) return value === 'off' ? 'off' : null
   if (routineIdOfKey(key, ROUTINE_HIDDEN_KEY_PREFIX) !== null) return value === true
+  // Project categories (section 13): a category, and the category a top-level project is in.
+  if (key.startsWith(PROJECT_CATEGORY_KEY_PREFIX)) return projectIdOfCategoryKey(key) !== null ? readProjectCategoryPref(value) : null
+  if (key.startsWith(CATEGORY_KEY_PREFIX)) return categoryIdOfKey(key) !== null ? readCategoryPref(value) : null
   return undefined
 }
 

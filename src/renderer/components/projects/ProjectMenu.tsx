@@ -17,12 +17,16 @@ import {
   Users,
   EyeOff,
   Eye,
+  Layers,
+  ListPlus,
+  Plus,
 } from 'lucide-react'
 import { Menu, MenuItem, MenuSeparator } from '@/components/overlay/Menu'
 import { Popover, type PopoverCloseReason } from '@/components/overlay/Popover'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useProjects } from '@/hooks/use-projects'
 import { useSharedProjectActions } from '@/hooks/use-project-actions'
+import { useProjectCategories, useProjectCategoryActions } from '@/hooks/use-project-categories'
 import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed'
 import { normalizeHex } from '@/lib/constants'
 import { childrenOf, descendantIds, effectiveParent, placeAt, TOP_LEVEL } from '@/lib/project-moves'
@@ -32,6 +36,7 @@ import { projectActions, type ProjectSurface } from '@/stores/project-actions-st
 import type { Project } from '@/lib/vikunja-types'
 import { parentOptions } from './ProjectDialog'
 import { TaskOrderMenu } from './TaskOrderMenu'
+import { canAddCategoryAbove, groupOfProject, type ProjectCategory } from '../../../shared/project-categories'
 
 interface ParentPickerProps {
   anchorRef: RefObject<HTMLElement | null>
@@ -85,6 +90,64 @@ function ParentPicker({ anchorRef, project, projects, inboxId, onSelect, onClose
   )
 }
 
+interface CategoryPickerProps {
+  anchorRef: RefObject<HTMLElement | null>
+  categories: readonly ProjectCategory[]
+  /** The project's category now (null: none). */
+  current: string | null
+  onSelect: (categoryId: string | null) => void
+  onNew: () => void
+  onClose: (reason?: PopoverCloseReason) => void
+}
+
+/**
+ * "Move to category…" (cross-app semantics 13.4): the categories in display order, No category,
+ * and New category… which asks for a name and puts the project in it.
+ */
+function CategoryPicker({ anchorRef, categories, current, onSelect, onNew, onClose }: CategoryPickerProps) {
+  const choose = (categoryId: string | null) => {
+    if (categoryId !== current) onSelect(categoryId)
+    onClose()
+  }
+  const option = (key: string, label: string, categoryId: string | null) => (
+    <button
+      key={key}
+      type="button"
+      role="option"
+      tabIndex={-1}
+      aria-selected={categoryId === current}
+      onClick={() => choose(categoryId)}
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[var(--text-primary)] hover:bg-[var(--bg-hover)] focus-visible:bg-[var(--bg-hover)]"
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {categoryId === current && <Check aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-[var(--accent-blue)]" />}
+    </button>
+  )
+
+  return (
+    <Popover anchorRef={anchorRef} onClose={onClose} placement="right-start" role="listbox" label="Move to category" className="w-56 py-1">
+      <div className="max-h-72 overflow-y-auto">
+        {categories.map((category) => option(category.id, category.name, category.id))}
+        {option('none', 'No category', null)}
+        <button
+          type="button"
+          role="option"
+          tabIndex={-1}
+          aria-selected={false}
+          onClick={() => {
+            onNew()
+            onClose()
+          }}
+          className="flex w-full items-center gap-2 border-t border-[var(--border-color)] px-3 py-1.5 text-left text-xs text-[var(--accent-blue)] hover:bg-[var(--bg-hover)] focus-visible:bg-[var(--bg-hover)]"
+        >
+          <Plus aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">New category…</span>
+        </button>
+      </div>
+    </Popover>
+  )
+}
+
 export interface ProjectMenuProps {
   project: Project
   /** Where the menu was opened: Rename and Add subproject work in place in the sidebar. */
@@ -97,7 +160,7 @@ export interface ProjectMenuProps {
   onClose: () => void
 }
 
-type Sub = 'move' | 'review' | 'sort' | null
+type Sub = 'move' | 'category' | 'review' | 'sort' | null
 
 /**
  * The one project menu, used by the sidebar (the … button and right-click), the project page
@@ -105,6 +168,7 @@ type Sub = 'move' | 'review' | 'sort' | null
  */
 export function ProjectMenu({ project, surface, anchorRef, anchorPoint, opener = null, onClose }: ProjectMenuProps) {
   const moveRef = useRef<HTMLButtonElement>(null)
+  const categoryRef = useRef<HTMLButtonElement>(null)
   const reviewRef = useRef<HTMLButtonElement>(null)
   const sortRef = useRef<HTMLButtonElement>(null)
   const [sub, setSub] = useState<Sub>(null)
@@ -112,6 +176,10 @@ export function ProjectMenu({ project, surface, anchorRef, anchorPoint, opener =
   const { data: config } = useAppConfig()
   const { setCollapsed } = useSidebarCollapsed()
   const actions = useSharedProjectActions()
+  const { categories, layout } = useProjectCategories()
+  const categoryActions = useProjectCategoryActions()
+  // Categories hold top-level projects only (cross-app semantics 13.2).
+  const group = groupOfProject(layout, project.id)
 
   const projects = data?.flat ?? []
   const inboxId = config?.inbox_project_id ?? 0
@@ -196,6 +264,32 @@ export function ProjectMenu({ project, surface, anchorRef, anchorPoint, opener =
           }}
           onClose={closeSub}
         />
+      )}
+      {group && (
+        <MenuItem
+          ref={categoryRef}
+          icon={<Layers />}
+          popup="listbox"
+          expanded={sub === 'category'}
+          onSelect={() => setSub((s) => (s === 'category' ? null : 'category'))}
+        >
+          Move to category…
+        </MenuItem>
+      )}
+      {sub === 'category' && group && (
+        <CategoryPicker
+          anchorRef={categoryRef}
+          categories={categories}
+          current={group.category?.id ?? null}
+          onSelect={(categoryId) => void categoryActions.assign(project, categoryId)}
+          onNew={() => projectActions.openDialog({ kind: 'category-new', project }, opener)}
+          onClose={closeSub}
+        />
+      )}
+      {group && surface !== 'page' && canAddCategoryAbove(layout, project.id) && (
+        <MenuItem icon={<ListPlus />} onSelect={() => projectActions.openDialog({ kind: 'category-new', above: project }, opener)}>
+          Add category above
+        </MenuItem>
       )}
 
       <MenuItem

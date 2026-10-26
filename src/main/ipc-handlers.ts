@@ -70,6 +70,7 @@ import {
   inboxChosenAtSetup,
   readSetupPreferences,
   setSyncedPreference,
+  setSyncedPreferences,
   syncSyncedPrefs,
 } from './synced-preferences'
 import { readSyncedPlaces } from '../shared/synced-prefs'
@@ -195,6 +196,7 @@ function taskWriteDeps() {
 const QUIET_PATCH_KEYS: ReadonlySet<string> = new Set([
   'sidebar_width',
   'sidebar_collapsed_projects',
+  'sidebar_collapsed_categories',
   'window_bounds',
   'last_used_project_id',
   'last_used_label_id',
@@ -513,6 +515,10 @@ export function registerIpcHandlers(): void {
   handleTrusted('synced-prefs:set', (_event, key: unknown, value: unknown) => {
     if (typeof key !== 'string') throw new Error('Invalid synced preference')
     return setSyncedPreference(key, value)
+  })
+  handleTrusted('synced-prefs:set-many', (_event, values: unknown) => {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('Invalid synced preferences')
+    return setSyncedPreferences(values as Record<string, unknown>)
   })
   handleTrusted('synced-prefs:sync', () => syncSyncedPrefs())
   handleTrusted('synced-prefs:status', () => getSyncedPrefsStatus())

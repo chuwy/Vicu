@@ -10,6 +10,12 @@ export type ProjectDialogRequest =
   | { kind: 'edit'; project: Project }
   | { kind: 'cadence'; project: Project }
   | { kind: 'share'; project: Project }
+  /**
+   * A new project category (cross-app semantics 13): with `project` it is "New category…" from that
+   * project's menu (the project goes into it), with `above` it is "Add category above" that project.
+   */
+  | { kind: 'category-new'; project?: Project; above?: Project }
+  | { kind: 'category-rename'; categoryId: string; name: string }
 
 interface ProjectActionsState {
   dialog: ProjectDialogRequest | null

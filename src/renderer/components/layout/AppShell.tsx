@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Outlet, useMatches, useNavigate } from '@tanstack/react-router'
 import {
   DndContext,
@@ -15,8 +15,12 @@ import { useSidebarStore } from '@/stores/sidebar-store'
 import { useSelectionStore } from '@/stores/selection-store'
 import { useUpdateTask, useReorderTask, useReorderProject, useAddLabel, applyReorderToCache } from '@/hooks/use-task-mutations'
 import { ProjectActionsContext, useProjectActions } from '@/hooks/use-project-actions'
-import { childrenOf, dropZone, placeAt, placeRelative, TOP_LEVEL, type ProjectPlacement } from '@/lib/project-moves'
+import { dropZone } from '@/lib/project-moves'
+import { projectDropMove } from '@/lib/project-category-moves'
+import { commitProjectMove } from '@/hooks/use-project-categories'
+import { SYNCED_PREFS_QUERY_KEY } from '@/hooks/use-synced-prefs'
 import { setProjectDropTarget, useProjectDropStore, type ProjectDropTarget } from '@/stores/project-drop-store'
+import type { SyncedPrefsSnapshot } from '../../../shared/synced-prefs'
 import { ProjectActionsHost } from '@/components/projects/ProjectActionsHost'
 import { commitSync } from '@/lib/sync-commit'
 import { taskDropAnimation } from '@/lib/drop-animation'
@@ -90,21 +94,14 @@ type DragItem =
   | { type: 'section'; project: Project; siblings: Project[] }
 
 /**
- * Where a dragged project would land for this drop target, or null when it cannot go there (on
- * itself, inside one of its own projects, inside the Inbox, or nowhere new).
+ * Where a dragged project would land for this drop target, from the caches (the active projects,
+ * the Inbox and the synced categories), or null when it cannot go there.
  */
-function projectDropPlacement(
-  projects: readonly Project[],
-  inboxId: number,
-  movedId: number,
-  target: ProjectDropTarget,
-): ProjectPlacement | null {
-  if (target.kind === 'root') {
-    const topLevel = childrenOf(projects, TOP_LEVEL).filter((p) => p.id !== movedId)
-    return placeAt(projects, movedId, TOP_LEVEL, topLevel.length)
-  }
-  if (target.zone === 'into' && target.projectId === inboxId) return null
-  return placeRelative(projects, movedId, target.projectId, target.zone)
+function projectDropFor(queryClient: QueryClient, movedId: number, target: ProjectDropTarget) {
+  const projects = (queryClient.getQueryData<Project[]>(['projects']) ?? []).filter((p) => !p.is_archived)
+  const inboxId = queryClient.getQueryData<AppConfig | null>(APP_CONFIG_QUERY_KEY)?.inbox_project_id ?? 0
+  const values = queryClient.getQueryData<SyncedPrefsSnapshot>(SYNCED_PREFS_QUERY_KEY)?.values ?? {}
+  return { projects, move: projectDropMove(projects, inboxId, values, movedId, target) }
 }
 
 function BadgeSyncEnabled() {
@@ -229,7 +226,7 @@ export function AppShell() {
       if (activeType === 'project') {
         return pointerWithin(args).filter((c) => {
           const data = c.data?.droppableContainer?.data?.current as Record<string, unknown> | undefined
-          return data?.type === 'project' || data?.type === 'project-root'
+          return data?.type === 'project' || data?.type === 'project-root' || data?.type === 'project-category'
         })
       }
 
@@ -293,16 +290,14 @@ export function AppShell() {
       let target: ProjectDropTarget | null = null
       if (over && overData?.type === 'project-root') {
         target = { kind: 'root', dndId: String(over.id) }
+      } else if (over && overData?.type === 'project-category') {
+        target = { kind: 'category', dndId: String(over.id), categoryId: overData.categoryId as string }
       } else if (over && overData?.type === 'project') {
         const pointerY = (activatorEvent as PointerEvent).clientY + delta.y
         const zone = dropZone(pointerY, over.rect, overData.hasVisibleChildren === true)
         target = { kind: 'row', dndId: String(over.id), projectId: overData.projectId as number, zone }
       }
-      if (target) {
-        const projects = (queryClient.getQueryData<Project[]>(['projects']) ?? []).filter((p) => !p.is_archived)
-        const inboxId = queryClient.getQueryData<AppConfig | null>(APP_CONFIG_QUERY_KEY)?.inbox_project_id ?? 0
-        if (!projectDropPlacement(projects, inboxId, dragItem.node.id, target)) target = null
-      }
+      if (target && !projectDropFor(queryClient, dragItem.node.id, target).move) target = null
       setProjectDropTarget(target)
     },
     [dragItem, queryClient],
@@ -525,11 +520,9 @@ export function AppShell() {
       } else if (dragItem.type === 'project') {
         const target = projectTarget
         if (target) {
-          const projects = (queryClient.getQueryData<Project[]>(['projects']) ?? []).filter((p) => !p.is_archived)
-          const inboxId = queryClient.getQueryData<AppConfig | null>(APP_CONFIG_QUERY_KEY)?.inbox_project_id ?? 0
+          const { projects, move } = projectDropFor(queryClient, dragItem.node.id, target)
           const project = projects.find((p) => p.id === dragItem.node.id)
-          const placement = project ? projectDropPlacement(projects, inboxId, project.id, target) : null
-          if (project && placement) projectActionsApi.move(project, placement)
+          if (project && move) commitProjectMove(queryClient, projectActionsApi.move, project, move)
         }
       }
       // custom-list reorder is handled by CustomListNav's useDndMonitor

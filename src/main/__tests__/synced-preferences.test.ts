@@ -204,6 +204,36 @@ describe('synced preferences', () => {
     await vi.waitFor(() => expect(documentOf(7).entries['location_reminder.42'].value).toBeNull())
   })
 
+  it('writes project categories, several keys in one change (section 13)', async () => {
+    writeConfig({ inbox_project_id: 0 })
+    putCarrier(7, { version: 1, entries: { 'category.work': entry({ name: 'Work', order: 65536, color: 'teal' }) } })
+    const service = await loadService()
+    await service.syncSyncedPrefs()
+
+    // A newer app's fields stay with the category.
+    service.setSyncedPreferences({
+      'category.home': { name: 'Home', order: 131072 },
+      'category.project.3': 'home',
+      'category.work': { name: 'Office', order: 65536, color: 'teal' },
+    })
+    await vi.waitFor(() => expect(documentOf(7).entries['category.project.3']?.value).toBe('home'))
+    expect(documentOf(7).entries['category.work'].value).toEqual({ name: 'Office', order: 65536, color: 'teal' })
+    expect(documentOf(7).entries['category.home'].value).toEqual({ name: 'Home', order: 131072 })
+
+    // One bad value and nothing of the batch is written.
+    expect(() => service.setSyncedPreferences({ 'category.project.3': null, 'category.project': { name: 'X', order: 1 } })).toThrow()
+    expect(service.getSyncedPrefs().values['category.project.3']).toBe('home')
+    expect(() => service.setSyncedPreference('category.home', { name: '  ', order: 1 })).toThrow()
+    expect(() => service.setSyncedPreference('category.home', { name: 'Home' })).toThrow()
+    expect(() => service.setSyncedPreference('category.project.3', 'a.b')).toThrow()
+    expect(() => service.setSyncedPreference('category.project.-3', 'home')).toThrow()
+
+    // A delete: the category and its projects' entries, together.
+    service.setSyncedPreferences({ 'category.home': null, 'category.project.3': null })
+    await vi.waitFor(() => expect(documentOf(7).entries['category.home'].value).toBeNull())
+    expect(documentOf(7).entries['category.project.3'].value).toBeNull()
+  })
+
   it("writes a shared routine's reminders and hiding for this account only (section 6.9)", async () => {
     writeConfig({ inbox_project_id: 0 })
     putCarrier(7, { version: 1, entries: {} })

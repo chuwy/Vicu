@@ -9,6 +9,7 @@ import type {
   SecondaryProject,
   ViewerFilter,
 } from '../shared/config-types'
+import { isCategoryId } from '../shared/project-categories'
 
 // The config types are shared with the renderer (src/shared/config-types.ts).
 export type {
@@ -112,6 +113,11 @@ function normalizeProjectIds(raw: unknown): number[] | undefined {
   return [...new Set(ids)].sort((a, b) => a - b)
 }
 
+function normalizeCategoryIds(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return [...new Set(raw.filter(isCategoryId))].sort()
+}
+
 export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
   return {
     vikunja_url: typeof raw.vikunja_url === 'string'
@@ -131,6 +137,7 @@ export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
     window_bounds: isWindowBounds(raw.window_bounds) ? raw.window_bounds : undefined,
     sidebar_width: typeof raw.sidebar_width === 'number' ? raw.sidebar_width : undefined,
     sidebar_collapsed_projects: normalizeProjectIds(raw.sidebar_collapsed_projects),
+    sidebar_collapsed_categories: normalizeCategoryIds(raw.sidebar_collapsed_categories),
     custom_lists: Array.isArray(raw.custom_lists) ? raw.custom_lists as AppConfig['custom_lists'] : undefined,
     custom_lists_sync: raw.custom_lists_sync && typeof raw.custom_lists_sync === 'object'
       ? raw.custom_lists_sync as AppConfig['custom_lists_sync']
@@ -287,6 +294,7 @@ export function saveConfigQuietly(config: AppConfig, what: string): boolean {
 /** Data that belongs to one server/account: IDs and state that mean nothing elsewhere. */
 const ACCOUNT_SPECIFIC_KEYS = [
   'sidebar_collapsed_projects',
+  'sidebar_collapsed_categories',
   'custom_lists',
   'custom_lists_sync',
   'synced_prefs_sync',

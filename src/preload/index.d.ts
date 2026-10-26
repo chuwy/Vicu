@@ -148,6 +148,8 @@ export interface ElectronAPI {
   getSyncedPrefs(): Promise<SyncedPrefsSnapshot>
   /** A choice the user made (`null` resets it to the default on every device). */
   setSyncedPreference(key: string, value: unknown): Promise<SyncedPrefsSnapshot>
+  /** Several choices at once: one change and one sync, and nothing written unless every value may be. */
+  setSyncedPreferences(values: Record<string, unknown>): Promise<SyncedPrefsSnapshot>
   syncSyncedPrefs(): Promise<CustomListSyncStatus>
   getSyncedPrefsStatus(): Promise<CustomListSyncStatus>
   /** Setup: the account's synced Inbox and Vikunja's default project, read before asking for an Inbox. */

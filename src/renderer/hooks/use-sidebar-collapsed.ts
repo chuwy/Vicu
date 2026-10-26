@@ -32,3 +32,26 @@ export function useSidebarCollapsed() {
 
   return { collapsed, setCollapsed }
 }
+
+/**
+ * Which sidebar categories are collapsed (cross-app semantics 13.3: per device, never synced).
+ * Saved in the config like the collapsed projects.
+ */
+export function useCollapsedCategories() {
+  const qc = useQueryClient()
+  const { data: config } = useAppConfig()
+  const collapsed = useMemo(() => new Set(config?.sidebar_collapsed_categories ?? []), [config?.sidebar_collapsed_categories])
+
+  const setCollapsed = useCallback(
+    (id: string, collapse: boolean) => {
+      const current = qc.getQueryData<AppConfig | null>(APP_CONFIG_QUERY_KEY)
+      const rest = (current?.sidebar_collapsed_categories ?? []).filter((known) => known !== id)
+      const next = collapse ? [...rest, id].sort() : rest
+      if (current) qc.setQueryData<AppConfig>(APP_CONFIG_QUERY_KEY, { ...current, sidebar_collapsed_categories: next })
+      void api.saveConfigPatch({ sidebar_collapsed_categories: next })
+    },
+    [qc],
+  )
+
+  return { collapsed, setCollapsed }
+}

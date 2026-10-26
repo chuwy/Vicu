@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from '@/stores/toast-store'
 import { APP_CONFIG_QUERY_KEY } from './use-app-config'
@@ -41,6 +41,26 @@ export function useSetSyncedPreference() {
       if (context?.previous) queryClient.setQueryData(SYNCED_PREFS_QUERY_KEY, context.previous)
     },
   })
+}
+
+/**
+ * Writes several synced settings in one change (`null`: back to the default, on every device),
+ * shown at once. Not tied to a component, so a menu that closes before the answer still gets its
+ * change applied. False (and an error toast) when main refused it.
+ */
+export async function writeSyncedPrefs(queryClient: QueryClient, values: Record<string, unknown>): Promise<boolean> {
+  if (Object.keys(values).length === 0) return true
+  const previous = queryClient.getQueryData<SyncedPrefsSnapshot>(SYNCED_PREFS_QUERY_KEY)
+  if (previous) queryClient.setQueryData(SYNCED_PREFS_QUERY_KEY, { ...previous, values: { ...previous.values, ...values } })
+  try {
+    queryClient.setQueryData(SYNCED_PREFS_QUERY_KEY, await api.setSyncedPreferences(values))
+    return true
+  } catch (error) {
+    if (previous) queryClient.setQueryData(SYNCED_PREFS_QUERY_KEY, previous)
+    const reason = error instanceof Error ? error.message : ''
+    toast.error(reason ? `Could not save the change: ${reason}` : 'Could not save the change')
+    return false
+  }
 }
 
 /**

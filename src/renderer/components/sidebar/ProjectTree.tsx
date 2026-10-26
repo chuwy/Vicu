@@ -1,25 +1,35 @@
-import { useMemo, useRef, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ChevronRight, FolderOpen, MoreHorizontal, RotateCcw } from 'lucide-react'
 import { buildProjectTree, useProjects, type ProjectTreeNode } from '@/hooks/use-projects'
 import { useOpenTaskCounts } from '@/hooks/use-project-progress'
-import { useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed'
+import { useCollapsedCategories, useSidebarCollapsed } from '@/hooks/use-sidebar-collapsed'
+import { useProjectCategories } from '@/hooks/use-project-categories'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useSharedProjectActions } from '@/hooks/use-project-actions'
 import { cn } from '@/lib/cn'
 import { normalizeHex } from '@/lib/constants'
 import { ProjectMenu } from '@/components/projects/ProjectMenu'
+import { CategoryMenu } from '@/components/projects/CategoryMenu'
 import { ProjectCreateRow } from '@/components/projects/ProjectRowParts'
 import { useProjectActionsStore } from '@/stores/project-actions-store'
 import { useSidebarStore } from '@/stores/sidebar-store'
 import { ProjectTreeItem, type OpenProjectMenu } from './ProjectTreeItem'
+import { CategoryHeader, type OpenCategoryMenu } from './CategoryHeader'
 import type { Project } from '@/lib/vikunja-types'
+import type { ProjectCategory } from '../../../shared/project-categories'
 
 interface MenuState {
   project: Project
   point?: { x: number; y: number }
   anchor?: HTMLElement
   /** The row it came from: a dialog or confirmation the menu opens gives focus back here. */
+  opener: HTMLElement | null
+}
+
+interface CategoryMenuState {
+  category: ProjectCategory
+  point?: { x: number; y: number }
   opener: HTMLElement | null
 }
 
@@ -159,20 +169,29 @@ export function ProjectTree() {
   const { data, isLoading } = useProjects()
   const openCounts = useOpenTaskCounts()
   const { collapsed, setCollapsed } = useSidebarCollapsed()
+  const { collapsed: collapsedCategories, setCollapsed: setCategoryCollapsed } = useCollapsedCategories()
+  const { categories, layout } = useProjectCategories()
   const renaming = useProjectActionsStore((s) => s.renaming)
   const creating = useProjectActionsStore((s) => s.creating)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [categoryMenu, setCategoryMenu] = useState<CategoryMenuState | null>(null)
   const anchorRef = useRef<HTMLElement | null>(null)
+  const categoryAnchorRef = useRef<HTMLElement | null>(null)
 
   // The tree waits for the config so the Inbox is never drawn (and counted) for a moment.
   const { data: config, isLoading: configLoading } = useAppConfig()
-  const inboxProjectId = config?.inbox_project_id || undefined
   const showProgress = config?.show_project_progress !== false
   const showCount = config?.show_project_task_count === true
 
-  const visibleTree = useMemo(
-    () => (inboxProjectId ? data?.tree.filter((n) => n.id !== inboxProjectId) : data?.tree) ?? [],
-    [data?.tree, inboxProjectId],
+  // The top-level projects come from the category layout (cross-app semantics 13.2: the Inbox's
+  // subprojects are top-level too), each drawn with its subtree.
+  const nodesById = useMemo(() => new Map(flatten(data?.tree ?? []).map(({ node }) => [node.id, node])), [data?.tree])
+  const groups = useMemo(
+    () => layout.map((group) => ({
+      category: group.category,
+      nodes: group.projectIds.flatMap((id) => nodesById.get(id) ?? []),
+    })),
+    [layout, nodesById],
   )
   const archived = data?.archived ?? []
 
@@ -185,6 +204,14 @@ export function ProjectTree() {
     }
   }
   const openTreeMenu: OpenProjectMenu = (node, at, opener) => openMenu(node, at, opener)
+  const openCategoryMenu: OpenCategoryMenu = (category, at, opener) => {
+    if ('anchor' in at) {
+      categoryAnchorRef.current = at.anchor
+      setCategoryMenu({ category, opener })
+    } else {
+      setCategoryMenu({ category, point: at.point, opener })
+    }
+  }
 
   if (isLoading || configLoading || !data) {
     return <div className="px-4 py-2 text-xs text-[var(--text-secondary)]">Loading...</div>
@@ -193,27 +220,46 @@ export function ProjectTree() {
   const renamingId = renaming?.surface === 'sidebar' ? renaming.id : null
   const menuOpenFor = menu?.project.id ?? null
 
+  const projectItem = (node: (typeof groups)[number]['nodes'][number]) => (
+    <ProjectTreeItem
+      key={node.id}
+      node={node}
+      openCounts={openCounts}
+      showProgress={showProgress}
+      showCount={showCount}
+      collapsed={collapsed}
+      onToggleCollapsed={setCollapsed}
+      onOpenMenu={openTreeMenu}
+      menuOpenFor={menuOpenFor}
+      renamingId={renamingId}
+      creatingUnder={creating?.parentId ?? null}
+    />
+  )
+  const noProjects = groups.every((group) => group.nodes.length === 0) && categories.length === 0
+
   return (
     <>
       <div className="flex flex-col gap-0.5 px-2">
-        {visibleTree.length === 0 && creating?.parentId !== 0 && (
+        {noProjects && creating?.parentId !== 0 && (
           <div className="px-2 py-2 text-xs text-[var(--text-secondary)]">No projects</div>
         )}
-        {visibleTree.map((node) => (
-          <ProjectTreeItem
-            key={node.id}
-            node={node}
-            openCounts={openCounts}
-            showProgress={showProgress}
-            showCount={showCount}
-            collapsed={collapsed}
-            onToggleCollapsed={setCollapsed}
-            onOpenMenu={openTreeMenu}
-            menuOpenFor={menuOpenFor}
-            renamingId={renamingId}
-            creatingUnder={creating?.parentId ?? null}
-          />
-        ))}
+        {groups.map(({ category, nodes }) => {
+          if (!category) return <Fragment key="no-category">{nodes.map(projectItem)}</Fragment>
+          const categoryCollapsed = collapsedCategories.has(category.id)
+          return (
+            <Fragment key={category.id}>
+              <CategoryHeader
+                category={category}
+                count={nodes.length}
+                collapsed={categoryCollapsed}
+                onToggle={() => setCategoryCollapsed(category.id, !categoryCollapsed)}
+                onOpenMenu={openCategoryMenu}
+                menuOpen={categoryMenu?.category.id === category.id}
+              />
+              {!categoryCollapsed && nodes.map(projectItem)}
+            </Fragment>
+          )
+        })}
         {creating?.parentId === 0 && <ProjectCreateRow parentId={0} depth={0} />}
         {archived.length > 0 && <ArchivedGroup archived={archived} onOpenMenu={openMenu} menuOpenFor={menuOpenFor} />}
       </div>
@@ -229,6 +275,18 @@ export function ProjectTree() {
           anchorRef={menu.anchor ? anchorRef : undefined}
           opener={menu.opener}
           onClose={() => setMenu(null)}
+        />
+      )}
+      {categoryMenu && (
+        <CategoryMenu
+          key={`${categoryMenu.category.id}:${categoryMenu.point ? `${categoryMenu.point.x}:${categoryMenu.point.y}` : 'button'}`}
+          category={categoryMenu.category}
+          index={categories.findIndex((category) => category.id === categoryMenu.category.id)}
+          count={categories.length}
+          anchorPoint={categoryMenu.point}
+          anchorRef={categoryMenu.point ? undefined : categoryAnchorRef}
+          opener={categoryMenu.opener}
+          onClose={() => setCategoryMenu(null)}
         />
       )}
     </>

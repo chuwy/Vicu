@@ -30,6 +30,7 @@ import {
   type SyncedPrefsSnapshot,
 } from '../shared/synced-prefs'
 import { GLOBAL_TASK_ORDER_KEY, isTaskOrderKey } from '../shared/task-order'
+import { categoryIdOfKey, isCategoryId, projectIdOfCategoryKey, readCategoryPref } from '../shared/project-categories'
 
 /**
  * The synced preferences (docs/cross-app-semantics-v1.md section 11): the settings that change
@@ -236,6 +237,10 @@ export function isWritablePref(key: unknown, value: unknown): key is string {
   // A shared routine's reminders turned off, or the routine hidden, on this account (section 6.9).
   if (routineIdOfKey(key, ROUTINE_REMINDERS_KEY_PREFIX) !== null) return value === null || value === 'off'
   if (routineIdOfKey(key, ROUTINE_HIDDEN_KEY_PREFIX) !== null) return value === null || value === true
+  // Project categories (section 13): a category's name and order (other fields a newer app wrote
+  // are kept with it), and the category a top-level project is in.
+  if (categoryIdOfKey(key) !== null) return value === null || readCategoryPref(value) !== null
+  if (projectIdOfCategoryKey(key) !== null) return value === null || isCategoryId(value)
   return false
 }
 
@@ -250,6 +255,30 @@ export function setSyncedPreference(key: string, value: unknown): SyncedPrefsSna
   const entry = ensureState(current).document.entries[key]
   if (entry && canonicalJson(entry.value ?? null) === canonicalJson(value)) return snapshotOf(current)
   const config = service.mutate((document, deviceId) => setSyncedPref(document, key, value, deviceId, Date.now()))
+  return snapshotOf(config)
+}
+
+/**
+ * Several choices made together (a category deleted with its projects' entries, categories
+ * renumbered, an undo): one change of the local copy and one sync. Nothing is written unless every
+ * key may hold its value; values equal to the entry's are left alone. Returns the new snapshot.
+ */
+export function setSyncedPreferences(values: Record<string, unknown>): SyncedPrefsSnapshot {
+  const entries = Object.entries(values)
+  for (const [key, value] of entries) {
+    if (!isWritablePref(key, value)) throw new Error(`Invalid synced preference ${String(key)}`)
+  }
+  const current = loadConfig()
+  if (!current) throw new Error('Configuration not loaded')
+  const existing = ensureState(current).document.entries
+  const changed = entries.filter(([key, value]) => {
+    const entry = existing[key]
+    return !entry || canonicalJson(entry.value ?? null) !== canonicalJson(value)
+  })
+  if (changed.length === 0) return snapshotOf(current)
+  const now = Date.now()
+  const config = service.mutate((document, deviceId) =>
+    changed.reduce((next, [key, value]) => setSyncedPref(next, key, value, deviceId, now), document))
   return snapshotOf(config)
 }
 

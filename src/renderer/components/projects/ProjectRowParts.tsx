@@ -3,11 +3,15 @@ import { useQueryClient } from '@tanstack/react-query'
 import { FolderOpen } from 'lucide-react'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useSharedProjectActions } from '@/hooks/use-project-actions'
+import { commitProjectMove } from '@/hooks/use-project-categories'
+import { SYNCED_PREFS_QUERY_KEY } from '@/hooks/use-synced-prefs'
 import { useCreateProject, useUpdateProject } from '@/hooks/use-task-mutations'
 import { cn } from '@/lib/cn'
-import { keyboardPlacement, type DropZone, type KeyboardMove } from '@/lib/project-moves'
+import { keyboardProjectMove } from '@/lib/project-category-moves'
+import { type DropZone, type KeyboardMove } from '@/lib/project-moves'
 import { projectActions, type ProjectSurface } from '@/stores/project-actions-store'
 import type { Project } from '@/lib/vikunja-types'
+import type { SyncedPrefsSnapshot } from '../../../shared/synced-prefs'
 
 /** The project row with this id on a surface: focus goes back to it after a keyboard move. */
 export const projectRowSelector = (surface: ProjectSurface, id: number) =>
@@ -29,8 +33,8 @@ const SPOKEN: Record<KeyboardMove, string> = {
 
 /**
  * Keys on a focused project row: F2 renames, Shift+F10 or the menu key opens the project menu,
- * Alt+Shift+arrows move it (up, down, in under the project above, out one level). Returns true
- * when it handled the key.
+ * Alt+Shift+arrows move it (up, down, in under the project above, out one level; a top-level
+ * project moves within its category). Returns true when it handled the key.
  */
 export function useProjectRowKeys(project: Project, surface: ProjectSurface, openMenu: () => void) {
   const qc = useQueryClient()
@@ -53,9 +57,11 @@ export function useProjectRowKeys(project: Project, surface: ProjectSurface, ope
     event.preventDefault()
     const projects = (qc.getQueryData<Project[]>(['projects']) ?? []).filter((p) => !p.is_archived)
     const inboxId = config?.inbox_project_id ?? 0
-    const placement = keyboardPlacement(projects, project.id, keyMove, new Set(inboxId ? [inboxId] : []))
-    if (!placement) return true
-    move(project, placement, placement.parentChanged ? undefined : `Moved “${project.title}” ${SPOKEN[keyMove]}`)
+    const values = qc.getQueryData<SyncedPrefsSnapshot>(SYNCED_PREFS_QUERY_KEY)?.values ?? {}
+    const planned = keyboardProjectMove(projects, inboxId, values, project.id, keyMove)
+    if (!planned) return true
+    const spoken = planned.placement?.parentChanged ? undefined : `Moved “${project.title}” ${SPOKEN[keyMove]}`
+    commitProjectMove(qc, move, project, planned, spoken)
     // The row may be drawn again elsewhere in the tree: keep the focus on it.
     requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(projectRowSelector(surface, project.id))?.focus({ preventScroll: false })
