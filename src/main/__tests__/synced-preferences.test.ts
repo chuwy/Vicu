@@ -253,6 +253,19 @@ describe('synced preferences', () => {
     await vi.waitFor(() => expect(documentOf(7).entries['routine_reminders.3f2a-routine'].value).toBeNull())
   })
 
+  it('writes the day the last weekly review was finished (section 14.7)', async () => {
+    writeConfig({ inbox_project_id: 0 })
+    putCarrier(7, { version: 1, entries: {} })
+    const service = await loadService()
+    await service.syncSyncedPrefs()
+
+    service.setSyncedPreference('weekly_review.last', '2026-10-27')
+    await vi.waitFor(() => expect(documentOf(7).entries['weekly_review.last']?.value).toBe('2026-10-27'))
+
+    expect(() => service.setSyncedPreference('weekly_review.last', '2026-02-30')).toThrow()
+    expect(() => service.setSyncedPreference('weekly_review.last', 'last week')).toThrow()
+  })
+
   it("never reads or writes another user's carrier", async () => {
     writeConfig({ inbox_project_id: 5 })
     putCarrier(7, { version: 1, entries: { inbox_project_id: entry(42) } }, 2)

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
 import { Loader2, Mic, MessageSquarePlus, Send, Sparkles, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { Button } from '@/components/shared/Button'
+import { AskAgenda } from './AskAgenda'
 import { Checkbox } from '@/components/shared/Checkbox'
 import { cn } from '@/lib/cn'
 import { api } from '@/lib/api'
@@ -206,10 +207,13 @@ function AskPane({ ready }: { ready: { ask: boolean; talk: boolean } }) {
     >
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3" aria-live="polite">
         {!conversation || conversation.messages.length === 0 ? (
-          <p className="text-meta text-[var(--text-secondary)]">
-            Ask about your tasks: “What is due this week?”, “Move the dentist to Friday”, “What did I finish yesterday?”
-            {ready.talk && ' Or turn on the microphone and just talk.'}
-          </p>
+          <>
+            <AskAgenda onSend={(text) => void state.send(text)} disabled={busy} />
+            <p className="text-meta text-[var(--text-secondary)]">
+              Or ask anything about your tasks, such as “Move the dentist to Friday”.
+              {ready.talk && ' Or turn on the microphone and just talk.'}
+            </p>
+          </>
         ) : (
           conversation.messages.map((stored, i) => <MessageView key={i} message={stored.message} knownIds={knownIds} />)
         )}

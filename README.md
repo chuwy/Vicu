@@ -74,7 +74,8 @@ Prefer Vikunja's syntax? Switch to `*label` and `+project` in **Settings, Genera
 - **Custom lists**: your own views by project, label, due window (with or without overdue), priority, recent changes, assignee or unread comments. They sync, so the phone shows the same lists, and Quick View can show any of them.
 - **Labels** with colours, always-readable chips and a page each. Drag a task onto one to apply it.
 - **Routines**: habits next to your tasks, once or several times a day, with history and CSV export. Never overdue.
-- **Project review**: step through your projects on a cadence to keep them current.
+- **Project review**: step through your projects on a cadence to keep them current, one project at a time with its health ("7 open · 4 untouched for 30+ days · 1 overdue") and its next step.
+- **Guided organizing**: sort the Inbox, overdue tasks or tasks that have waited for months one card at a time, with the keyboard, then Undo all if you change your mind. A weekly review checklist takes you through it in GTD order. With the assistant set up, each card comes with a suggestion you confirm ([how it works](docs/guided-organizing.md)).
 - **Task order** per project: due date, priority, title, newest, oldest or manual. Subprojects follow their parent.
 - **Find anything**: quick find as you type (`Ctrl+F`), Search through finished tasks too, and a command palette (`Ctrl+Shift+P`) for every list and action.
 

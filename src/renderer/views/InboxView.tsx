@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpDown } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { ArrowUpDown, Layers } from 'lucide-react'
 import { useProjectTasks } from '@/hooks/use-project-tasks'
 import { useProjects } from '@/hooks/use-projects'
 import { useAppConfig } from '@/hooks/use-app-config'
@@ -9,6 +10,7 @@ import { TaskList } from '@/components/task-list/TaskList'
 import { RowViewProvider } from '@/components/task-list/RowViewContext'
 import { ListSkeleton } from '@/components/shared/ListSkeleton'
 import { TaskOrderMenu } from '@/components/projects/TaskOrderMenu'
+import { Button } from '@/components/shared/Button'
 import type { Project } from '@/lib/vikunja-types'
 
 /** The Inbox's "Sort tasks": the order of the Inbox project (cross-app semantics 12.3). */
@@ -30,6 +32,17 @@ function InboxSortButton({ project }: { project: Project }) {
       </button>
       {open && <TaskOrderMenu project={project} anchorRef={buttonRef} placement="bottom-end" onClose={() => setOpen(false)} />}
     </>
+  )
+}
+
+/** Opens the guided Inbox session (cross-app semantics 14.2): one task at a time. */
+function SortInboxButton() {
+  const navigate = useNavigate()
+  return (
+    <Button variant="quiet" className="px-2" onClick={() => void navigate({ to: '/guided/$session', params: { session: 'inbox' } })}>
+      <Layers aria-hidden="true" className="h-4 w-4" />
+      Sort the Inbox
+    </Button>
   )
 }
 
@@ -68,7 +81,12 @@ export function InboxView() {
         sortable
         taskOrder={taskOrder}
         viewId={viewId}
-        headerActions={inboxProject && <InboxSortButton project={inboxProject} />}
+        headerActions={inboxProject && (
+          <>
+            {tasks.some((task) => !task.done) && <SortInboxButton />}
+            <InboxSortButton project={inboxProject} />
+          </>
+        )}
         emptyTitle={inboxProjectId && !activeInboxId ? 'Inbox project is archived' : 'Nothing in Inbox'}
         emptySubtitle={inboxProjectId && !activeInboxId ? 'Select an active Inbox project in Settings' : 'Tasks added here will be sorted later'}
       />

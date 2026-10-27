@@ -13,7 +13,7 @@ export type PaletteAction =
   | { type: 'label'; id: number }
   | { type: 'task'; task: Task }
 
-export type PaletteKind = 'Action' | 'List' | 'Project' | 'Label' | 'Task'
+export type PaletteKind = 'Action' | 'List' | 'Guided' | 'Project' | 'Label' | 'Task'
 
 export interface PaletteItem {
   id: string
@@ -34,7 +34,16 @@ export interface PaletteSources {
   labels: readonly Pick<Label, 'id' | 'title'>[]
 }
 
-/** Everything the palette can run except tasks: actions, smart lists, projects and labels, in that order. */
+/** The guided sessions (cross-app semantics 14): found by name, not listed with an empty query. */
+export const GUIDED_PALETTE_ITEMS: readonly PaletteItem[] = [
+  { id: 'guided:inbox', kind: 'Guided', title: 'Sort the Inbox', keywords: 'guided organize organise process triage one at a time session', action: { type: 'path', path: '/guided/inbox' } },
+  { id: 'guided:overdue', kind: 'Guided', title: 'Sort out overdue', keywords: 'guided organize organise late reschedule session', action: { type: 'path', path: '/guided/overdue' } },
+  { id: 'guided:waiting', kind: 'Guided', title: 'Waiting a long time', keywords: 'guided organize organise old stale untouched session', action: { type: 'path', path: '/guided/waiting' } },
+  { id: 'guided:review', kind: 'Guided', title: 'Start review', keywords: 'guided projects review one at a time session', action: { type: 'path', path: '/guided/review' } },
+  { id: 'guided:weekly', kind: 'Guided', title: 'Weekly review', keywords: 'guided gtd checklist week session', action: { type: 'path', path: '/weekly-review' } },
+]
+
+/** Everything the palette can run except tasks: actions, smart lists, guided sessions, projects and labels, in that order. */
 export function buildPaletteItems({ smartLists, projects, labels }: PaletteSources): PaletteItem[] {
   const actions: PaletteItem[] = [
     { id: 'cmd:new-task', kind: 'Action', title: 'New task', keywords: 'add create', action: { type: 'command', command: 'new-task' } },
@@ -53,6 +62,7 @@ export function buildPaletteItems({ smartLists, projects, labels }: PaletteSourc
   return [
     ...actions,
     ...smartLists.map((list): PaletteItem => ({ id: `list:${list.id}`, kind: 'List', title: list.label, keywords: 'go to', action: { type: 'path', path: list.path } })),
+    ...GUIDED_PALETTE_ITEMS,
     ...projects.map((project): PaletteItem => ({ id: `project:${project.id}`, kind: 'Project', title: project.title, keywords: 'go to', action: { type: 'project', id: project.id } })),
     ...labels.map((label): PaletteItem => ({ id: `label:${label.id}`, kind: 'Label', title: label.title, keywords: 'go to tag', action: { type: 'label', id: label.id } })),
   ]

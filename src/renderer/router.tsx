@@ -17,7 +17,7 @@ import { CustomListView } from '@/views/CustomListView'
 import { SearchView } from '@/views/SearchView'
 import { pageTransitionTypes, trackInput } from '@/lib/navigation-motion'
 
-// Routines, Review and Settings are used now and then and are their own chunks, loaded when first
+// Routines, Review, the guided sessions and Settings are used now and then and are their own chunks, loaded when first
 // opened, so the main chunk holds what every session needs.
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -64,6 +64,20 @@ const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/review',
   component: lazyRouteComponent(() => import('@/views/ReviewView'), 'ReviewView'),
+})
+
+// Guided organizing (cross-app semantics 14): a session on its own page, and the weekly review.
+const guidedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/guided/$session',
+  component: lazyRouteComponent(() => import('@/views/GuidedView'), 'GuidedView'),
+  validateSearch: (search: Record<string, unknown>): { from?: 'weekly' } => (search.from === 'weekly' ? { from: 'weekly' } : {}),
+})
+
+const weeklyReviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/weekly-review',
+  component: lazyRouteComponent(() => import('@/views/WeeklyReviewView'), 'WeeklyReviewView'),
 })
 
 const logbookRoute = createRoute({
@@ -113,6 +127,8 @@ const routeTree = rootRoute.addChildren([
   upcomingRoute,
   anytimeRoute,
   reviewRoute,
+  guidedRoute,
+  weeklyReviewRoute,
   logbookRoute,
   projectRoute,
   tagRoute,

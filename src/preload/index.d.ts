@@ -241,6 +241,11 @@ export interface ElectronAPI {
      */
     dictate(input: { requestId: string; edit: boolean; user: string; brainDump?: boolean }): Promise<AiResult<unknown>>
     cancelDictation(requestId: string): Promise<boolean>
+    /**
+     * Suggestions for one batch of a guided session (section 9), from Ask's model under Ask's
+     * agreement; checked against `organize.answerSchema` in main. Cancelled with `cancelDictation`.
+     */
+    organize(input: { requestId: string; user: string }): Promise<AiResult<unknown>>
     askStart(request: AskTurnRequest): Promise<boolean>
     askCancel(turnId: string): Promise<boolean>
     onAskEvent(cb: (envelope: AskTurnEnvelope) => void): () => void

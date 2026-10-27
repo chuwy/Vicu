@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Circle, Folder, Mic, Plus, RefreshCw, Settings, Sparkles, SunMoon, Tag } from 'lucide-react'
+import { CheckCircle2, Circle, Folder, Layers, Mic, Plus, RefreshCw, Settings, Sparkles, SunMoon, Tag } from 'lucide-react'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { formatAcceleratorForDisplay } from '@/lib/accelerator'
 import { Dialog } from '@/components/overlay/Dialog'
@@ -32,6 +32,7 @@ import { useVoiceStore } from '@/stores/voice-store'
 const ICONS: Record<PaletteKind, typeof Circle> = {
   Action: Plus,
   List: Circle,
+  Guided: Layers,
   Project: Folder,
   Label: Tag,
   Task: Circle,

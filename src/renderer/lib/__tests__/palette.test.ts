@@ -18,8 +18,8 @@ const task = (id: number, title: string) => ({ id, title, project_id: 1 }) as Ta
 const ids = (list: { id: string }[]) => list.map((i) => i.id)
 
 describe('buildPaletteItems', () => {
-  it('lists actions first, then smart lists, projects and labels', () => {
-    expect(ids(items).map((id) => id.split(':')[0])).toEqual(['cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'list', 'list', 'list', 'project', 'project', 'label'])
+  it('lists actions first, then smart lists, guided sessions, projects and labels', () => {
+    expect(ids(items).map((id) => id.split(':')[0])).toEqual(['cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'cmd', 'list', 'list', 'list', 'guided', 'guided', 'guided', 'guided', 'guided', 'project', 'project', 'label'])
   })
 
   it('has the New task, Say a task, Dictate tasks, Brain dump, Ask, Make tasks, Refresh, Toggle theme and Settings actions', () => {
@@ -63,6 +63,12 @@ describe('rankPalette', () => {
     expect(rankPalette(items, 'say', [])[0].id).toBe('cmd:voice')
     expect(rankPalette(items, 'dictate', [])[0].id).toBe('cmd:dictate')
     expect(rankPalette(items, 'dictate', []).map((i) => i.id)).toContain('cmd:voice')
+  })
+
+  it('finds the guided sessions by name and by their words', () => {
+    expect(rankPalette(items, 'weekly review', [])[0].id).toBe('guided:weekly')
+    expect(rankPalette(items, 'sort the inbox', [])[0].id).toBe('guided:inbox')
+    expect(rankPalette(items, 'triage', []).map((i) => i.id)).toEqual(['guided:inbox'])
   })
 
   it('lists nothing when nothing matches', () => {

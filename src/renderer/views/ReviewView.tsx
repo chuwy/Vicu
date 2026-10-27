@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RefreshCw, CheckCircle2 } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { RefreshCw, CheckCircle2, ListChecks, Play } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   useReviewTree,
@@ -15,6 +16,7 @@ import { toast, UNDO_TOAST_MS, useToastStore } from '@/stores/toast-store'
 import { ProjectBranch } from '@/components/review/ProjectBranch'
 import { SmartListIcon } from '@/components/shared/SmartListIcon'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Button } from '@/components/shared/Button'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ReadingScroll } from '@/components/layout/ReadingScroll'
 import type { Project } from '@/lib/vikunja-types'
@@ -43,6 +45,7 @@ export function ReviewView() {
   const clearErrorNotice = useReviewNoticeStore((s) => s.clearError)
   const collapseTasks = useSelectionStore((s) => s.collapseAll)
   const { data: cfg } = useAppConfig()
+  const navigate = useNavigate()
   const defaultCadence = cfg?.review?.default_cadence_days ?? 14
 
   const currentTree = tab === 'due' ? due.data : all.data
@@ -224,6 +227,16 @@ export function ReviewView() {
           </>
         }
         actions={
+          <>
+          {/* Guided organizing (cross-app semantics 14.4, 14.7): one project at a time, and the weekly checklist. */}
+          {remaining > 0 && (
+            <Button variant="primary" onClick={() => void navigate({ to: '/guided/$session', params: { session: 'review' } })}>
+              <Play aria-hidden="true" className="h-4 w-4" /> Start review
+            </Button>
+          )}
+          <Button onClick={() => void navigate({ to: '/weekly-review' })}>
+            <ListChecks aria-hidden="true" className="h-4 w-4" /> Weekly review
+          </Button>
           <span
             style={{
               fontSize: 'var(--type-chip-size)',
@@ -237,6 +250,7 @@ export function ReviewView() {
           >
             {remaining} due
           </span>
+          </>
         }
       />
       <div className="mx-auto w-full max-w-reading shrink-0 pr-[var(--scrollbar-size)]">

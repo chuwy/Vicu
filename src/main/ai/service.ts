@@ -8,11 +8,13 @@ import {
   AI_LIMITS,
   BRAIN_DUMP_ANSWER_SCHEMA,
   DICTATION_ANSWER_SCHEMA,
+  ORGANIZE_ANSWER_SCHEMA,
   PROBE,
   askSystemPrompt,
   brainDumpSystemPrompt,
   dictationSystemPrompt,
   enabledAskTools,
+  promptText,
   providerPreset,
   type JsonSchema,
   type StructuredMode,
@@ -39,6 +41,8 @@ export const DICTATION_MAX_TOKENS = 8192
 export const ASK_MAX_TOKENS = 16000
 /** A brain dump's whole plan in one answer (4.8.1). */
 export const BRAIN_DUMP_MAX_TOKENS = AI_LIMITS.brain_dump_max_tokens
+/** One batch of a guided session's suggestions (9.1). */
+export const ORGANIZE_MAX_TOKENS = AI_LIMITS.organize_max_tokens
 const PROBE_MAX_TOKENS = 2048
 
 let transport: Transport = nodeTransport
@@ -175,13 +179,20 @@ export function aiTestConnection(model: string): Promise<AiResult<ConnectionTest
   })
 }
 
-/** A structured answer from the dictation model: checked against the schema, repaired once. */
-function dictationModelAnswer(request: { system: string; user: string; schema: JsonSchema; maxTokens: number }, signal?: AbortSignal): Promise<AiResult<unknown>> {
+/**
+ * A structured answer, checked against the schema and repaired once: from the dictation model, or
+ * from Ask's model for a guided session's suggestions (9.1).
+ */
+function structuredModelAnswer(
+  request: { system: string; user: string; schema: JsonSchema; maxTokens: number; feature?: 'dictation' | 'ask' },
+  signal?: AbortSignal,
+): Promise<AiResult<unknown>> {
   return wrap(async () => {
     const settings = getAiSettings()
     const connection = connectionOf(settings)
-    const model = settings.models.dictation
-    if (!model) throw new AiFailure('not_set_up', 'Choose a dictation model in Settings, Assistant.')
+    const feature = request.feature ?? 'dictation'
+    const model = settings.models[feature]
+    if (!model) throw new AiFailure('not_set_up', `Choose ${feature === 'ask' ? 'an Ask' : 'a dictation'} model in Settings, Assistant.`)
     const mode = capabilitiesOf(settings, model)?.structured ?? providerPreset(settings.provider ?? '')?.structured ?? 'json_schema'
     return structuredAnswer(connection, {
       model,
@@ -196,7 +207,7 @@ function dictationModelAnswer(request: { system: string; user: string; schema: J
 
 /** One dictation request (4.1, 4.4). */
 export function aiDictate(input: { edit: boolean; user: string }, signal?: AbortSignal): Promise<AiResult<unknown>> {
-  return dictationModelAnswer({
+  return structuredModelAnswer({
     system: dictationSystemPrompt(input.edit),
     user: input.user,
     schema: DICTATION_ANSWER_SCHEMA,
@@ -206,11 +217,26 @@ export function aiDictate(input: { edit: boolean; user: string }, signal?: Abort
 
 /** One brain dump request: Organize (4.8.1) or Update (4.8.4), with the dictation model. */
 export function aiBrainDump(input: { edit: boolean; user: string }, signal?: AbortSignal): Promise<AiResult<unknown>> {
-  return dictationModelAnswer({
+  return structuredModelAnswer({
     system: brainDumpSystemPrompt(input.edit),
     user: input.user,
     schema: BRAIN_DUMP_ANSWER_SCHEMA,
     maxTokens: BRAIN_DUMP_MAX_TOKENS,
+  }, signal)
+}
+
+/**
+ * One batch of suggestions for a guided session (section 9): the `organize` prompt, asked like a
+ * dictation (deterministic, structured, dictation's idle timeout) of Ask's model, under Ask's
+ * agreement.
+ */
+export function aiOrganize(input: { user: string }, signal?: AbortSignal): Promise<AiResult<unknown>> {
+  return structuredModelAnswer({
+    system: promptText('organize'),
+    user: input.user,
+    schema: ORGANIZE_ANSWER_SCHEMA,
+    maxTokens: ORGANIZE_MAX_TOKENS,
+    feature: 'ask',
   }, signal)
 }
 

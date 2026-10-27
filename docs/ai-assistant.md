@@ -125,6 +125,18 @@ off when you press it again, close Ask, or after a minute without speech.
 Text from shared projects (titles, notes, other people's names) is treated as data, never as an
 instruction to the model, and the model cannot reach the internet or fetch images or links.
 
+An empty conversation starts with what needs a decision (the Inbox, overdue tasks, projects due for
+review, the weekly review), each opening its guided session, and a few questions for the list you
+are in; pressing one sends it as written.
+
+## Suggestions in guided sessions
+
+The guided sessions (sorting the Inbox, overdue tasks, tasks waiting a long time, and the project
+review; see `docs/guided-organizing.md`) work without the assistant. With Ask set up, Ask's model
+suggests a decision for each card: the choices are filled in with a dashed outline and the reason
+is under the title. Nothing is saved until you press Next, and Complete or Delete are only marked
+"Suggested", never done for you.
+
 ## Speech on this computer
 
 Voice input normally uses the system's recogniser. Under Hearing you can download
@@ -137,7 +149,8 @@ and resumed, and a model can be deleted again.
 
 - Sent to the provider: for dictation and brain dump, the words (never audio) with the names of
   your projects, labels and places and today's date and time; for Ask, your messages and what its
-  tools look up.
+  tools look up; for suggestions in a guided session, the same names and date with the session's
+  tasks (their summaries, when they were added and changed, and the start of their notes).
 - On this computer only: the last five conversations and any transcript kept after a failed
   request. They are deleted when you sign out, or with Delete conversations in Settings,
   Assistant, Privacy.

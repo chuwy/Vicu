@@ -157,6 +157,19 @@ export function readTaskOrderPref(value: unknown): TaskOrderKey {
   return parseTaskOrder(value)
 }
 
+/** The local date the last weekly review was finished (section 14.7): `"YYYY-MM-DD"`. */
+export const WEEKLY_REVIEW_LAST_KEY = 'weekly_review.last'
+
+/** A real local date `YYYY-MM-DD`, else null (never done, or a value that cannot be read). */
+export function readWeeklyReviewLast(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return null
+  const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const date = new Date(Date.UTC(y, m - 1, d))
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d ? value : null
+}
+
 // Places and location reminders (section 11.7): a place's id and name, and a task's reminder at
 // it. Where a place is never syncs; only phones know it, and only phones remind.
 
@@ -299,6 +312,7 @@ export function readSyncedPref(values: Readonly<Record<string, unknown>>, key: s
   const value = values[key]
   if (key === INBOX_PROJECT_ID_KEY) return readInboxProjectId(value)
   if (key === GLOBAL_TASK_ORDER_KEY) return readTaskOrderPref(value)
+  if (key === WEEKLY_REVIEW_LAST_KEY) return readWeeklyReviewLast(value)
   if (/^task_order\.project\.\d+$/.test(key)) return value === undefined || value === null ? null : parseTaskOrder(value)
   if (placeIdOfKey(key) !== null) return readPlacePref(value)
   if (taskIdOfLocationReminderKey(key) !== null) return readLocationReminderPref(value)
