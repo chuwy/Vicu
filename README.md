@@ -7,6 +7,7 @@
 [![Website](https://img.shields.io/badge/website-vicutodo.app-ee9a4d)](https://vicutodo.app/)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+[![Ko-fi](https://img.shields.io/badge/support-Ko--fi-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/rendyhd)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/assets/img/screens/desktop-today-dark.webp">
@@ -168,6 +169,10 @@ Found a bug or have an idea? [Open an issue](https://github.com/rendyhd/Vicu/iss
 - **[Vicu for Android and iOS](https://github.com/rendyhd/Vicu-Mobile)**: Vicu on your phone, iPhone and iPad
 - **[vikunja-quick-entry](https://github.com/rendyhd/vikunja-quick-entry)**: a lightweight tray app with only Quick Entry and Quick View
 - **[Vikunja](https://vikunja.io/)**: the open-source backend that powers Vicu
+
+## Support Vicu
+
+Vicu is free and open source, with no ads, no account and no paid tier. If it helps you, you can [support it on Ko-fi](https://ko-fi.com/rendyhd).
 
 ## License
 
