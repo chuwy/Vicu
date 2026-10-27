@@ -26,6 +26,8 @@ import {
   ROUTINE_HIDDEN_KEY_PREFIX,
   ROUTINE_REMINDERS_KEY_PREFIX,
   validateSyncedPrefs,
+  readWeeklyReviewLast,
+  WEEKLY_REVIEW_LAST_KEY,
   type SyncedPrefsDocument,
   type SyncedPrefsSnapshot,
 } from '../shared/synced-prefs'
@@ -227,6 +229,8 @@ export function isWritablePref(key: unknown, value: unknown): key is string {
   if (typeof key !== 'string') return false
   if (key === INBOX_PROJECT_ID_KEY) return readInboxProjectId(value) !== null
   if (key === GLOBAL_TASK_ORDER_KEY || /^task_order\.project\.[1-9]\d*$/.test(key)) return value === null || isTaskOrderKey(value)
+  // The day the last weekly review was finished (section 14.7).
+  if (key === WEEKLY_REVIEW_LAST_KEY) return value === null || readWeeklyReviewLast(value) !== null
   // A task's location reminder at a place a phone saved (section 11.7). The desktop never creates,
   // renames or deletes a place: that needs its position, which only the phone has.
   if (taskIdOfLocationReminderKey(key) !== null) {

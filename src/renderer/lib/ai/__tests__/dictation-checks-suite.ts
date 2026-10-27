@@ -3,6 +3,7 @@ import { join } from 'path'
 import { describe, expect, it } from 'vitest'
 import { checkBrainDumpAnswer, type BrainDumpAnswer } from '../../../../shared/ai/brain-dump'
 import { checkDictationAnswer, type CheckContext, type DictationAnswer } from '../../../../shared/ai/dictation'
+import { checkOrganizeAnswer, type OrganizeAnswer, type OrganizeSession } from '../../../../shared/ai/organize'
 import { readSaid } from '../said-parser'
 
 // docs/ai-assistant-v1.md section 4.3 against `dictation.checks` of test-fixtures/ai-tools-v1.json,
@@ -35,6 +36,16 @@ interface BrainDumpVector extends Omit<CheckVector, 'answer'> {
   answer: BrainDumpAnswer
 }
 
+interface OrganizeVector {
+  name: string
+  session: OrganizeSession
+  reference: string
+  locale: string
+  tasks: Array<{ id: number; title: string; project_id: number; due: string | null }>
+  answer: OrganizeAnswer
+  expect: unknown
+}
+
 function contextFor(vector: Omit<CheckVector, 'answer'>): CheckContext {
   const context = vector.context ?? fixture.dictation.context
   return {
@@ -65,6 +76,15 @@ describe(`dictation checks (fixture vectors, real parser, ${zone})`, () => {
   for (const vector of fixture.brainDump.checks as BrainDumpVector[]) {
     it(`brain dump: ${vector.name}`, () => {
       expect(checkBrainDumpAnswer(vector.answer, contextFor(vector))).toEqual(vector.expect)
+    })
+  }
+
+  // Suggestions in guided sessions (section 9.3), with the dictation context.
+  for (const vector of fixture.organize.checks as OrganizeVector[]) {
+    it(`organize: ${vector.name}`, () => {
+      const tasks = vector.tasks.map((task) => ({ id: task.id, title: task.title, project_id: task.project_id, has_due: task.due !== null }))
+      const result = checkOrganizeAnswer(vector.answer, vector.session, tasks, contextFor({ ...vector, defaultDue: null }))
+      expect(result).toEqual(vector.expect)
     })
   }
 

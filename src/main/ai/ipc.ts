@@ -1,7 +1,7 @@
 import { handleTrusted } from '../secure-ipc'
 import type { AiSettingsPatch, AskTurnRequest, KeptTranscript } from '../../shared/ai/types'
 import { clearAiAccountData, dropKeptTranscript, flushAiLocalData, getConversations, getKeptTranscripts, keepTranscript, saveConversations } from './local-data'
-import { aiAskTurn, aiBrainDump, aiDictate, aiListModels, aiTestConnection, cancelAllAskTurns, cancelAskTurn } from './service'
+import { aiAskTurn, aiBrainDump, aiDictate, aiListModels, aiOrganize, aiTestConnection, cancelAllAskTurns, cancelAskTurn } from './service'
 import { aiSettingsView, flushAiSettings, patchAiSettings, setProviderKey } from './settings-store'
 import {
   cancelModelDownload,
@@ -50,6 +50,17 @@ export function registerAiIpc(): void {
     const controller = typeof id === 'string' ? dictations.get(id) : undefined
     controller?.abort()
     return !!controller
+  })
+  // A guided session's suggestions (section 9): Ask's model, cancelled like a dictation.
+  handleTrusted('ai:organize', async (_event, input: { requestId?: unknown; user?: unknown }) => {
+    const id = typeof input?.requestId === 'string' ? input.requestId : ''
+    const controller = new AbortController()
+    if (id) dictations.set(id, controller)
+    try {
+      return await aiOrganize({ user: typeof input?.user === 'string' ? input.user : '' }, controller.signal)
+    } finally {
+      if (id) dictations.delete(id)
+    }
   })
   handleTrusted('ai:ask-start', (event, request: AskTurnRequest) => {
     const sender = event.sender

@@ -153,7 +153,7 @@ export function setDictationDeps(next: DictationDeps | null): void {
   deps = next
 }
 
-function errorText(error: AiError): string {
+export function errorText(error: AiError): string {
   switch (error.kind) {
     case 'timeout': return 'The model did not answer in time.'
     case 'network': return 'Could not reach the model.'

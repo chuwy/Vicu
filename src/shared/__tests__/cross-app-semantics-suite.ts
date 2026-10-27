@@ -23,7 +23,7 @@ import {
   type CustomListContext,
   type CustomListFilterInput,
 } from '../custom-list-filter'
-import { computeStatus, type ReviewMetadata } from '../../renderer/lib/review-metadata'
+import { computeStatus, type ReviewMetadata } from '../review-metadata'
 import { evaluateServerFilter } from './server-filter-eval'
 
 /**
