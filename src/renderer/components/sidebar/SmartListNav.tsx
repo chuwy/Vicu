@@ -8,7 +8,7 @@ import { useReviewBadgeCount, useReviewFeatureEnabled } from '@/hooks/use-review
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useOpenTaskCounts } from '@/hooks/use-project-progress'
 import { useTodayOverdueCount } from '@/hooks/use-today-overdue-count'
-import { isRoutinesEnabled } from '@/lib/vikunja-types'
+import { isHiddenFromSidebar, isRoutinesEnabled } from '@/lib/vikunja-types'
 
 export interface SmartListItem {
   id: SmartListId
@@ -27,7 +27,10 @@ const ALL_SMART_LISTS: SmartListItem[] = [
   { id: 'logbook', label: 'Logbook', path: '/logbook' },
 ]
 
-/** The smart lists that are switched on (Review and Routines can be off). */
+/**
+ * The smart lists that are switched on (Review and Routines can be off). The command palette lists
+ * them all; the sidebar leaves out the ones hidden in Settings → General → Sidebar.
+ */
 export function useSmartLists(): SmartListItem[] {
   const reviewEnabled = useReviewFeatureEnabled()
   const { data: config } = useAppConfig()
@@ -42,8 +45,8 @@ export function SmartListNav() {
   const matches = useMatches()
   const currentPath = matches[matches.length - 1]?.pathname ?? ''
   const reviewCount = useReviewBadgeCount()
-  const items = useSmartLists()
   const { data: config } = useAppConfig()
+  const items = useSmartLists().filter((item) => !isHiddenFromSidebar(config, item.id))
   const openCounts = useOpenTaskCounts()
   const todayCount = useTodayOverdueCount()
 

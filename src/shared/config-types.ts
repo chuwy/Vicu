@@ -206,6 +206,12 @@ export interface AppConfig {
    * device, never synced). They belong to one account, so this is dropped with its data.
    */
   sidebar_collapsed_categories?: string[]
+  /**
+   * The smart lists the person took out of the sidebar (`SIDEBAR_HIDEABLE_LISTS`). Per device and
+   * kept through sign-out, like Android's drawer setting; never synced. A hidden list keeps working
+   * and stays in the command palette. A name this version does not know (a newer one wrote it) is kept.
+   */
+  sidebar_hidden_lists?: string[]
   custom_lists?: CustomList[]
   /** Owned by the custom list service in the main process; the renderer never writes it. */
   custom_lists_sync?: {
@@ -340,6 +346,25 @@ export function isQuickViewEnabled(config: Pick<AppConfig, 'quick_view_enabled'>
 /** Routines are on unless the user turned them off (configs from before the setting have none). */
 export function isRoutinesEnabled(config: Pick<AppConfig, 'routines_enabled'> | null | undefined): boolean {
   return config?.routines_enabled !== false
+}
+
+/** The smart lists Settings can take out of the sidebar, in the sidebar's order; the Inbox always stays. */
+export const SIDEBAR_HIDEABLE_LISTS = ['today', 'routines', 'upcoming', 'anytime', 'review', 'logbook'] as const
+export type SidebarHideableList = (typeof SIDEBAR_HIDEABLE_LISTS)[number]
+
+/** Whether the person took `list` out of the sidebar (Settings → General → Sidebar). */
+export function isHiddenFromSidebar(config: Pick<AppConfig, 'sidebar_hidden_lists'> | null | undefined, list: string): boolean {
+  return config?.sidebar_hidden_lists?.includes(list) === true
+}
+
+/** The hidden lists with `list` taken out of the sidebar or put back; names this version does not know stay. */
+export function withSidebarListHidden(
+  config: Pick<AppConfig, 'sidebar_hidden_lists'> | null | undefined,
+  list: SidebarHideableList,
+  hidden: boolean,
+): string[] {
+  const rest = (config?.sidebar_hidden_lists ?? []).filter((id) => id !== list)
+  return hidden ? [...rest, list] : rest
 }
 
 /** Today lists open routines only while routines are on and the Today section is not turned off. */

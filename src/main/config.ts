@@ -118,6 +118,12 @@ function normalizeCategoryIds(raw: unknown): string[] | undefined {
   return [...new Set(raw.filter(isCategoryId))].sort()
 }
 
+/** Smart list names: lower case words, so one a newer version adds is kept too. */
+function normalizeListNames(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  return [...new Set(raw.filter((id): id is string => typeof id === 'string' && /^[a-z][a-z_]{0,31}$/.test(id)))].sort()
+}
+
 export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
   return {
     vikunja_url: typeof raw.vikunja_url === 'string'
@@ -138,6 +144,7 @@ export function normalizeConfig(raw: Record<string, unknown>): AppConfig {
     sidebar_width: typeof raw.sidebar_width === 'number' ? raw.sidebar_width : undefined,
     sidebar_collapsed_projects: normalizeProjectIds(raw.sidebar_collapsed_projects),
     sidebar_collapsed_categories: normalizeCategoryIds(raw.sidebar_collapsed_categories),
+    sidebar_hidden_lists: normalizeListNames(raw.sidebar_hidden_lists),
     custom_lists: Array.isArray(raw.custom_lists) ? raw.custom_lists as AppConfig['custom_lists'] : undefined,
     custom_lists_sync: raw.custom_lists_sync && typeof raw.custom_lists_sync === 'object'
       ? raw.custom_lists_sync as AppConfig['custom_lists_sync']

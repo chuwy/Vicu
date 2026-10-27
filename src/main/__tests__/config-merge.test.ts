@@ -29,6 +29,7 @@ function userConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     sidebar_width: 333,
     sidebar_collapsed_projects: [4, 9],
     sidebar_collapsed_categories: ['work'],
+    sidebar_hidden_lists: ['logbook', 'anytime'],
     quick_entry_enabled: true,
     quick_view_enabled: true,
     quick_entry_hotkey: 'Ctrl+Alt+N',
@@ -74,6 +75,7 @@ const PREFERENCE_KEYS = [
   'clock_format',
   'window_bounds',
   'sidebar_width',
+  'sidebar_hidden_lists',
   'quick_entry_enabled',
   'quick_view_enabled',
   'quick_entry_hotkey',
@@ -200,6 +202,12 @@ describe('applyConnectionFields: another server or account', () => {
     expect(normalizeConfig({ sidebar_collapsed_categories: ['work', 'home', 'work', 'project', 'a.b', '', 3, null] }).sidebar_collapsed_categories)
       .toEqual(['home', 'work'])
     expect(normalizeConfig({ sidebar_collapsed_categories: 'nope' }).sidebar_collapsed_categories).toBeUndefined()
+  })
+
+  it('sidebar_hidden_lists keeps list names, once each, sorted, a newer one included', () => {
+    expect(normalizeConfig({ sidebar_hidden_lists: ['logbook', 'anytime', 'logbook', 'calendar', 'Today', '', 3, null] }).sidebar_hidden_lists)
+      .toEqual(['anytime', 'calendar', 'logbook'])
+    expect(normalizeConfig({ sidebar_hidden_lists: 'nope' }).sidebar_hidden_lists).toBeUndefined()
   })
 
   it('does not carry the old inbox project over', () => {

@@ -217,15 +217,19 @@ export type {
   CustomListSyncStatus,
   ReviewConfig,
   SecondaryProject,
+  SidebarHideableList,
   UnsyncedDocuments,
   ViewerFilter,
 } from '../../shared/config-types'
 export {
   CUSTOM_LIST_SORT_FIELDS,
+  SIDEBAR_HIDEABLE_LISTS,
+  isHiddenFromSidebar,
   isQuickEntryEnabled,
   isQuickViewEnabled,
   isRoutinesEnabled,
   showRoutinesInToday,
+  withSidebarListHidden,
 } from '../../shared/config-types'
 import type { ConnectionFields } from '../../shared/config-types'
 
