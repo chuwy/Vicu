@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { runTaskTransition, transitionIds } from '@/lib/task-transition'
 
+/** A subtask opened from its parent's card: its row is shown under the parent's row. */
+export interface OpenedSubtask {
+  parentId: number
+  id: number
+}
+
 interface SelectionState {
   expandedTaskId: number | null
   focusedTaskId: number | null
@@ -13,8 +19,15 @@ interface SelectionState {
   selectedTaskIds: Set<number>
   /** Anchor row for shift-click range selection. */
   selectionAnchorId: number | null
+  /**
+   * The subtasks opened from a card ("Open" on a subtask), outermost first. Lists leave subtasks out,
+   * so a parent row shows the ones listed here as rows of their own under it until another task opens.
+   */
+  openedSubtasks: OpenedSubtask[]
   setExpandedTask: (id: number | null) => void
   toggleExpandedTask: (id: number) => void
+  /** Open a subtask of the task whose card shows it: the card closes and the subtask opens under it. */
+  openSubtask: (parentId: number, id: number) => void
   setFocusedTask: (id: number | null) => void
   requestOpenTask: (id: number) => void
   /** The row of a requested task calls this once it is on screen: it expands and takes focus. */
@@ -52,6 +65,11 @@ export const currentExpandedTaskId = (): number | null => expandedNow(useSelecti
 function expand(get: Get, set: SetState, next: number | null): void {
   const current = expandedNow(get)
   if (current === next) return
+  // Opening any other task puts the opened subtasks away; closing one keeps its row where it is.
+  const { openedSubtasks } = get()
+  if (next !== null && openedSubtasks.length > 0 && !openedSubtasks.some((entry) => entry.id === next)) {
+    set({ openedSubtasks: [] })
+  }
   const request = { id: next }
   requested = request
   runTaskTransition(transitionIds(current, next), () => {
@@ -66,11 +84,20 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   pendingOpenTaskId: null,
   selectedTaskIds: new Set(),
   selectionAnchorId: null,
+  openedSubtasks: [],
 
   // Opening, closing and switching the expanded task go through the open/close transition (lib/task-transition.ts).
   setExpandedTask: (id) => expand(get, set, id),
 
   toggleExpandedTask: (id) => expand(get, set, expandedNow(get) === id ? null : id),
+
+  openSubtask: (parentId, id) => {
+    // A subtask of an opened subtask goes one level deeper; any other parent starts a new trail.
+    const trail = get().openedSubtasks
+    const at = trail.findIndex((entry) => entry.id === parentId)
+    set({ openedSubtasks: [...trail.slice(0, at + 1), { parentId, id }], focusedTaskId: id })
+    expand(get, set, id)
+  },
 
   setFocusedTask: (id) => set({ focusedTaskId: id }),
 

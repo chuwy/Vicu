@@ -19,7 +19,7 @@ import {
   taskDescendants,
   unfinishedDescendants,
 } from '@/lib/task-hierarchy'
-import { updateTaskDetailDone } from '@/lib/task-detail-cache'
+import { removeFromTaskDetail, restoreTaskDetail, updateTaskDetailDone, updateTaskDetailFields } from '@/lib/task-detail-cache'
 import { projectPatch, taskPatch } from '@/lib/merge-patches'
 import { rememberRepeatCompletion, repeatUndoPatch, takeRepeatSnapshot } from '@/lib/repeat-undo'
 import {
@@ -293,11 +293,14 @@ export function useUpdateTask(options?: MutationHookOptions) {
       await qc.cancelQueries({ queryKey: ['tasks'] })
       await qc.cancelQueries({ queryKey: ['view-tasks'] })
       await qc.cancelQueries({ queryKey: ['section-tasks'] })
+      await qc.cancelQueries({ queryKey: ['task-detail'] })
       const previousTaskQueries = qc.getQueriesData<Task[]>({ queryKey: ['tasks'] })
       const previousViewQueries = qc.getQueriesData<Task[]>({ queryKey: ['view-tasks'] })
       const previousSectionQueries = qc.getQueriesData<SectionTaskCacheEntry[]>({
         queryKey: ['section-tasks'],
       })
+      // A subtask is shown from its parent's fetched subtask list (the open card, an opened subtask row).
+      const previousTaskDetailQueries = updateTaskDetailFields(qc, id, changes)
 
       qc.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
         old?.map((t) => (t.id === id ? { ...t, ...changes } : t))
@@ -345,9 +348,10 @@ export function useUpdateTask(options?: MutationHookOptions) {
         (old) => updateSectionTaskCache(old, id, changes, original)
       )
 
-      return { previousTaskQueries, previousViewQueries, previousSectionQueries }
+      return { previousTaskQueries, previousViewQueries, previousSectionQueries, previousTaskDetailQueries }
     },
     onError: (_err, _vars, context) => {
+      restoreTaskDetail(qc, context?.previousTaskDetailQueries)
       if (context?.previousTaskQueries) {
         for (const [key, data] of context.previousTaskQueries) {
           qc.setQueryData(key, data)
@@ -411,11 +415,13 @@ export function useDeleteTask() {
       await qc.cancelQueries({ queryKey: ['tasks'] })
       await qc.cancelQueries({ queryKey: ['view-tasks'] })
       await qc.cancelQueries({ queryKey: ['section-tasks'] })
+      await qc.cancelQueries({ queryKey: ['task-detail'] })
       const previousTaskQueries = qc.getQueriesData<Task[]>({ queryKey: ['tasks'] })
       const previousViewQueries = qc.getQueriesData<Task[]>({ queryKey: ['view-tasks'] })
       const previousSectionQueries = qc.getQueriesData<SectionTaskCacheEntry[]>({
         queryKey: ['section-tasks'],
       })
+      const previousTaskDetailQueries = removeFromTaskDetail(qc, ids)
 
       qc.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
         old?.map((item) => removeTaskIdsFromTree(item, ids)).filter((item): item is Task => item !== null)
@@ -432,9 +438,10 @@ export function useDeleteTask() {
         }))
       )
 
-      return { previousTaskQueries, previousViewQueries, previousSectionQueries, completedEntries }
+      return { previousTaskQueries, previousViewQueries, previousSectionQueries, previousTaskDetailQueries, completedEntries }
     },
     onError: (_err, _vars, context) => {
+      restoreTaskDetail(qc, context?.previousTaskDetailQueries)
       for (const entry of context?.completedEntries ?? []) {
         useCompletedTasksStore.getState().add(
           entry.task,
@@ -460,7 +467,7 @@ export function useDeleteTask() {
       }
     },
     onSettled: () => {
-      refreshTasks(qc, [['tasks'], ['view-tasks'], ['section-tasks'], ['project-counts']])
+      refreshTasks(qc, [['tasks'], ['view-tasks'], ['section-tasks'], ['task-detail'], ['project-counts']])
       // A deleted task's reminders must not fire.
       api.refreshTaskReminders()
     },

@@ -4,12 +4,18 @@ import type { Task } from '@/lib/vikunja-types'
 import {
   mapTaskDoneByIds,
   removeTaskIdsFromTree,
+  renamedSubtaskTitle,
   subtaskProgress,
   taskDescendants,
   unfinishedDescendants,
 } from '../task-hierarchy'
 import { resolveSelectedTasks } from '../task-selection'
-import { updateTaskDetailDone } from '../task-detail-cache'
+import {
+  removeFromTaskDetail,
+  restoreTaskDetail,
+  updateTaskDetailDone,
+  updateTaskDetailFields,
+} from '../task-detail-cache'
 
 function task(id: number, done = false, children: Task[] = []): Task {
   return {
@@ -83,5 +89,42 @@ describe('task hierarchy', () => {
     for (const [key, data] of previous) queryClient.setQueryData(key, data)
     expect(queryClient.getQueryData<Task[]>(['task-detail', 1])?.[0].done).toBe(false)
     expect(queryClient.getQueryData<Task[]>(['task-detail', 4])?.[0].related_tasks?.subtask?.[0].done).toBe(false)
+  })
+
+  it('renames a subtask in the fetched subtask lists and puts it back', () => {
+    const queryClient = new QueryClient()
+    queryClient.setQueryData(['task-detail', 1], [task(2), task(3)])
+
+    const previous = updateTaskDetailFields(queryClient, 3, { title: 'Renamed' })
+
+    expect(queryClient.getQueryData<Task[]>(['task-detail', 1])?.map((item) => item.title)).toEqual(['Task 2', 'Renamed'])
+
+    restoreTaskDetail(queryClient, previous)
+    expect(queryClient.getQueryData<Task[]>(['task-detail', 1])?.[1].title).toBe('Task 3')
+  })
+
+  it('takes a deleted subtask out of the fetched subtask lists and puts it back', () => {
+    const queryClient = new QueryClient()
+    queryClient.setQueryData(['task-detail', 1], [task(2), task(3, false, [task(4)])])
+
+    const previous = removeFromTaskDetail(queryClient, new Set([2, 4]))
+
+    const after = queryClient.getQueryData<Task[]>(['task-detail', 1])
+    expect(after?.map((item) => item.id)).toEqual([3])
+    expect(after?.[0].related_tasks?.subtask).toEqual([])
+
+    restoreTaskDetail(queryClient, previous)
+    expect(queryClient.getQueryData<Task[]>(['task-detail', 1])?.map((item) => item.id)).toEqual([2, 3])
+  })
+})
+
+describe('renamedSubtaskTitle', () => {
+  it('saves a changed title without the spaces around it', () => {
+    expect(renamedSubtaskTitle({ title: 'Buy milk' }, '  Buy oat milk ')).toBe('Buy oat milk')
+  })
+
+  it('saves nothing for an empty or unchanged title', () => {
+    expect(renamedSubtaskTitle({ title: 'Buy milk' }, '   ')).toBeNull()
+    expect(renamedSubtaskTitle({ title: 'Buy milk' }, 'Buy milk ')).toBeNull()
   })
 })

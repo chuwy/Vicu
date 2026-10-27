@@ -71,3 +71,9 @@ export function removeTaskIdsFromTree(task: Task, ids: ReadonlySet<number>): Tas
 export function parentTitle(task: Task): string | null {
   return task.related_tasks?.parenttask?.[0]?.title ?? null
 }
+
+/** The new title of a renamed subtask, or null when nothing should be saved (empty or unchanged). */
+export function renamedSubtaskTitle(subtask: Pick<Task, 'title'>, draft: string): string | null {
+  const title = draft.trim()
+  return title && title !== subtask.title ? title : null
+}
