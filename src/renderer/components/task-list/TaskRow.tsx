@@ -37,6 +37,7 @@ import { useProjects } from '@/hooks/use-projects'
 import { extractBangToday, recurrenceToVikunja } from '@/lib/task-parser'
 import { TaskInputParser } from '@/components/task-input/TaskInputParser'
 import { useAppConfig } from '@/hooks/use-app-config'
+import { useSubtasks } from '@/hooks/use-subtasks'
 import { useHasLocationReminder } from '@/hooks/use-location-reminders'
 import {
   parentTitle,
@@ -347,6 +348,8 @@ function TaskRowInner({
   const isSelected = useSelectionStore((s) => s.selectedTaskIds.has(task.id))
   // Main asked for this task to be shown (a clicked reminder): expand once the row is on screen.
   const isOpenRequested = useSelectionStore((s) => s.pendingOpenTaskId === task.id)
+  // A subtask opened from this task's card is shown as a row of its own under this one.
+  const hasOpenedSubtask = useSelectionStore((s) => s.openedSubtasks.some((entry) => entry.parentId === task.id))
   const toggleExpandedTask = useSelectionStore((s) => s.toggleExpandedTask)
   const setFocusedTask = useSelectionStore((s) => s.setFocusedTask)
   const setExpandedTask = useSelectionStore((s) => s.setExpandedTask)
@@ -816,6 +819,9 @@ function TaskRowInner({
           parentProjectId={task.project_id}
         />
       ))}
+      {hasOpenedSubtask && !(canExpandSubtasks && subtasksExpanded) && (
+        <OpenedSubtaskRows parent={task} nestedDepth={nestedDepth} />
+      )}
       </>
     )
   }
@@ -960,6 +966,31 @@ const DraggableTaskRow = memo(function DraggableTaskRow(props: TaskRowProps) {
   const drag = useDraggableRow(props.task)
   return <TaskRowInner task={props.task} nestedDepth={props.nestedDepth} parentProjectId={props.parentProjectId} projectMeta={props.projectMeta} drag={drag} />
 }, sameRowProps)
+
+/**
+ * The subtasks opened from `parent`'s card. They come from the parent's fetched subtask list (the
+ * one the card showed), which edits and deletes keep up to date.
+ */
+function OpenedSubtaskRows({ parent, nestedDepth }: { parent: Task; nestedDepth: number }) {
+  const opened = useSelectionStore((s) => s.openedSubtasks)
+  const { data: fetched } = useSubtasks(parent.id)
+  const subtasks = fetched ?? parent.related_tasks?.subtask ?? []
+  return (
+    <>
+      {subtasks
+        .filter((child) => opened.some((entry) => entry.parentId === parent.id && entry.id === child.id))
+        .map((child) => (
+          <TaskRow
+            key={child.id}
+            task={child}
+            sortable={false}
+            nestedDepth={nestedDepth + 1}
+            parentProjectId={parent.project_id}
+          />
+        ))}
+    </>
+  )
+}
 
 export const TaskRow = memo(function TaskRow(props: TaskRowProps) {
   // `sortable` follows the list's task order (cross-app semantics 12.4); when it changes (a new
