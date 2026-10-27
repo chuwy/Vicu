@@ -3,10 +3,12 @@ import { readdirSync, readFileSync, statSync } from 'fs'
 import { join, relative, sep } from 'path'
 import {
   CUSTOM_LIST_SORT_FIELDS,
+  isHiddenFromSidebar,
   isQuickEntryEnabled,
   isQuickViewEnabled,
   isRoutinesEnabled,
   showRoutinesInToday,
+  withSidebarListHidden,
 } from '../config-types'
 
 describe('Quick Entry and Quick View defaults', () => {
@@ -23,6 +25,28 @@ describe('Quick Entry and Quick View defaults', () => {
     expect(isQuickViewEnabled({ quick_view_enabled: false })).toBe(false)
     expect(isQuickEntryEnabled({ quick_entry_enabled: true })).toBe(true)
     expect(isQuickEntryEnabled({ quick_entry_enabled: false })).toBe(false)
+  })
+})
+
+describe('lists hidden from the sidebar', () => {
+  it('none are hidden in a config without the setting', () => {
+    expect(isHiddenFromSidebar({}, 'logbook')).toBe(false)
+    expect(isHiddenFromSidebar(null, 'logbook')).toBe(false)
+  })
+
+  it('a list can be hidden and shown again', () => {
+    const hidden = withSidebarListHidden({}, 'logbook', true)
+    expect(hidden).toEqual(['logbook'])
+    expect(isHiddenFromSidebar({ sidebar_hidden_lists: hidden }, 'logbook')).toBe(true)
+    expect(isHiddenFromSidebar({ sidebar_hidden_lists: hidden }, 'today')).toBe(false)
+    expect(withSidebarListHidden({ sidebar_hidden_lists: hidden }, 'logbook', false)).toEqual([])
+  })
+
+  it('hiding twice keeps one entry and a name from a newer version stays', () => {
+    const config = { sidebar_hidden_lists: ['calendar', 'review'] }
+    expect(withSidebarListHidden(config, 'review', true)).toEqual(['calendar', 'review'])
+    expect(withSidebarListHidden(config, 'review', false)).toEqual(['calendar'])
+    expect(withSidebarListHidden(config, 'anytime', true)).toEqual(['calendar', 'review', 'anytime'])
   })
 })
 
