@@ -75,6 +75,7 @@ import { canReorderTask, type TaskOrderKey } from '../../../shared/task-order'
 import { usePrintStore } from '@/stores/print-store'
 import { buildPrintHtml } from '@/lib/print-template'
 import { sanitizeTaskHtml } from '@/lib/sanitize-html'
+import { plannerDueDateOnDrop } from '@/lib/planner'
 
 const MIN_WIDTH = 180
 const MAX_WIDTH = 360
@@ -332,7 +333,16 @@ export function AppShell() {
           if (isMulti) useSelectionStore.getState().clearSelection()
         }
 
-        if (overData?.type === 'project') {
+        if (overData?.type === 'planner-day') {
+          const targetDate = overData.date as string
+          dragTasks.forEach((t) => {
+            const dueDate = plannerDueDateOnDrop(t.due_date, targetDate)
+            if (dueDate) {
+              updateTask.mutate({ id: t.id, changes: { due_date: dueDate }, original: t })
+            }
+          })
+          clearIfMulti()
+        } else if (overData?.type === 'project') {
           const projectId = overData.projectId as number
           dragTasks.forEach((t) => {
             if (projectId !== t.project_id) {

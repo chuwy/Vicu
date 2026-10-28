@@ -55,6 +55,8 @@ interface TaskListProps {
   taskOrder?: TaskOrderKey
   viewId?: number
   className?: string
+  /** Use the whole content width for the header and body instead of the reading column. */
+  wide?: boolean
   children?: React.ReactNode
   /** Overrides the guess that the list is empty (no tasks and no children); a view that fills the list through children says so. */
   empty?: boolean
@@ -89,6 +91,7 @@ export function TaskList({
   taskOrder = DEFAULT_TASK_ORDER,
   viewId,
   className,
+  wide = false,
   children,
   empty,
   insertIndex,
@@ -554,6 +557,7 @@ export function TaskList({
       <PageHeader
         title={title}
         subtitle={subtitle}
+        wide={wide}
         icon={identity && <SmartListIcon list={identity} className="h-5 w-5" />}
         onClick={handleHeaderClick}
         actions={
@@ -577,7 +581,7 @@ export function TaskList({
         }
       />
 
-      <ReadingScroll ref={listRef} onClick={handleScrollAreaClick}>
+      <ReadingScroll ref={listRef} onClick={handleScrollAreaClick} columnClassName={wide ? 'max-w-none' : undefined}>
         {headerContent}
 
         {isAdding && addPosition === 'top' && taskInputElement}

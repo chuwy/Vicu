@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest'
+import { addLocalDays, dateOnlyDue, startOfLocalDayIso, toLocalDate } from '@/lib/due-dates'
+import { groupPlannerTasks, plannerDueDateOnDrop, plannerTaskFilter, PLANNER_DAY_COUNT } from '@/lib/planner'
+import type { Task } from '@/lib/vikunja-types'
+
+function task(id: number, dueDate: string, projectId = 1): Task {
+  return { id, due_date: dueDate, project_id: projectId } as Task
+}
+
+describe('Planner', () => {
+  it('asks the server for every overdue task and only the three dated days on screen', () => {
+    const now = new Date(2026, 4, 31, 12)
+
+    expect(plannerTaskFilter(now)).toBe(
+      `done = false && due_date != '0001-01-01T00:00:00Z' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}'`,
+    )
+  })
+
+  it('groups overdue tasks before today and the next two local calendar days', () => {
+    const now = new Date(2026, 4, 31, 12)
+    const today = toLocalDate(now)
+    const tomorrow = addLocalDays(today, 1)
+    const thirdDay = addLocalDays(today, 2)
+    const tasks = [
+      task(1, dateOnlyDue(today)),
+      task(2, dateOnlyDue(tomorrow)),
+      task(3, new Date(2026, 5, 2, 9, 30).toISOString()),
+      task(4, dateOnlyDue(addLocalDays(today, -1))),
+      task(5, dateOnlyDue(addLocalDays(today, PLANNER_DAY_COUNT))),
+      task(6, '0001-01-01T00:00:00Z'),
+    ]
+
+    const days = groupPlannerTasks(tasks, new Set([1]), now)
+
+    expect(days.map((day) => day.date)).toEqual([null, '2026-05-31', '2026-06-01', '2026-06-02'])
+    expect(days.map((day) => day.tasks.map((item) => item.id))).toEqual([[4], [1], [2], [3]])
+  })
+
+  it('changes the date of a dropped task without changing its explicit local time', () => {
+    const original = new Date(2026, 2, 7, 9, 30, 45, 123).toISOString()
+
+    const result = plannerDueDateOnDrop(original, '2026-03-08')
+
+    expect(result).toBe(new Date(2026, 2, 8, 9, 30, 45, 123).toISOString())
+  })
+
+  it('keeps date-only tasks date-only and ignores drops with no date change', () => {
+    expect(plannerDueDateOnDrop(dateOnlyDue('2026-06-01'), '2026-06-03')).toBe(dateOnlyDue('2026-06-03'))
+    expect(plannerDueDateOnDrop(dateOnlyDue('2026-06-01'), '2026-06-01')).toBeNull()
+    expect(plannerDueDateOnDrop('0001-01-01T00:00:00Z', '2026-06-01')).toBeNull()
+  })
+
+  it('leaves archived-project tasks out and keeps empty day columns', () => {
+    const now = new Date(2026, 0, 10, 12)
+    const today = toLocalDate(now)
+    const days = groupPlannerTasks(
+      [task(1, dateOnlyDue(today), 9), task(2, dateOnlyDue(addLocalDays(today, 1)))],
+      new Set([1]),
+      now,
+    )
+
+    expect(days.map((day) => day.tasks.map((item) => item.id))).toEqual([[], [], [2], []])
+  })
+})
