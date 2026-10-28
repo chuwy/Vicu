@@ -581,7 +581,7 @@ export function TaskList({
         }
       />
 
-      <ReadingScroll ref={listRef} onClick={handleScrollAreaClick} columnClassName={wide ? 'max-w-none' : undefined}>
+      <ReadingScroll ref={listRef} onClick={handleScrollAreaClick} wide={wide}>
         {headerContent}
 
         {isAdding && addPosition === 'top' && taskInputElement}

@@ -127,7 +127,7 @@ export function PlannerView() {
         {isLoading && <span role="status" className="sr-only">Loading Planner</span>}
         <div
           aria-busy={isLoading}
-          className="grid w-full min-w-0 grid-cols-4 items-start gap-4 px-6 pb-6 pt-2"
+          className="grid w-full min-w-0 grid-cols-[repeat(4,minmax(200px,1fr))] items-start gap-4 px-6 pb-6 pt-2"
         >
           {days.map((day) => (
             <PlannerDayColumn
