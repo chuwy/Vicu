@@ -1,6 +1,7 @@
 import { net } from 'electron'
 import { getRefreshToken, storeRenewedSession } from './token-store'
 import { extractRefreshToken } from './cookie-utils'
+import { vikunjaUserAgent } from '../user-agent'
 
 const RENEWAL_TIMEOUT = 10_000
 
@@ -73,6 +74,7 @@ export async function renewJWT(vikunjaUrl: string): Promise<string> {
       headers: {
         'Content-Type': 'application/json',
         Cookie: `vikunja_refresh_token=${refreshToken}`,
+        'User-Agent': vikunjaUserAgent(),
       },
       credentials: 'omit',
       signal: controller.signal,

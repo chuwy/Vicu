@@ -5,6 +5,7 @@ import { getProviderKey, storeRenewedSession } from './token-store'
 import { extractRefreshToken } from './cookie-utils'
 import { AUTH_WINDOW_PARTITION } from '../web-security-policy'
 import { buildAuthorizationUrl, interpretRedirect } from './oidc-url'
+import { vikunjaUserAgent } from '../user-agent'
 
 const SILENT_AUTH_TIMEOUT = 15_000
 const TOKEN_EXCHANGE_TIMEOUT = 15_000
@@ -107,7 +108,7 @@ export async function silentReauth(vikunjaUrl: string): Promise<string> {
 
     const tokenResponse = await net.fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'User-Agent': vikunjaUserAgent() },
       body: JSON.stringify({
         code,
         scope: provider.scope,

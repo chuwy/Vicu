@@ -119,6 +119,8 @@ describe('a 401 from a collaboration endpoint', () => {
     expect(check).toHaveLength(1)
     expect(new URL(check[0].url).searchParams.get('per_page')).toBe('1')
     expect(check[0].headers.Authorization).toBe('Bearer tk')
+    // Vikunja lists a session under its User-Agent; this mock of electron has no app version.
+    for (const req of sent()) expect(req.headers['User-Agent']).toMatch(/^Vicu \(/)
   })
 
   it('says that a token cannot follow a task', async () => {

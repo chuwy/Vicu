@@ -1,4 +1,5 @@
 import { net } from 'electron'
+import { vikunjaUserAgent } from '../user-agent'
 
 export interface OIDCProvider {
   name: string
@@ -42,7 +43,7 @@ export async function discoverProviders(vikunjaUrl: string): Promise<OIDCProvide
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT)
 
-    const response = await net.fetch(url, { signal: controller.signal })
+    const response = await net.fetch(url, { headers: { 'User-Agent': vikunjaUserAgent() }, signal: controller.signal })
     clearTimeout(timer)
 
     if (!response.ok) return []
@@ -76,7 +77,7 @@ export async function discoverAuthMethods(vikunjaUrl: string): Promise<ServerAut
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT)
 
-    const response = await net.fetch(url, { signal: controller.signal })
+    const response = await net.fetch(url, { headers: { 'User-Agent': vikunjaUserAgent() }, signal: controller.signal })
     clearTimeout(timer)
 
     if (!response.ok) return fallback

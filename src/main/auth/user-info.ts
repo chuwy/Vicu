@@ -1,4 +1,5 @@
 import { net } from 'electron'
+import { vikunjaUserAgent } from '../user-agent'
 
 export interface VikunjaUser {
   id: number
@@ -26,7 +27,7 @@ export async function fetchCurrentUser(
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT)
 
     const response = await net.fetch(`${baseUrl}/api/v2/user`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': vikunjaUserAgent() },
       signal: controller.signal,
     })
     clearTimeout(timer)

@@ -18,6 +18,7 @@ import {
 } from './token-store'
 import { extractRefreshToken } from './cookie-utils'
 import { isTotpChallenge, parseVikunjaProblem } from './totp'
+import { vikunjaUserAgent } from '../user-agent'
 import { AUTH_WINDOW_PARTITION } from '../web-security-policy'
 import { getInstallId } from './install-id'
 import {
@@ -163,7 +164,7 @@ export async function loginWithOIDC(
 
     const tokenResponse = await net.fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'User-Agent': vikunjaUserAgent() },
       body: JSON.stringify({
         code,
         scope: provider.scope,
@@ -238,7 +239,7 @@ type AvailableRoutes = Record<string, Record<string, unknown>>
 async function fetchAvailableRoutes(baseUrl: string, jwt: string): Promise<AvailableRoutes> {
   const response = await net.fetch(`${baseUrl}/api/v2/routes`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${jwt}` },
+    headers: { Authorization: `Bearer ${jwt}`, 'User-Agent': vikunjaUserAgent() },
   })
   if (!response.ok) {
     const body = await response.text().catch(() => '')
@@ -285,6 +286,7 @@ export async function createBackupAPIToken(
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${jwt}`,
+        'User-Agent': vikunjaUserAgent(),
       },
       body: JSON.stringify({
         title: buildBackupTokenTitle(deviceName, installId),
@@ -355,7 +357,7 @@ async function listAPITokens(baseUrl: string, bearer: string): Promise<ListedTok
   for (let page = 1; page <= MAX_PAGES; page++) {
     const resp = await net.fetch(
       `${baseUrl}/api/v2/tokens?page=${page}&per_page=${PER_PAGE}`,
-      { headers: { Authorization: `Bearer ${bearer}` } },
+      { headers: { Authorization: `Bearer ${bearer}`, 'User-Agent': vikunjaUserAgent() } },
     )
     if (!resp.ok) {
       throw new Error(`List tokens failed (${resp.status})`)
@@ -378,7 +380,7 @@ async function deleteAPIToken(baseUrl: string, bearer: string, id: number): Prom
   try {
     const resp = await net.fetch(`${baseUrl}/api/v2/tokens/${id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${bearer}` },
+      headers: { Authorization: `Bearer ${bearer}`, 'User-Agent': vikunjaUserAgent() },
       signal: controller.signal,
     })
     if (resp.ok || resp.status === 404) return true
