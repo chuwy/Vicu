@@ -6,9 +6,17 @@ Planner is a view allowing to visualize the progress, duration and ordering of t
 
 Planner deliberately shows completed tasks.
 
+The right side of the Planner carries a plain day-view calendar for today: 30-minute blocks with a more solid line every hour. No events are drawn on it yet; its decisions are in `docs/calendar.md`.
+
 ## Implementation
 
 `TaskRow` is aware of larger planner feature because it has smaller margins and paddings when displayed in Planner.
+
+## First column: Overdue / Unplanned
+
+The first column has a switch where the other columns show a task count. Left is **Overdue** (open tasks due before today, the default); right is **Unplanned**: open tasks with neither a due date nor a start date. The column is not a drop target in either mode.
+
+Unplanned tasks are selected client-side (`plannerUnplannedTasks`). Vikunja's filter engine treats the Go zero time (`0001-01-01T00:00:00Z`) as "no date" and never matches it, so `due_date = '0001-01-01T00:00:00Z'` returns nothing and the Planner query instead fetches the dated window plus every open task (`plannerTaskFilter`).
 
 ## Task duration
 

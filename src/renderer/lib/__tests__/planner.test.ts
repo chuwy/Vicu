@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addLocalDays, dateOnlyDue, startOfLocalDayIso, toLocalDate } from '@/lib/due-dates'
-import { groupPlannerTasks, plannerDueDateOnDrop, plannerTaskFilter, plannerTaskSortKey, PLANNER_DAY_COUNT } from '@/lib/planner'
+import { groupPlannerTasks, plannerDueDateOnDrop, plannerTaskFilter, plannerTaskSortKey, plannerUnplannedTasks, PLANNER_DAY_COUNT } from '@/lib/planner'
 import type { Task } from '@/lib/vikunja-types'
 
 function task(id: number, dueDate: string, projectId = 1): Task {
@@ -8,12 +8,24 @@ function task(id: number, dueDate: string, projectId = 1): Task {
 }
 
 describe('Planner', () => {
-  it('asks the server for every task in the overdue range and the three dated days on screen', () => {
+  it('asks the server for the dated window plus every open task, because zero dates cannot be filtered server-side', () => {
     const now = new Date(2026, 4, 31, 12)
 
     expect(plannerTaskFilter(now)).toBe(
-      `due_date != '0001-01-01T00:00:00Z' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}'`,
+      `(due_date != '0001-01-01T00:00:00Z' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}') || done = false`,
     )
+  })
+
+  it('selects only open active-project tasks with neither a due nor a start date as unplanned', () => {
+    const tasks = [
+      task(1, '0001-01-01T00:00:00Z'),
+      { ...task(2, '0001-01-01T00:00:00Z'), done: true },
+      task(3, '2026-06-01T12:00:00Z'),
+      { ...task(4, '0001-01-01T00:00:00Z'), start_date: '2026-06-01T09:00:00Z' },
+      task(5, '0001-01-01T00:00:00Z', 9),
+    ]
+
+    expect(plannerUnplannedTasks(tasks, new Set([1])).map((item) => item.id)).toEqual([1])
   })
 
   it('groups overdue tasks before today and the next two local calendar days', () => {

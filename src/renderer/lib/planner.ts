@@ -20,10 +20,16 @@ export interface PlannerDay {
   tasks: Task[]
 }
 
-/** The server query for open overdue tasks and every task in the dated days Planner shows. */
+/**
+ * Every task Planner shows: the dated window (completed included) plus all open tasks.
+ * The Unplanned column needs open tasks with no dates, but Vikunja's filter engine treats the Go
+ * zero time as "no date" and never matches it (`due_date = '0001-01-01T00:00:00Z'` returns
+ * nothing), so unplanned tasks cannot be selected server-side: fetch `done = false` and pick them
+ * out with `plannerUnplannedTasks`. The dated grouping drops open tasks outside the window.
+ */
 export function plannerTaskFilter(now: Date): string {
   const end = startOfLocalDayIso(PLANNER_DAY_COUNT, now)
-  return `due_date != '${NULL_DATE}' && due_date < '${end}'`
+  return `(due_date != '${NULL_DATE}' && due_date < '${end}') || done = false`
 }
 
 /** The due date after a Planner drop, or null when there is no date change to send. */
@@ -54,6 +60,16 @@ function comparePlannerTasks(left: Task, right: Task): number {
   if (leftKey === null) return rightKey === null ? 0 : 1
   if (rightKey === null) return -1
   return leftKey - rightKey
+}
+
+/** Open tasks in active projects that have neither a due date nor a start date. */
+export function plannerUnplannedTasks(tasks: Task[], activeProjectIds: ReadonlySet<number>): Task[] {
+  return tasks.filter((task) => (
+    !task.done
+    && activeProjectIds.has(task.project_id)
+    && plannerTimestamp(task.due_date) === null
+    && plannerTimestamp(task.start_date) === null
+  ))
 }
 
 /** Group open overdue tasks first, then all tasks by local date, always returning all four columns. */

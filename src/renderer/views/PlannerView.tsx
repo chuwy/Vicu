@@ -1,8 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { TaskList } from '@/components/task-list/TaskList'
 import { TaskRow } from '@/components/task-list/TaskRow'
 import { TaskRowGroup } from '@/components/task-list/TaskRowGroup'
+import { DayViewCalendar } from '@/components/planner/DayViewCalendar'
+import { Switch } from '@/components/shared/Switch'
 import { DueDateContextProvider } from '@/components/task-list/TaskDueBadge'
 import { useTasks } from '@/hooks/use-tasks'
 import { useProjects } from '@/hooks/use-projects'
@@ -13,7 +15,7 @@ import { cn } from '@/lib/cn'
 import { formatDateDisplay } from '@/lib/date-display'
 import { startOfLocalDay } from '@/lib/due-dates'
 import { openCount } from '@/lib/list-sections'
-import { groupPlannerTasks, plannerTaskFilter, type PlannerDay } from '@/lib/planner'
+import { groupPlannerTasks, plannerTaskFilter, plannerUnplannedTasks, type PlannerDay } from '@/lib/planner'
 import type { Project, TaskQueryParams } from '@/lib/vikunja-types'
 
 interface PlannerColumnDay extends PlannerDay {
@@ -24,9 +26,17 @@ interface PlannerDayColumnProps {
   day: PlannerColumnDay
   projectsById: ReadonlyMap<number, Project>
   isLoading: boolean
+  showUnplanned?: boolean
+  onShowUnplannedChange?: (show: boolean) => void
 }
 
-function PlannerDayColumn({ day, projectsById, isLoading }: PlannerDayColumnProps) {
+function PlannerDayColumn({
+  day,
+  projectsById,
+  isLoading,
+  showUnplanned = false,
+  onShowUnplannedChange,
+}: PlannerDayColumnProps) {
   const columnId = `planner-column-${day.date ?? 'overdue'}`
   const { setNodeRef, isOver } = useDroppable({
     id: columnId,
@@ -46,11 +56,20 @@ function PlannerDayColumn({ day, projectsById, isLoading }: PlannerDayColumnProp
       <header className="flex h-12 items-center gap-2 border-b border-border px-4">
         <h2
           id={columnId}
-          className={cn('min-w-0 flex-1 truncate text-section', day.date === null ? 'text-status-overdue' : 'text-text')}
+          className={cn(
+            'min-w-0 flex-1 truncate text-section',
+            day.date === null && !showUnplanned ? 'text-status-overdue' : 'text-text',
+          )}
         >
           {day.date === null ? day.label : <time dateTime={day.date}>{day.label}</time>}
         </h2>
-        {!isLoading && (
+        {day.date === null ? (
+          <Switch
+            aria-label="Show unplanned tasks"
+            checked={showUnplanned}
+            onCheckedChange={(show) => onShowUnplannedChange?.(show)}
+          />
+        ) : !isLoading && (
           <span className="shrink-0 text-meta text-text-secondary">{openCount(day.tasks)}</span>
         )}
       </header>
@@ -88,6 +107,7 @@ function PlannerDayColumn({ day, projectsById, isLoading }: PlannerDayColumnProp
 }
 
 export function PlannerView() {
+  const [showUnplanned, setShowUnplanned] = useState(false)
   const dayKey = useDayKey()
   const now = useMemo(() => new Date(), [dayKey])
   const params = useMemo<TaskQueryParams>(() => ({
@@ -104,14 +124,20 @@ export function PlannerView() {
     () => new Map(projectData?.flat.map((project) => [project.id, project]) ?? []),
     [projectData?.flat],
   )
+  const activeProjectIds = useMemo(() => new Set(projectsById.keys()), [projectsById])
+  const unplannedTasks = useMemo(
+    () => plannerUnplannedTasks(tasks, activeProjectIds),
+    [tasks, activeProjectIds],
+  )
   const days = useMemo(
-    () => groupPlannerTasks(tasks, new Set(projectsById.keys()), now).map((day) => ({
+    () => groupPlannerTasks(tasks, activeProjectIds, now).map((day) => ({
       ...day,
+      tasks: day.date === null && showUnplanned ? unplannedTasks : day.tasks,
       label: day.date === null
-        ? 'Overdue'
+        ? (showUnplanned ? 'Unplanned' : 'Overdue')
         : formatDateDisplay('header.day', startOfLocalDay(day.date), now, true, dateFormat),
     })),
-    [tasks, projectsById, now, dateFormat],
+    [tasks, activeProjectIds, unplannedTasks, showUnplanned, now, dateFormat],
   )
 
   usePrintable(useMemo(() => ({
@@ -126,18 +152,21 @@ export function PlannerView() {
     <DueDateContextProvider value="row.inDayGroup">
       <TaskList title="Planner" tasks={[]} showNewTask={false} empty={false} wide>
         {isLoading && <span role="status" className="sr-only">Loading Planner</span>}
-        <div
-          aria-busy={isLoading}
-          className="grid w-full min-w-0 grid-cols-[repeat(4,minmax(200px,1fr))] items-start gap-4 px-6 pb-6 pt-2"
-        >
-          {days.map((day) => (
-            <PlannerDayColumn
-              key={day.date ?? 'overdue'}
-              day={day}
-              projectsById={projectsById}
-              isLoading={isLoading}
-            />
-          ))}
+        <div aria-busy={isLoading} className="flex w-full min-w-0 items-start gap-4 px-6 pb-6 pt-2">
+          <div className="grid min-w-0 flex-1 grid-cols-[repeat(4,minmax(200px,1fr))] items-start gap-4">
+            {days.map((day) => (
+              <PlannerDayColumn
+                key={day.date ?? 'overdue'}
+                day={day}
+                projectsById={projectsById}
+                isLoading={isLoading}
+                showUnplanned={showUnplanned}
+                onShowUnplannedChange={setShowUnplanned}
+              />
+            ))}
+          </div>
+          {/* The day calendar is a plain layout scaffold for now (docs/calendar.md). */}
+          <DayViewCalendar day={now} className="w-80 shrink-0" />
         </div>
       </TaskList>
     </DueDateContextProvider>
