@@ -29,6 +29,7 @@ import { collectAllPages } from './paginate'
 import { decodeUtf8Chunks } from './response-body'
 import { MAX_BINARY_DOWNLOAD_BYTES, describeDownloadLimit, parseContentLength } from './attachment-safety'
 import { buildMultipartBody } from './multipart'
+import { vikunjaUserAgent } from './user-agent'
 import { createIdleTimeout } from './idle-timeout'
 import { DEFAULT_MAX_UPLOAD_BYTES, parseMaxFileSize, uploadSizeError, uploadTimeoutMs } from './upload-limits'
 
@@ -144,6 +145,7 @@ function request<T>(
 
       req.setHeader('Authorization', `Bearer ${token}`)
       req.setHeader('Content-Type', contentType)
+      req.setHeader('User-Agent', vikunjaUserAgent())
 
       const bodyChunks: Buffer[] = []
       let statusCode = 0
@@ -699,6 +701,7 @@ function requestMultipart<T>(
       req = net.request({ method, url })
       req.setHeader('Authorization', `Bearer ${token}`)
       req.setHeader('Content-Type', `multipart/form-data; boundary=${boundary}`)
+      req.setHeader('User-Agent', vikunjaUserAgent())
       // Content-Length is a forbidden header in Chromium's network stack —
       // Electron's net.request rejects it with ERR_INVALID_ARGUMENT.
       // Chromium calculates it automatically from the body.
@@ -776,6 +779,7 @@ function requestBinary(
     try {
       req = net.request({ method: 'GET', url })
       req.setHeader('Authorization', `Bearer ${token}`)
+      req.setHeader('User-Agent', vikunjaUserAgent())
 
       const chunks: Buffer[] = []
       let statusCode = 0

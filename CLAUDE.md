@@ -170,6 +170,8 @@ Two auth methods supported:
 - **API Token**: stored in config, sent as `Bearer` token
 - **OIDC**: full OAuth2 flow in `src/main/auth/` (discovery, login, token store, silent reauth)
 
+Every request to the Vikunja server sends the User-Agent `Vicu/<version> (<platform>; <host>)` (`user-agent.ts`), which Vikunja lists as the session's device under Settings, Sessions; the mobile app sends the same form with the phone's model.
+
 OIDC and password logins also create a 365-day full-access backup API token titled `Vicu — <host> [<install id>]` (`backup-token.ts`; the random per-install id lives in `userData/install-id`). Its server id is stored in `auth.json` and logout revokes it best-effort (`DELETE /tokens/{id}`). Stale-token cleanup only deletes tokens carrying this install's id, the previously stored id, or the old-format token whose title and expiry match the locally stored one.
 
 ### Offline support

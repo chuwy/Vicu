@@ -4,6 +4,7 @@ import { extractRefreshToken } from './cookie-utils'
 import { createBackupAPIToken } from './oidc-login'
 import { loadConfig, saveConfig } from '../config'
 import { isTotpChallenge, parseVikunjaProblem } from './totp'
+import { vikunjaUserAgent } from '../user-agent'
 
 const LOGIN_TIMEOUT = 15_000
 
@@ -52,7 +53,7 @@ export async function loginWithPassword(
 
     const response = await net.fetch(`${baseUrl}/api/v2/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'User-Agent': vikunjaUserAgent() },
       body: JSON.stringify(body),
       signal: controller.signal,
     })

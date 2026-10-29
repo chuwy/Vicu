@@ -1,5 +1,6 @@
 import { loadConfig } from '../config'
 import { net } from 'electron'
+import { vikunjaUserAgent } from '../user-agent'
 import {
   getBestToken,
   getJWT,
@@ -205,7 +206,7 @@ class AuthManager {
         const baseUrl = config.vikunja_url.replace(/\/+$/, '')
         await net.fetch(`${baseUrl}/api/v2/logout`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${jwt}` },
+          headers: { Authorization: `Bearer ${jwt}`, 'User-Agent': vikunjaUserAgent() },
         }).catch(() => {})
       }
     } catch {
