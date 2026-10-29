@@ -6,7 +6,9 @@ Planner is a view allowing to visualize the progress, duration and ordering of t
 
 Planner deliberately shows completed tasks.
 
-The right side of the Planner carries a read-only day-view calendar: 30-minute blocks with a more solid line every hour, on the day picked by clicking a day heading (today by default). Tasks map to time blocks using start date, timed due date and duration; date-only tasks sit under **No time**, completed tasks remain visible, and overlaps share side-by-side columns. Its mapping rules and decisions are in `docs/calendar.md`.
+The right side of the Planner carries an editable day-view calendar: 30-minute blocks with a more solid line every hour, on the day picked by clicking a day heading (today by default). Only tasks with a valid `start_date` map to time blocks, using their description duration or a 30-minute default. Due dates are ignored throughout Planner. Completed scheduled tasks remain visible, and overlaps share side-by-side columns. Drag a scheduled block to change its start, its top border
+to change start and duration with a fixed end, or its bottom border to change duration with a fixed
+start. Its mapping and editing rules are in `docs/calendar.md`.
 
 The calendar stays flush against the right edge, separate from the padded day cards. Available
 Planner width (excluding the sidebar) controls the visible columns: Overdue and Today through
@@ -19,9 +21,9 @@ including 1090–1420 px, the cards stretch instead of adding columns or horizon
 
 ## First column: Overdue / Unplanned
 
-The first column has a switch where the other columns show a task count. Left is **Overdue** (open tasks due before today, the default); right is **Unplanned**: open tasks with neither a due date nor a start date. The column is not a drop target in either mode. Dragging an Unplanned task onto a dated column gives it that date as a date-only due date.
+The first column has a switch where the other columns show a task count. Left is **Overdue** (open tasks with a start date before today, the default); right is **Unplanned**: all open tasks without a valid `start_date`, even if they have a due date or duration. The column is not a drop target in either mode. Dragging an Unplanned task onto a dated column sets `start_date` to local midnight on that day. Moving a planned task between days preserves its local start time. Neither operation changes `due_date` or duration.
 
-Unplanned tasks are selected client-side (`plannerUnplannedTasks`). Vikunja's filter engine treats the Go zero time (`0001-01-01T00:00:00Z`) as "no date" and never matches it, so `due_date = '0001-01-01T00:00:00Z'` returns nothing. `plannerTaskFilter` instead fetches every open task plus tasks with a due or start date in the three-day window (even when narrower layouts hide a day). Completed history outside that window is not fetched; start dates include completed start-only calendar entries.
+Unplanned tasks are selected client-side (`plannerUnplannedTasks`). Vikunja's filter engine treats the Go zero time (`0001-01-01T00:00:00Z`) as "no date" and never matches it. `plannerTaskFilter` instead fetches every open task plus tasks with a start date in the three-day window (even when narrower layouts hide a day). Completed history outside that start-date window is not fetched. No due-date clauses or sorting are used in Planner's query.
 
 ## Task duration
 
@@ -31,4 +33,4 @@ Duration is stored in the task description as `<!-- vicu-duration:v1:45 -->`. Th
 
 `start_date`, `due_date` and duration are independent: duration is valid without a start date, and adding or removing a start date does not convert or erase it. `end_date` is ignored completely and is never read or written for duration.
 
-Within Overdue and each day column, Planner sorts by `start_date` when it is set. Otherwise the key is `due_date - duration`; missing duration counts as zero, so the key is simply `due_date`. Sorting happens after fetching because duration is description metadata. Column membership and drag-and-drop date changes still use `due_date`, and `end_date` has no effect on ordering.
+Within Overdue and each day column, Planner groups by the local day of `start_date` and sorts by its timestamp, preserving order for ties. Tasks without a valid start date never appear in a dated column or the calendar. Due dates, `end_date` and duration have no effect on grouping or ordering. A missing duration uses 30 minutes in the calendar without writing duration metadata; moving a block preserves the missing value, while resizing writes the chosen duration. Due-date behavior in all other views is unchanged.

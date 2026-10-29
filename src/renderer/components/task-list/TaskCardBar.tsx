@@ -1,5 +1,5 @@
 import { Fragment, useRef, type ReactNode, type RefObject } from 'react'
-import { Calendar, Bell, Repeat, Paperclip, ListChecks, FolderOpen, MoreHorizontal, Info, Trash2, Plus, MessageSquare, Clock3 } from 'lucide-react'
+import { Calendar, CalendarClock, Bell, Repeat, Paperclip, ListChecks, FolderOpen, MoreHorizontal, Info, Trash2, Plus, MessageSquare, Clock3 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { isNullDate } from '@/lib/date-utils'
 import { labelChipSolidStyle } from '@/lib/label-style'
@@ -37,6 +37,7 @@ import { DurationPickerPopover } from './DurationPickerPopover'
 /** The one editor of the card that is open, if any. */
 export type CardPopover =
   | 'date'
+  | 'start'
   | 'priority'
   | 'duration'
   | 'label'
@@ -62,6 +63,7 @@ interface TaskCardBarProps {
   /** Other buttons that toggle the attachment popover (the paperclip in the card header). */
   attachmentInvokers: RefObject<HTMLElement | null>[]
   onDateChange: (isoDate: string) => void
+  onStartDateChange: (isoDate: string) => void
   onDurationChange: (minutes: number | null) => void
   onRecurrenceChange: (repeatAfter: number, repeatMode: number) => void
   onPriorityChange: (priority: number) => void
@@ -140,8 +142,8 @@ function PropertyButton({ prop, name, value, unsetName, tip, shortcut, isSet, op
 }
 
 /**
- * The properties of an open card: date, duration, priority, labels, checklist, reminder, repeat,
- * project, assign, attachments, then comments and
+ * The properties of an open card: date, start time, duration, priority, labels, checklist,
+ * reminder, repeat, project, assign, attachments, then comments and
  * More on the right. Assign and Comments exist only on a shared project. A set property is a chip
  * that opens its editor; an unset one is a quiet "+" button that does the same. Task info and
  * Delete live under More. Each button has a tooltip (400 ms, with its shortcut where there is one).
@@ -154,6 +156,7 @@ export function TaskCardBar({
   onClose,
   attachmentInvokers,
   onDateChange,
+  onStartDateChange,
   onDurationChange,
   onRecurrenceChange,
   onPriorityChange,
@@ -167,6 +170,7 @@ export function TaskCardBar({
   const { data: projects } = useProjects()
   const { reminderFor } = useLocationReminders()
   const dateRef = useRef<HTMLButtonElement>(null)
+  const startRef = useRef<HTMLButtonElement>(null)
   const durationRef = useRef<HTMLButtonElement>(null)
   const priorityRef = useRef<HTMLButtonElement>(null)
   const labelRef = useRef<HTMLButtonElement>(null)
@@ -180,6 +184,7 @@ export function TaskCardBar({
 
   const labels = task.labels ?? []
   const hasDate = !isNullDate(task.due_date)
+  const hasStartTime = !isNullDate(task.start_date)
   const durationMinutes = parseTaskDuration(task.description)
   const mark = priorityMark(task.priority)
   const progress = subtaskProgress(task)
@@ -189,6 +194,7 @@ export function TaskCardBar({
   const attachmentCount = task.attachments?.length ?? 0
   const project = projects?.flat.find((p) => p.id === task.project_id)
   const dueText = hasDate ? (formatDueDate(task.due_date, new Date(), dateFormat, 'row') ?? '') : ''
+  const startTimeText = hasStartTime ? (formatDueDate(task.start_date, new Date(), dateFormat, 'row') ?? '') : ''
   const repeatText = formatRecurrenceLabel(task.repeat_after ?? 0, task.repeat_mode ?? 0)
   // A location reminder alone reads as its place ("Arrive: Home"), as on the phone.
   const reminderText = placeReminder && reminderCount === 1
@@ -231,6 +237,31 @@ export function TaskCardBar({
           repeatAfter={task.repeat_after ?? 0}
           repeatMode={task.repeat_mode ?? 0}
           onRecurrenceChange={onRecurrenceChange}
+        />
+      )}
+
+      <PropertyButton
+        prop="start_time"
+        name="Start time"
+        value={startTimeText}
+        isSet={hasStartTime}
+        open={is('start')}
+        haspopup="dialog"
+        buttonRef={startRef}
+        onClick={() => onToggle('start')}
+        unsetLabel="Start time"
+        icon={<CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />}
+      >
+        <span>{startTimeText}</span>
+      </PropertyButton>
+      {is('start') && (
+        <WhenPopover
+          anchorRef={startRef}
+          label="Start time"
+          clearLabel="Clear start time"
+          currentDate={task.start_date}
+          onDateChange={onStartDateChange}
+          onClose={onClose}
         />
       )}
 

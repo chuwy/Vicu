@@ -13,7 +13,9 @@ export default async function run(h) {
   try {
     const overlap = await create({ title: 'Calendar overlap', start_date: at(0, 9, 15, 0), description: '<!-- vicu-duration:v1:60 -->' })
     const completed = await create({ title: 'Calendar completed start only', start_date: at(0, 9, 30, 0), description: '<!-- vicu-duration:v1:30 -->', done: true })
-    const history = await create({ title: 'Calendar old history', due_date: dateOnly(-30), done: true })
+    const history = await create({ title: 'Calendar old history', start_date: at(-30, 9, 0, 0), due_date: dateOnly(0), done: true })
+    const tomorrowTask = await create({ title: 'Calendar tomorrow', start_date: at(1, 10, 0, 0) })
+    const dueOnly = await create({ title: 'Calendar due only', due_date: at(0, 12, 0, 0), description: '<!-- vicu-duration:v1:60 -->' })
     await h.goto('/planner')
     const schedule = page.getByRole('region', { name: 'Day schedule', exact: true })
     const rail = schedule.locator('..')
@@ -28,8 +30,13 @@ export default async function run(h) {
     }))
     await h.assert('start-only completed tasks are fetched and have an explicit completed label',
       (await page.locator(`[data-calendar-task="${completed.id}"]`).getAttribute('aria-label')).includes(', completed'))
-    await h.assert('date-only tasks are separate from the time grid',
-      await rail.getByRole('list', { name: 'Tasks without a time' }).locator(`[data-calendar-task="${h.ids.tasks.roadmap}"]`).count() === 1)
+    await h.assert('due-only tasks have no fabricated calendar time or No time band',
+      await rail.locator(`[data-calendar-task="${dueOnly.id}"]`).count() === 0
+      && await rail.getByRole('list', { name: 'Tasks without a time' }).count() === 0)
+    await h.assert('due-only tasks do not enter dated columns', await page.locator(`[data-task-id="${dueOnly.id}"]`).count() === 0)
+    await page.getByRole('switch', { name: 'Show unplanned tasks' }).click()
+    await h.assert('due-only tasks appear in Unplanned', await page.locator(`[data-task-id="${dueOnly.id}"]`).count() === 1)
+    await page.getByRole('switch', { name: 'Show unplanned tasks' }).click()
     await h.assert('undated tasks have no fabricated calendar time', await rail.locator(`[data-calendar-task="${h.ids.tasks.dinner}"]`).count() === 0)
 
     const blocks = await schedule.locator('[data-calendar-task]').evaluateAll((elements) => elements.map((el) => ({
@@ -67,7 +74,7 @@ export default async function run(h) {
     await h.assert('selecting another day opens at 8 AM', Math.abs(await schedule.evaluate((el) => el.scrollTop) - 578) < 2)
     await h.assert('day switching replaces the events',
       await schedule.locator(`[data-calendar-task="${overlap.id}"]`).count() === 0
-      && (await schedule.getByRole('list', { name: 'Scheduled tasks' }).textContent()).includes('Dentist appointment'))
+      && await schedule.locator(`[data-calendar-task="${tomorrowTask.id}"]`).count() === 1)
     await h.capture('tomorrow-events')
 
     // Breakpoints use the space beside the sidebar, not the whole window. Exercise their exact

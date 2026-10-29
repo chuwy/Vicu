@@ -26,34 +26,32 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
       expect(timed).toHaveLength(1)
       expect(timed[0]).toMatchObject({ startMinute: 555, endMinute: 600, column: 0, columnCount: 1 })
       expect(timed[0].start.toISOString()).toBe(at(9, 15))
-      expect(timed[0].end?.toISOString()).toBe(at(10))
+      expect(timed[0].end.toISOString()).toBe(at(10))
     })
 
-    it('works backwards from a timed due date and leaves a missing duration as a point', () => {
+    it('ignores due-only tasks and defaults invalid duration to 30 minutes without storing it', () => {
       const { timed } = plannerCalendarEvents([
         task(1, { due_date: at(11), description: duration(90) }),
         task(2, { due_date: at(14) }),
         task(3, { start_date: at(15), due_date: at(18), description: duration(0) }),
       ], active, day())
-      expect(timed.map((event) => [event.startMinute, event.endMinute])).toEqual([[570, 660], [840, 860], [900, 920]])
-      expect(timed[0].end?.toISOString()).toBe(at(11))
-      expect(timed[1].end).toBeNull()
-      expect(timed[2].end).toBeNull()
+      expect(timed.map((event) => [event.startMinute, event.endMinute])).toEqual([[900, 930]])
+      expect(timed[0].end.toISOString()).toBe(at(15, 30))
+      expect(timed[0].task.description).toBe(duration(0))
     })
 
-    it('puts date-only and legacy midnight due dates in No time, even with a duration', () => {
-      const { timed, anytime } = plannerCalendarEvents([
+    it('excludes date-only and legacy midnight due-only tasks, even with a duration', () => {
+      const { timed } = plannerCalendarEvents([
         task(1, { due_date: dateOnlyDue('2026-06-10'), description: duration(45) }),
         task(2, { due_date: at(0) }),
         task(3, { due_date: dateOnlyDue('2026-06-11') }),
         task(4, { due_date: dateOnlyDue('2026-06-10'), start_date: at(9) }),
       ], active, day())
-      expect(anytime.map((item) => item.id)).toEqual([1, 2])
       expect(timed.map((event) => event.task.id)).toEqual([4])
     })
 
     it('keeps completed tasks, but excludes archived projects, undated and malformed tasks', () => {
-      const { timed, anytime } = plannerCalendarEvents([
+      const { timed } = plannerCalendarEvents([
         task(1, { start_date: at(9), done: true }),
         task(2, { due_date: dateOnlyDue('2026-06-10'), done: true }),
         task(3, { start_date: at(10), project_id: 9 }),
@@ -62,7 +60,8 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
         task(6, { start_date: at(10), description: duration(Number.MAX_SAFE_INTEGER) }),
       ], active, day())
       expect(timed.map((event) => event.task.id)).toEqual([1])
-      expect(anytime.map((item) => item.id)).toEqual([2])
+      expect(timed[0].end.toISOString()).toBe(at(9, 30))
+      expect(timed[0].task.description).toBe('')
     })
 
     it('clips overnight events and uses exclusive day-end boundaries', () => {
@@ -75,7 +74,7 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
         task(6, { due_date: at(0, 30, 11), description: duration(60) }),
       ], active, day())
       expect(timed.map((event) => [event.task.id, event.startMinute, event.endMinute])).toEqual([
-        [1, 0, 60], [5, 0, 20], [2, 1410, 1440], [6, 1410, 1440],
+        [1, 0, 60], [5, 0, 30], [2, 1410, 1440],
       ])
     })
 
@@ -101,7 +100,7 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
         task(3, { start_date: at(23, 59) }),
       ], active, day())
       expect(timed.map((event) => [event.columnCount, event.startMinute, event.endMinute])).toEqual([
-        [2, 540, 560], [2, 545, 565], [1, 1420, 1440],
+        [2, 540, 570], [2, 545, 565], [1, 1420, 1440],
       ])
       expect(timed[2].start.toISOString()).toBe(at(23, 59))
     })
@@ -113,7 +112,7 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
         task(1, { start_date: start.toISOString(), description: duration(120) }),
       ], active, start)
       expect(timed[0]).toMatchObject({ startMinute: 90, endMinute: 270 })
-      expect(timed[0].end!.getTime() - timed[0].start.getTime()).toBe(120 * 60_000)
+      expect(timed[0].end.getTime() - timed[0].start.getTime()).toBe(120 * 60_000)
     })
 
     it('keeps fall-back intervals visible when their end wall time is before their start', () => {
@@ -123,7 +122,7 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
         task(1, { start_date: start.toISOString(), description: duration(30) }),
       ], active, start)
       expect(timed[0].endMinute - timed[0].startMinute).toBe(20)
-      expect(timed[0].end!.getTime() - timed[0].start.getTime()).toBe(30 * 60_000)
+      expect(timed[0].end.getTime() - timed[0].start.getTime()).toBe(30 * 60_000)
     })
   })
 }

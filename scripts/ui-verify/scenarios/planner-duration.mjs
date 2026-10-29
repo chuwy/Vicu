@@ -20,6 +20,8 @@ export default async function run(h) {
   await h.goto('/today')
   await h.assert('A: a duration-bearing task remains visible in Today', await page.locator('[data-task-id]').filter({ hasText: 'Book flights to Lisbon' }).count() === 1)
   await h.goto('/planner')
+  // Due-only tasks now live in Unplanned; flights has an explicit start and remains in Today.
+  await page.getByRole('switch', { name: 'Show unplanned tasks' }).click()
 
   const flights = page.locator('[data-task-id]').filter({ hasText: 'Book flights to Lisbon' }).first()
   const roadmap = page.locator('[data-task-id]').filter({ hasText: 'Draft Q4 roadmap' }).first()

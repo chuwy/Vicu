@@ -148,7 +148,7 @@ export function PlannerView() {
   const now = useMemo(() => new Date(), [dayKey])
   const params = useMemo<TaskQueryParams>(() => ({
     filter: plannerTaskFilter(now),
-    sort_by: 'due_date',
+    sort_by: 'start_date',
     order_by: 'asc',
   }), [now])
   const { data: tasks = [], isLoading: tasksLoading } = useTasks(params)

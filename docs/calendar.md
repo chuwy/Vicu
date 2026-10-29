@@ -1,6 +1,6 @@
 # Day calendar
 
-The day calendar is the Planner's right-side rail: a read-only schedule for the selected local
+The day calendar is the Planner's right-side rail: an editable schedule for the selected local
 day, split into 30-minute blocks. It lives in
 `src/renderer/components/planner/DayViewCalendar.tsx` and is rendered by `PlannerView` beside the
 day columns (see `docs/planner.md`). Events are Vikunja tasks, not an external calendar feed.
@@ -12,29 +12,61 @@ uses the same task data as the columns, so optimistic edits and completions upda
 without a second request. Completed tasks stay visible, with a check mark and strikethrough.
 
 - **Start date set:** start at `start_date`; the hidden description duration determines the end.
-  The due date does not stretch or move this block. A midnight start is a real start time.
-- **No start, timed due date:** start at `due_date - duration`, ending at the due time.
-- **No duration:** show a point marker at the start or timed due date. The marker has a minimum
-  visual height of 24 px for readability; this is not a stored or inferred duration. Short events
-  use the same minimum. At the bottom of the day, markers shift up just enough to remain visible.
-- **No start, date-only due:** show the task under **No time**, even if it has a duration. Both
-  local 23:59:59 and legacy midnight due dates are date-only; neither becomes a late-night block.
-- **Neither date:** no calendar entry. The task remains available in the Unplanned column.
-- **`end_date`:** never read or written for scheduling or duration.
+  A midnight start is a real start time.
+- **No duration:** use a 30-minute block without writing duration metadata. Invalid duration
+  metadata also uses this default. Short blocks retain a minimum visual height of 24 px for
+  readability; at the bottom of the day they shift up just enough to remain visible.
+- **No valid start date:** no calendar entry, regardless of due date or duration. Open tasks
+  remain available in the Unplanned column. There is no **No time** band.
+- **`due_date` and `end_date`:** never read or written for calendar scheduling or duration.
 
 Timed intervals are included when they overlap the selected local day and are clipped at its
-boundaries; a task ending exactly at midnight does not spill into the following day. The calendar
-uses the effective schedule, while Planner **columns still use the due date**. A start-only task
-or a task due on another day can therefore appear in the calendar without a row in that day's
-column. All open tasks are loaded; completed tasks are loaded only when their due or start date
+boundaries; a task ending exactly at midnight does not spill into the following day. Both the
+calendar and Planner columns use start dates; an overnight task may also appear in the following
+day's calendar. All open tasks are loaded; completed tasks are loaded only when their start date
 falls in the three-day Planner window. This does not discover completed intervals whose start
-and due dates are both outside that window (duration is hidden metadata, not server-filterable).
+is outside that window (duration is hidden metadata, not server-filterable).
 
 Overlapping blocks share side-by-side columns, assigned independently for each connected overlap
 group. Minimum-height markers participate in overlap detection so short tasks cannot cover one
 another. Full titles, times and completion state are available as accessible names and native
-hover titles. Blocks are display-only: edit tasks through their existing rows, not through a
-second editor or drag target in the calendar.
+hover titles. Scheduled blocks can be moved and resized directly; other task properties are still
+edited through their existing rows.
+
+## Moving and resizing
+
+Drag a scheduled block's body to move it, or its top/bottom border to resize it. The pointer cursor
+and small edge grips (visible on hover or keyboard focus) distinguish the three operations:
+
+- **Body:** change `start_date`, preserving duration exactly (including an absent duration).
+- **Top border:** change `start_date` and description duration, keeping the actual end fixed.
+- **Bottom border:** change description duration only, keeping the actual start fixed.
+
+Neither `due_date` nor `end_date` is ever changed. Notes and other description metadata are
+preserved. A task without duration metadata is moved as a 30-minute block without storing the
+default; resizing writes the selected duration using that block's effective start and end.
+
+Displacements snap to 15-minute increments relative to the original time, retaining any original
+off-grid minutes/seconds. Resizing cannot invert an interval: the minimum stored duration is one
+minute. Resizing uses the effective interval, not its minimum-height display box. A clipped
+overnight border has no resize handle because it is not the task's actual endpoint. Completed
+blocks support the same gestures.
+
+The preview updates position, duration, time labels and overlap columns locally. Releasing saves
+one minimal merge patch through `useUpdateTask`, so optimistic updates, errors/rollback and the
+offline queue behave like other task edits. Clicking without dragging, or returning to the original
+position before releasing, writes nothing. Escape, pointer cancellation, window blur, leaving
+Planner or changing its selected day discards the preview. Other gestures wait while a save is
+pending. A refresh during a drag does not overwrite newly received notes with the older description.
+
+The calendar auto-scrolls when an active drag reaches the top/bottom of its viewport. Pointer
+capture keeps the gesture working outside the original block, including while overlap columns
+change. Each body and edge control is keyboard focusable: Up/Down applies the same edit in
+15-minute steps, with instructions linked by `aria-describedby` and a live announcement after
+saving. The controls do not participate in Planner row selection or its drag-and-drop machinery.
+
+Editing math lives in `src/renderer/lib/planner-calendar-edit.ts`; pointer/keyboard handling and
+preview lifetime are in `src/renderer/hooks/use-calendar-edit.ts`.
 
 ## Grid and local time
 
@@ -51,7 +83,10 @@ Event duration is elapsed time; its position uses local wall-clock hours, not el
 since midnight. This keeps a 09:00 event on the 09:00 line after a DST change. The fixed 24-hour
 grid intentionally shows skipped hours and folds repeated hours onto the same line. An interval
 whose end wall time goes backwards during fall-back remains visible as a minimum-height marker.
-Tests cover Auckland and New York, including both DST transitions.
+Edits move endpoints in local clock minutes, then compute resized duration as elapsed minutes.
+Moving a block never changes elapsed duration. Within a repeated hour, edits retain the current
+occurrence when possible; crossing a nonexistent spring-forward hour must not reverse the gesture's
+direction. Tests cover Auckland and New York, including both DST transitions.
 
 ## Picking, sizing and scrolling
 
@@ -96,11 +131,12 @@ Hour labels use `text-meta text-text-secondary`; the title uses `text-section`; 
 There are no new font sizes, radii or durations outside the design tokens.
 
 The hour grid is an `<ol>` with decorative half-hour blocks and `<time dateTime>` labels. Separate
-labelled lists contain scheduled tasks and tasks without a time; the section is labelled by its
-heading. Calendar entries deliberately do not carry `data-task-id`, which belongs exclusively to
+labelled lists contain the hours and scheduled tasks; the section is labelled by its heading. Calendar entries deliberately do not carry `data-task-id`, which belongs exclusively to
 the real task rows and their selection/drag/editor machinery.
 
-Unit tests live in `src/renderer/lib/__tests__/day-calendar.test.ts`, `planner-calendar.test.ts`
-and `planner.test.ts`. `scripts/ui-verify/scenarios/planner-calendar.mjs` checks actual scroll
+Unit tests live in `src/renderer/lib/__tests__/day-calendar.test.ts`, `planner-calendar.test.ts`,
+`planner-calendar-edit.test.ts` and `planner.test.ts`. `scripts/ui-verify/scenarios/planner-calendar.mjs` checks actual scroll
 position, event geometry, day selection, overlap columns, bounded fetching and narrow-window
 layout. `planner-duration.mjs` also checks live calendar updates after editing a duration.
+`planner-calendar-edit.mjs` checks body/edge gestures, preview-before-write, cancellation, keyboard
+editing, completed and default-duration events, preserved dates/notes, and edge auto-scrolling.

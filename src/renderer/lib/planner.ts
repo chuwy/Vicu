@@ -1,19 +1,17 @@
 import type { Task } from '@/lib/vikunja-types'
 import { NULL_DATE } from '@/lib/constants'
-import { parseTaskDuration } from '@/lib/task-duration'
 import {
   addLocalDays,
-  dateOnlyDue,
   diffLocalDays,
   localDateOf,
-  postponeDays,
+  startOfLocalDay,
   startOfLocalDayIso,
   toLocalDate,
   type LocalDate,
 } from '@/lib/due-dates'
 
 export const PLANNER_DAY_COUNT = 3
-const MINUTE_MS = 60_000
+export const PLANNER_DEFAULT_DURATION_MINUTES = 30
 
 /** Available Planner width, excluding the sidebar. Columns stretch between these breakpoints. */
 export function plannerVisibleDayCount(width: number): number {
@@ -29,17 +27,14 @@ export interface PlannerDay {
 }
 
 /**
- * The dated window (completed included) plus all open tasks. Start dates also cover scheduled
- * calendar tasks whose due date is absent or on another day. Never fetch all completed history.
- * The Unplanned column needs open tasks with no dates, but Vikunja's filter engine treats the Go
- * zero time as "no date" and never matches it (`due_date = '0001-01-01T00:00:00Z'` returns
- * nothing), so unplanned tasks cannot be selected server-side: fetch `done = false` and pick them
- * out with `plannerUnplannedTasks`. The dated grouping drops open tasks outside the window.
+ * The start-date window (completed included) plus all open tasks. Never fetch all completed history.
+ * Vikunja cannot match its zero-time "no date" value, so select unplanned tasks client-side from
+ * all open tasks. Due dates have no bearing on Planner membership, including completed tasks.
  */
 export function plannerTaskFilter(now: Date): string {
   const start = startOfLocalDayIso(0, now)
   const end = startOfLocalDayIso(PLANNER_DAY_COUNT, now)
-  return `done = false || (due_date >= '${start}' && due_date < '${end}') || (start_date >= '${start}' && start_date < '${end}')`
+  return `done = false || (start_date >= '${start}' && start_date < '${end}')`
 }
 
 /** A picked date must still have a visible heading after resizing or the local day rolls over. */
@@ -50,12 +45,16 @@ export function plannerCalendarDate(selected: LocalDate | null, now: Date, visib
     : today
 }
 
-/** The due date after a Planner drop, or null when there is no date change to send. */
-export function plannerDueDateOnDrop(dueDate: string, targetDate: LocalDate): string | null {
-  const currentDate = localDateOf(dueDate)
-  if (!currentDate) return dateOnlyDue(targetDate)
+/** Preserve an existing start time; a day-only drop of an unplanned task starts at local midnight. */
+export function plannerStartDateOnDrop(startDate: string, targetDate: LocalDate): string | null {
+  const currentDate = plannerTimestamp(startDate) === null ? null : localDateOf(startDate)
+  if (!currentDate) return startOfLocalDay(targetDate).toISOString()
   if (currentDate === targetDate) return null
-  return postponeDays(dueDate, diffLocalDays(currentDate, targetDate))
+  // Start times are always real times, including midnight and 23:59:59. Do not apply the
+  // date-only/legacy-midnight normalization used by due-date moves.
+  const moved = new Date(startDate)
+  moved.setDate(moved.getDate() + diffLocalDays(currentDate, targetDate))
+  return moved.toISOString()
 }
 
 function plannerTimestamp(value: string | null | undefined): number | null {
@@ -64,13 +63,9 @@ function plannerTimestamp(value: string | null | undefined): number | null {
   return Number.isNaN(timestamp) ? null : timestamp
 }
 
-/** Start date wins; otherwise Planner schedules the task backwards from due by its duration. */
+/** Only a valid start_date makes a task planned; due/end dates and duration never affect order. */
 export function plannerTaskSortKey(task: Task): number | null {
-  const start = plannerTimestamp(task.start_date)
-  if (start !== null) return start
-  const due = plannerTimestamp(task.due_date)
-  if (due === null) return null
-  return due - (parseTaskDuration(task.description) ?? 0) * MINUTE_MS
+  return plannerTimestamp(task.start_date)
 }
 
 function comparePlannerTasks(left: Task, right: Task): number {
@@ -81,12 +76,11 @@ function comparePlannerTasks(left: Task, right: Task): number {
   return leftKey - rightKey
 }
 
-/** Open tasks in active projects that have neither a due date nor a start date. */
+/** Open tasks in active projects without a valid start date, regardless of their due date. */
 export function plannerUnplannedTasks(tasks: Task[], activeProjectIds: ReadonlySet<number>): Task[] {
   return tasks.filter((task) => (
     !task.done
     && activeProjectIds.has(task.project_id)
-    && plannerTimestamp(task.due_date) === null
     && plannerTimestamp(task.start_date) === null
   ))
 }
@@ -105,17 +99,16 @@ export function groupPlannerTasks(
   }))
   const byDate = new Map(days.map((day) => [day.date, day.tasks]))
 
-  // The server cannot order by hidden duration metadata. Stable sorting keeps the existing order
-  // for equal keys, and grouping then preserves the effective order within every column.
+  // Stable sorting preserves the existing order for equal start times.
   for (const task of [...tasks].sort(comparePlannerTasks)) {
     if (!activeProjectIds.has(task.project_id)) continue
-    const dueDate = localDateOf(task.due_date)
-    if (!dueDate) continue
-    if (dueDate < today) {
+    const startDate = plannerTaskSortKey(task) === null ? null : localDateOf(task.start_date)
+    if (!startDate) continue
+    if (startDate < today) {
       if (!task.done) overdueTasks.push(task)
       continue
     }
-    const dayTasks = byDate.get(dueDate)
+    const dayTasks = byDate.get(startDate)
     if (dayTasks) dayTasks.push(task)
   }
 

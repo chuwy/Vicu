@@ -486,6 +486,14 @@ function TaskRowInner({
     [task, updateTask]
   )
 
+  // Vikunja's task field is named start_date even when the picker includes a time of day.
+  const handleStartDateChange = useCallback(
+    (isoDate: string) => {
+      updateTask.mutate({ id: task.id, changes: { start_date: isoDate }, original: task })
+    },
+    [task, updateTask]
+  )
+
   const handleDurationChange = useCallback(
     (minutes: number | null) => {
       updateTask.mutate({
@@ -957,6 +965,7 @@ function TaskRowInner({
         onClose={() => setActivePopover(null)}
         attachmentInvokers={attachmentInvokers}
         onDateChange={handleDateChange}
+        onStartDateChange={handleStartDateChange}
         onDurationChange={handleDurationChange}
         onRecurrenceChange={handleRecurrenceChange}
         onPriorityChange={handlePriorityChange}

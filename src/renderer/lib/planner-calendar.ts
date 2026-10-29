@@ -1,20 +1,20 @@
 import type { Task } from '@/lib/vikunja-types'
-import { addLocalDays, isDateOnly, isNoDueDate, localDateOf, startOfLocalDay, toLocalDate } from '@/lib/due-dates'
-import { plannerTaskSortKey } from '@/lib/planner'
+import { addLocalDays, startOfLocalDay, toLocalDate } from '@/lib/due-dates'
+import { PLANNER_DEFAULT_DURATION_MINUTES, plannerTaskSortKey } from '@/lib/planner'
 import { parseTaskDuration } from '@/lib/task-duration'
 import { DAY_SLOT_HEIGHT_PX, DAY_SLOT_MINUTES } from '@/lib/day-calendar'
 
 const MINUTE_MS = 60_000
 const DAY_MINUTES = 24 * 60
-/** A readable marker, not an invented task duration. Also used when assigning overlap columns. */
+/** Minimum readable height for short blocks, also used when assigning overlap columns. */
 export const CALENDAR_EVENT_MIN_HEIGHT_PX = 24
 const MIN_EVENT_MINUTES = CALENDAR_EVENT_MIN_HEIGHT_PX * DAY_SLOT_MINUTES / DAY_SLOT_HEIGHT_PX
 
 export interface PlannerCalendarEvent {
   task: Task
-  /** Real instants; an absent duration is a point, not a guessed half-hour appointment. */
+  /** Real instants; absent duration uses Planner's 30-minute default without storing metadata. */
   start: Date
-  end: Date | null
+  end: Date
   /** Display bounds in the fixed 24-hour wall-clock grid, clipped to this day. */
   startMinute: number
   endMinute: number
@@ -24,7 +24,6 @@ export interface PlannerCalendarEvent {
 
 export interface PlannerCalendarEvents {
   timed: PlannerCalendarEvent[]
-  anytime: Task[]
 }
 
 const wallMinute = (date: Date): number => date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
@@ -55,9 +54,8 @@ function layoutOverlaps(events: PlannerCalendarEvent[]): PlannerCalendarEvent[] 
 }
 
 /**
- * Map the Planner's loaded tasks to the selected local day. Start wins, otherwise timed due minus
- * duration; end_date is never involved. Date-only due tasks have no invented time. The calendar is
- * read-only and may show a task on a different day from its due-date-based Planner column.
+ * Map tasks with a start_date to the selected local day, including overlapping overnight blocks.
+ * Missing duration defaults to 30 minutes; due_date and end_date are never involved.
  */
 export function plannerCalendarEvents(
   tasks: readonly Task[],
@@ -67,26 +65,21 @@ export function plannerCalendarEvents(
   const date = toLocalDate(day)
   const dayStart = startOfLocalDay(date).getTime()
   const dayEnd = startOfLocalDay(addLocalDays(date, 1)).getTime()
-  const anytime: Task[] = []
   const timed: PlannerCalendarEvent[] = []
 
   for (const task of tasks) {
     if (!activeProjectIds.has(task.project_id)) continue
-    if (isNoDueDate(task.start_date) && isDateOnly(task.due_date)) {
-      if (localDateOf(task.due_date) === date) anytime.push(task)
-      continue
-    }
     const startMs = plannerTaskSortKey(task)
     if (startMs === null) continue
-    const duration = parseTaskDuration(task.description)
-    const endMs = duration === null ? startMs : startMs + duration * MINUTE_MS
+    const duration = parseTaskDuration(task.description) ?? PLANNER_DEFAULT_DURATION_MINUTES
+    const endMs = startMs + duration * MINUTE_MS
     const start = new Date(startMs)
-    const end = duration === null ? null : new Date(endMs)
-    if (!Number.isFinite(start.getTime()) || (end && !Number.isFinite(end.getTime()))) continue
-    if (startMs >= dayEnd || (duration === null ? startMs < dayStart : endMs <= dayStart)) continue
+    const end = new Date(endMs)
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) continue
+    if (startMs >= dayEnd || endMs <= dayStart) continue
 
     const startMinute = startMs < dayStart ? 0 : wallMinute(start)
-    const endMinute = endMs >= dayEnd ? DAY_MINUTES : wallMinute(end ?? start)
+    const endMinute = endMs >= dayEnd ? DAY_MINUTES : wallMinute(end)
     // Repeated DST hours share a line. A backwards wall-clock interval still gets a visible marker.
     const displayStart = Math.min(startMinute, DAY_MINUTES - MIN_EVENT_MINUTES)
     timed.push({
@@ -98,5 +91,5 @@ export function plannerCalendarEvents(
     })
   }
 
-  return { timed: layoutOverlaps(timed), anytime }
+  return { timed: layoutOverlaps(timed) }
 }
