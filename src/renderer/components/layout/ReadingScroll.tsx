@@ -24,7 +24,7 @@ export const ReadingScroll = forwardRef<HTMLDivElement, ReadingScrollProps>(func
   useImperativeHandle(ref, () => inner.current as HTMLDivElement)
   useListMotion(inner)
   return (
-    <div ref={inner} className={cn('min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]', className)} {...rest}>
+    <div ref={inner} data-scroll-area="" className={cn('min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]', className)} {...rest}>
       <div className={cn('mx-auto min-h-full w-full', !wide && 'max-w-reading', columnClassName)}>{children}</div>
     </div>
   )

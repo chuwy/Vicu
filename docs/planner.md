@@ -6,7 +6,7 @@ Planner is a view allowing to visualize the progress, duration and ordering of t
 
 Planner deliberately shows completed tasks.
 
-The right side of the Planner carries a plain day-view calendar for today: 30-minute blocks with a more solid line every hour. No events are drawn on it yet; its decisions are in `docs/calendar.md`.
+The right side of the Planner carries a plain day-view calendar: 30-minute blocks with a more solid line every hour, on the day picked by clicking a day heading (today by default). No events are drawn on it yet; its decisions are in `docs/calendar.md`.
 
 ## Implementation
 

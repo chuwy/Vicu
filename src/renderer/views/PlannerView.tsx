@@ -13,7 +13,7 @@ import { useDayKey } from '@/stores/day-store'
 import { usePrintable } from '@/stores/print-store'
 import { cn } from '@/lib/cn'
 import { formatDateDisplay } from '@/lib/date-display'
-import { startOfLocalDay } from '@/lib/due-dates'
+import { startOfLocalDay, toLocalDate, type LocalDate } from '@/lib/due-dates'
 import { openCount } from '@/lib/list-sections'
 import { groupPlannerTasks, plannerTaskFilter, plannerUnplannedTasks, type PlannerDay } from '@/lib/planner'
 import type { Project, TaskQueryParams } from '@/lib/vikunja-types'
@@ -26,6 +26,9 @@ interface PlannerDayColumnProps {
   day: PlannerColumnDay
   projectsById: ReadonlyMap<number, Project>
   isLoading: boolean
+  /** This column's day is the one the right-side day calendar shows. */
+  selected?: boolean
+  onSelect?: (date: LocalDate) => void
   showUnplanned?: boolean
   onShowUnplannedChange?: (show: boolean) => void
 }
@@ -34,10 +37,13 @@ function PlannerDayColumn({
   day,
   projectsById,
   isLoading,
+  selected = false,
+  onSelect,
   showUnplanned = false,
   onShowUnplannedChange,
 }: PlannerDayColumnProps) {
   const columnId = `planner-column-${day.date ?? 'overdue'}`
+  const date = day.date
   const { setNodeRef, isOver } = useDroppable({
     id: columnId,
     data: { type: 'planner-day', date: day.date },
@@ -54,14 +60,30 @@ function PlannerDayColumn({
       )}
     >
       <header className="flex h-12 items-center gap-2 border-b border-border px-4">
-        <h2
-          id={columnId}
-          className={cn(
-            'min-w-0 flex-1 truncate text-section',
-            day.date === null && !showUnplanned ? 'text-status-overdue' : 'text-text',
+        <h2 id={columnId} className="min-w-0 flex-1">
+          {date === null ? (
+            <span
+              className={cn(
+                'block truncate text-section',
+                !showUnplanned ? 'text-status-overdue' : 'text-text',
+              )}
+            >
+              {day.label}
+            </span>
+          ) : (
+            <button
+              type="button"
+              aria-current={selected ? 'date' : undefined}
+              onClick={() => onSelect?.(date)}
+              title="Show this day in the calendar"
+              className={cn(
+                '-mx-2 block w-full truncate rounded-control px-2 text-left text-section transition-colors duration-fade-fast hover:bg-bg-hover',
+                selected ? 'text-accent-blue' : 'text-text',
+              )}
+            >
+              <time dateTime={date}>{day.label}</time>
+            </button>
           )}
-        >
-          {day.date === null ? day.label : <time dateTime={day.date}>{day.label}</time>}
         </h2>
         {day.date === null ? (
           <Switch
@@ -108,6 +130,7 @@ function PlannerDayColumn({
 
 export function PlannerView() {
   const [showUnplanned, setShowUnplanned] = useState(false)
+  const [selectedDay, setSelectedDay] = useState<LocalDate | null>(null)
   const dayKey = useDayKey()
   const now = useMemo(() => new Date(), [dayKey])
   const params = useMemo<TaskQueryParams>(() => ({
@@ -139,6 +162,9 @@ export function PlannerView() {
     })),
     [tasks, activeProjectIds, unplannedTasks, showUnplanned, now, dateFormat],
   )
+  // The day the right-side calendar shows: the picked day, or today (docs/calendar.md).
+  const calendarDate = selectedDay ?? toLocalDate(now)
+  const calendarDay = useMemo(() => startOfLocalDay(calendarDate), [calendarDate])
 
   usePrintable(useMemo(() => ({
     viewTitle: 'Planner',
@@ -160,13 +186,15 @@ export function PlannerView() {
                 day={day}
                 projectsById={projectsById}
                 isLoading={isLoading}
+                selected={day.date === calendarDate}
+                onSelect={setSelectedDay}
                 showUnplanned={showUnplanned}
                 onShowUnplannedChange={setShowUnplanned}
               />
             ))}
           </div>
           {/* The day calendar is a plain layout scaffold for now (docs/calendar.md). */}
-          <DayViewCalendar day={now} className="w-80 shrink-0" />
+          <DayViewCalendar day={calendarDay} className="w-80 shrink-0" />
         </div>
       </TaskList>
     </DueDateContextProvider>

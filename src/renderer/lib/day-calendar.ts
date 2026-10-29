@@ -3,6 +3,11 @@
 
 export const DAY_SLOT_MINUTES = 30
 export const DAY_SLOT_COUNT = (24 * 60) / DAY_SLOT_MINUTES
+/** Height of one 30-minute block in px (an hour is 72 px). DayViewCalendar renders it as an inline
+ * height so its scroll-to-open math shares the one constant. */
+export const DAY_SLOT_HEIGHT_PX = 36
+/** The slot the day opens at for any day other than today: the 8 AM hour line. */
+const DAY_OPEN_SLOT_INDEX = (8 * 60) / DAY_SLOT_MINUTES
 
 export interface DayTimeSlot {
   /** Minutes from local midnight: 0, 30, 60, ... 1410. */
@@ -36,4 +41,14 @@ export function dayTimeSlots(dayStart: Date): DayTimeSlot[] {
       isoLocal: `${isoDay}T${pad2(Math.floor(minutesFromMidnight / 60))}:${pad2(minutesFromMidnight % 60)}`,
     }
   })
+}
+
+/**
+ * The slot the day calendar opens at (docs/calendar.md): for today the 30-minute block containing
+ * an hour before now (clamped to the start of the day), for any other day the 8 AM hour line.
+ */
+export function dayOpenSlotIndex(isToday: boolean, now: Date): number {
+  if (!isToday) return DAY_OPEN_SLOT_INDEX
+  const minutesNow = now.getHours() * 60 + now.getMinutes()
+  return Math.max(0, Math.floor((minutesNow - 60) / DAY_SLOT_MINUTES))
 }
