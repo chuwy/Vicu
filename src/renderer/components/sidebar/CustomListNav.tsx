@@ -1,16 +1,12 @@
 import { useState } from 'react'
 import { SelectionPill } from './SelectionPill'
 import { useNavigate, useMatches } from '@tanstack/react-router'
-import {
-  Plus, List, ListFilter, Folder, Star, Heart, Home, Briefcase, GraduationCap,
-  ShoppingCart, Dumbbell, Code2, PawPrint, Sparkles, Lightbulb, Bookmark, Flag,
-  Wrench, Palette, Pencil, Trash2, CloudOff, Loader2, RefreshCw,
-  type LucideIcon,
-} from 'lucide-react'
+import { Plus, List, Pencil, Trash2, CloudOff, Loader2, RefreshCw } from 'lucide-react'
 import { useSortable, SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { useDndMonitor } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/cn'
+import { customListIcon } from '@/lib/custom-list-icons'
 import { CustomListDialog } from '@/components/shared/CustomListDialog'
 import { Menu, MenuItem } from '@/components/overlay/Menu'
 import type { CustomList } from '@/lib/vikunja-types'
@@ -23,26 +19,6 @@ import {
   useUpsertCustomList,
 } from '@/hooks/use-custom-lists'
 
-const CUSTOM_LIST_ICONS: Record<string, LucideIcon> = {
-  filter_list: ListFilter,
-  folder: Folder,
-  star: Star,
-  favorite: Heart,
-  home: Home,
-  work: Briefcase,
-  school: GraduationCap,
-  shopping_cart: ShoppingCart,
-  fitness: Dumbbell,
-  code: Code2,
-  pets: PawPrint,
-  auto_awesome: Sparkles,
-  lightbulb: Lightbulb,
-  bookmark: Bookmark,
-  flag: Flag,
-  build: Wrench,
-  palette: Palette,
-}
-
 function CustomListItem({
   item,
   isActive,
@@ -54,7 +30,7 @@ function CustomListItem({
   onNavigate: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }) {
-  const ItemIcon = CUSTOM_LIST_ICONS[item.icon ?? ''] ?? List
+  const ItemIcon = customListIcon(item.icon) ?? List
   const {
     attributes,
     listeners,
