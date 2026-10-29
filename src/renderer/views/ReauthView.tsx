@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { BrowserSignIn } from '@/components/auth/BrowserSignIn'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
+import type { OidcSignInMode } from '../../shared/oidc-browser'
 
 interface ReauthViewProps {
   authMethod: string
@@ -25,6 +27,25 @@ export function ReauthView({
   const [error, setError] = useState('')
   const [needsTotp, setNeedsTotp] = useState(false)
   const [needsOidcTotp, setNeedsOidcTotp] = useState(false)
+  // Start the way the last sign-in went: in Vicu's window, or in the browser for a passkey.
+  const [oidcMode, setOidcMode] = useState<OidcSignInMode>('window')
+  const [passkeyPrompted, setPasskeyPrompted] = useState(false)
+  const [providerName, setProviderName] = useState<string | undefined>()
+
+  useEffect(() => {
+    if (authMethod !== 'oidc') return
+    let live = true
+    void Promise.all([api.getOidcSignIn(), api.discoverOidc(vikunjaUrl)])
+      .then(([last, providers]) => {
+        if (!live) return
+        setOidcMode(last.mode)
+        setProviderName((providers.find((p) => p.key === last.providerKey) ?? providers[0])?.name)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [authMethod, vikunjaUrl])
 
   const handlePasswordLogin = async (totpPasscode?: string) => {
     setLoading(true)
@@ -54,19 +75,25 @@ export function ReauthView({
     }
   }
 
-  const handleOidcLogin = async (totpPasscode?: string) => {
+  const handleOidcLogin = async (totpPasscode?: string, mode: OidcSignInMode = oidcMode) => {
     setLoading(true)
     setError('')
+    setOidcMode(mode)
 
     try {
-      const result = await api.oidcLogin(vikunjaUrl, '', totpPasscode)
+      // No provider key: main signs in with the provider used last time.
+      const signIn = mode === 'browser' ? api.oidcBrowserLogin : api.oidcLogin
+      const result = await signIn(vikunjaUrl, '', totpPasscode)
       if (result.success) {
         onSuccess()
       } else if (result.totpRequired) {
         setNeedsOidcTotp(true)
         setTotpCode('')
         if (totpPasscode) setError(result.error)
-      } else {
+      } else if (result.passkeyUnavailable) {
+        setOidcMode('browser')
+        setPasskeyPrompted(true)
+      } else if (!result.cancelled) {
         setError(result.error)
       }
     } catch {
@@ -90,19 +117,57 @@ export function ReauthView({
         </p>
 
         <div className="space-y-4">
-          {authMethod === 'oidc' && !needsOidcTotp && (
-            <button
-              type="button"
-              onClick={() => handleOidcLogin()}
-              disabled={loading}
-              className={cn(
-                'w-full rounded-control px-4 py-2.5 text-sm font-medium transition-colors',
-                'bg-accent-fill text-on-accent hover:bg-accent-fill/90',
-                'disabled:cursor-not-allowed disabled:opacity-50'
-              )}
-            >
-              {loading ? 'Waiting for browser...' : 'Sign in with SSO'}
-            </button>
+          {authMethod === 'oidc' && !needsOidcTotp && oidcMode === 'window' && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleOidcLogin(undefined, 'window')}
+                disabled={loading}
+                className={cn(
+                  'w-full rounded-control px-4 py-2.5 text-sm font-medium transition-colors',
+                  'bg-accent-fill text-on-accent hover:bg-accent-fill/90',
+                  'disabled:cursor-not-allowed disabled:opacity-50'
+                )}
+              >
+                {loading ? 'Waiting for sign-in...' : providerName ? `Sign in with ${providerName}` : 'Sign in with SSO'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError('')
+                  setOidcMode('browser')
+                }}
+                disabled={loading}
+                className="w-full text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50"
+              >
+                Uses a passkey? Sign in through your browser
+              </button>
+            </>
+          )}
+
+          {authMethod === 'oidc' && !needsOidcTotp && oidcMode === 'browser' && (
+            <>
+              <BrowserSignIn
+                providerName={providerName}
+                passkeyPrompted={passkeyPrompted}
+                waiting={loading}
+                error=""
+                onStart={() => handleOidcLogin(undefined, 'browser')}
+                onCancel={() => api.cancelOidcBrowserLogin()}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (loading) void api.cancelOidcBrowserLogin()
+                  setError('')
+                  setPasskeyPrompted(false)
+                  setOidcMode('window')
+                }}
+                className="w-full text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                Sign in in Vicu's window instead
+              </button>
+            </>
           )}
 
           {authMethod === 'oidc' && needsOidcTotp && (
@@ -121,7 +186,7 @@ export function ReauthView({
                   autoFocus
                   className="w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-center text-lg tracking-widest text-[var(--text-primary)] placeholder:text-text-secondary/50"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && totpCode.length === 6) handleOidcLogin(totpCode)
+                    if (e.key === 'Enter' && totpCode.length === 6 && !loading) handleOidcLogin(totpCode)
                   }}
                 />
                 <p className="mt-1.5 text-xs text-[var(--text-secondary)]">
@@ -139,12 +204,23 @@ export function ReauthView({
                   'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
               >
-                {loading ? 'Waiting for browser...' : 'Continue with SSO'}
+                {loading ? 'Waiting for sign-in...' : 'Continue with SSO'}
               </button>
+
+              {loading && oidcMode === 'browser' && (
+                <button
+                  type="button"
+                  onClick={() => api.cancelOidcBrowserLogin()}
+                  className="w-full text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                >
+                  Cancel
+                </button>
+              )}
 
               <button
                 type="button"
                 onClick={() => {
+                  if (loading && oidcMode === 'browser') void api.cancelOidcBrowserLogin()
                   setNeedsOidcTotp(false)
                   setTotpCode('')
                   setError('')

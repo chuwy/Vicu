@@ -145,7 +145,7 @@ If you share nothing, none of this shows. With an API token sign-in, give the to
 - **macOS**: open the `.dmg` and drag **Vicu** into **Applications**.
 - **Linux**: `chmod +x Vicu-*.AppImage`, then run it. On Wayland, accept the GlobalShortcuts consent dialog if one appears; if the hotkeys still fail, Settings shows commands to bind in your desktop's keyboard settings. On GNOME the tray needs the **AppIndicator and KStatusNotifierItem Support** extension. Obsidian detection and voice input are not available on Linux.
 
-Then enter your server URL, sign in with a username and password (with two-factor), single sign-on (OpenID Connect) or an API token, and pick your Inbox project (if another device already chose one, Vicu suggests it). Turn on Quick Entry in Settings. `VICU_USER_DATA_DIR=<folder>` runs Vicu with a separate, throwaway profile.
+Then enter your server URL, sign in with a username and password (with two-factor), single sign-on (OpenID Connect) or an API token, and pick your Inbox project (if another device already chose one, Vicu suggests it). If your identity provider signs you in with a passkey (Pocket ID, for example), choose "Sign in through your browser": add `http://127.0.0.1:47823/vicu/oidc-callback` once as a redirect (callback) URL of the Vikunja client at the provider, since passkeys don't work in Vicu's own sign-in window on macOS and Linux. Turn on Quick Entry in Settings. `VICU_USER_DATA_DIR=<folder>` runs Vicu with a separate, throwaway profile.
 
 ## Building from source
 

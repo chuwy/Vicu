@@ -27,6 +27,7 @@ import type {
 import type { TaskPatch } from './merge-patches'
 import type { JsonPatchOperation } from '../../shared/routines'
 import type { SyncedPrefsSnapshot } from '../../shared/synced-prefs'
+import type { OidcSignInMode } from '../../shared/oidc-browser'
 import { withCollabSignals } from './collab-signals'
 import { announceAccountChanged } from './account-events'
 import type {
@@ -53,7 +54,15 @@ export type {
 
 export type OidcLoginResult =
   | { success: true }
-  | { success: false; error: string; totpRequired?: boolean }
+  | {
+      success: false
+      error: string
+      totpRequired?: boolean
+      /** The provider asked for a passkey, which the sign-in window cannot use: sign in in the browser. */
+      passkeyUnavailable?: boolean
+      /** The browser sign-in was cancelled in Vicu. */
+      cancelled?: boolean
+    }
 
 function queueOptions(title?: string): TaskWriteOptions {
   return title ? { queue: true, title } : { queue: true }
@@ -257,6 +266,14 @@ export const api = {
 
   oidcLogin: (url: string, providerKey: string, totpPasscode?: string) =>
     window.api.oidcLogin(url, providerKey, totpPasscode) as Promise<OidcLoginResult>,
+
+  oidcBrowserLogin: (url: string, providerKey: string, totpPasscode?: string) =>
+    window.api.oidcBrowserLogin(url, providerKey, totpPasscode) as Promise<OidcLoginResult>,
+
+  cancelOidcBrowserLogin: () => window.api.cancelOidcBrowserLogin(),
+
+  /** How the last OIDC sign-in ran and with which provider, so signing in again starts the same way. */
+  getOidcSignIn: () => window.api.getOidcSignIn() as Promise<{ mode: OidcSignInMode; providerKey: string | null }>,
 
   loginPassword: (url: string, username: string, password: string, totpPasscode?: string) =>
     window.api.loginPassword(url, username, password, totpPasscode) as Promise<PasswordLoginResult>,

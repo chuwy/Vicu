@@ -81,7 +81,9 @@ import { hasVicuMetadataMarker } from './custom-list-protocol'
 import { discoverProviders, discoverAuthMethods } from './auth/oidc-discovery'
 import { fetchCurrentUser } from './auth/user-info'
 import { authManager } from './auth/auth-manager'
-import { OidcTotpRequiredError } from './auth/oidc-login'
+import { OidcPasskeyUnavailableError, OidcTotpRequiredError } from './auth/oidc-login'
+import { cancelBrowserLogin } from './auth/oidc-browser-login'
+import { BrowserSignInCancelledError } from './auth/loopback-callback'
 import { buildViewerFilterParams } from './quick-entry/filter-builder'
 import { forgetDeletedTask, loadRoutineCarriers, rememberCreatedTask } from './carrier-service'
 import { countProjectTasks, invalidateProjectCounts } from './project-counts-service'
@@ -103,7 +105,7 @@ import {
   applyQuickEntrySettings,
   getLastShortcutStatus,
 } from './quick-entry-state'
-import { getAPIToken, getSecretStorageStatus, storeAPIToken, API_TOKEN_NO_EXPIRY } from './auth/token-store'
+import { getAPIToken, getOidcSignInMode, getProviderKey, getSecretStorageStatus, storeAPIToken, API_TOKEN_NO_EXPIRY } from './auth/token-store'
 import { sendTestNotification, rescheduleNotifications, refreshTaskRemindersSoon, refreshRoutineReminders } from './notifications'
 import { setTaskBadge, clearTaskBadge } from './badge'
 import { resolveShownObsidianLink, testObsidianConnection } from './obsidian-client'
@@ -568,9 +570,9 @@ export function registerIpcHandlers(): void {
     return discoverProviders(url)
   })
 
-  handleTrusted('auth:login-oidc', async (_event, url: string, providerKey: string, totpPasscode?: string) => {
+  const oidcLoginResult = async (signIn: () => Promise<void>) => {
     try {
-      await authManager.login(url, providerKey, totpPasscode)
+      await signIn()
       accountChanged()
       // Signing in again is what a replay that paused on an expired session was waiting for.
       void replayPendingActions()
@@ -580,9 +582,23 @@ export function registerIpcHandlers(): void {
         success: false,
         error: err instanceof Error ? err.message : 'Login failed',
         ...(err instanceof OidcTotpRequiredError ? { totpRequired: true } : {}),
+        ...(err instanceof OidcPasskeyUnavailableError ? { passkeyUnavailable: true } : {}),
+        ...(err instanceof BrowserSignInCancelledError ? { cancelled: true } : {}),
       }
     }
+  }
+
+  handleTrusted('auth:login-oidc', (_event, url: string, providerKey: string, totpPasscode?: string) =>
+    oidcLoginResult(() => authManager.login(url, providerKey, totpPasscode)))
+
+  handleTrusted('auth:login-oidc-browser', (_event, url: string, providerKey: string, totpPasscode?: string) =>
+    oidcLoginResult(() => authManager.loginInBrowser(url, providerKey, totpPasscode)))
+
+  handleTrusted('auth:cancel-oidc-browser', () => {
+    cancelBrowserLogin()
   })
+
+  handleTrusted('auth:oidc-sign-in', () => ({ mode: getOidcSignInMode(), providerKey: getProviderKey() }))
 
   handleTrusted('auth:discover-methods', (_event, url: string) => {
     return discoverAuthMethods(url)

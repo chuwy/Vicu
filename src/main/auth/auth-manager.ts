@@ -21,6 +21,7 @@ import {
   revokeStoredBackupAPIToken,
 } from './oidc-login'
 import { silentReauth } from './silent-reauth'
+import { loginWithOIDCInBrowser } from './oidc-browser-login'
 import { loginWithPassword, type PasswordLoginResult } from './password-login'
 import { renewJWT, JWTRenewalError, type JWTRenewalErrorKind } from './jwt-renewal'
 
@@ -156,10 +157,19 @@ class AuthManager {
   }
 
   /**
-   * Interactive OIDC login via system browser.
+   * Interactive OIDC login in Vicu's sign-in window.
    */
   async login(vikunjaUrl: string, providerKey?: string, totpPasscode?: string): Promise<void> {
     await loginWithOIDC(vikunjaUrl, providerKey, totpPasscode)
+    this._resetBackoff()
+    this._scheduleProactiveRefresh()
+  }
+
+  /**
+   * Interactive OIDC login in the system browser, for providers that sign in with a passkey.
+   */
+  async loginInBrowser(vikunjaUrl: string, providerKey?: string, totpPasscode?: string): Promise<void> {
+    await loginWithOIDCInBrowser(vikunjaUrl, providerKey, totpPasscode)
     this._resetBackoff()
     this._scheduleProactiveRefresh()
   }
