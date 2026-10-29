@@ -776,6 +776,7 @@ export function AppShell() {
           ref={sidebarRef}
           className="flex shrink-0 flex-col overflow-hidden border-r border-[var(--border-color)] bg-[var(--bg-sidebar)]"
           style={{ width: sidebarWidth }}
+          onClick={() => setExpandedTask(null)}
         >
           <div className="h-8 shrink-0" />
           <div className="flex-1 overflow-hidden">

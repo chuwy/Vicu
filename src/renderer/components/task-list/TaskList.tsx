@@ -209,13 +209,12 @@ export function TaskList({
   const handleScrollAreaClick = useCallback(
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement
-      // Only collapse when clicking empty space: the scroll container itself (beside the column) or
-      // the reading column inside it (below the tasks).
-      if (target === e.currentTarget || target.parentElement === e.currentTarget) {
-        collapseAll()
-        setFocusedTask(null)
-        clearSelection()
-      }
+      // A click anywhere in the content background closes the card, including the gaps and empty
+      // areas inside Planner's grid. Task rows handle themselves; overlays are not background.
+      if (target.closest('[data-task-id], [popover], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return
+      collapseAll()
+      setFocusedTask(null)
+      clearSelection()
     },
     [collapseAll, setFocusedTask, clearSelection]
   )
