@@ -4,7 +4,8 @@
 //      message, focus on Cancel, the page behind inert, Tab staying inside, Escape closing it with
 //      focus back on the row, and a press on the backdrop closing it. Nothing is deleted.
 //   B. "New list" opens the custom-list dialog named by its title, with focus in the name field;
-//      Escape closes it and focus returns to the button that opened it.
+//      the icons are a radio group of drawn, named icons that the arrows move through; Escape
+//      closes it and focus returns to the button that opened it.
 //
 // Written against behaviour: the dialog is found by role and by `:modal`.
 export const meta = {
@@ -108,6 +109,34 @@ export default async function run(h) {
   await h.assert('focus starts in the name field', async () => {
     const f = await page.evaluate(() => ({ tag: document.activeElement?.tagName, ph: document.activeElement?.getAttribute('placeholder') }))
     return f.tag === 'INPUT' && f.ph === 'My List'
+  })
+  const iconState = () =>
+    page.evaluate(() => {
+      const group = document.querySelector('dialog[open] [role="radiogroup"]')
+      const radios = [...(group?.querySelectorAll('[role="radio"]') ?? [])]
+      return {
+        name: document.getElementById(group?.getAttribute('aria-labelledby') ?? '')?.textContent ?? null,
+        count: radios.length,
+        drawn: radios.filter((r) => r.querySelector('svg')).length,
+        checked: radios.filter((r) => r.getAttribute('aria-checked') === 'true').map((r) => r.getAttribute('aria-label')),
+        tabStops: radios.filter((r) => r.tabIndex === 0).length,
+        focused: document.activeElement?.getAttribute('role') === 'radio' ? document.activeElement.getAttribute('aria-label') : null,
+      }
+    })
+  let icons = await iconState()
+  await h.assert('the icons are a radio group named Icon, each drawn and named, Filter chosen, one tab stop', {
+    ok: icons.name === 'Icon' && icons.count === 17 && icons.drawn === 17 && icons.checked.join() === 'Filter' && icons.tabStops === 1,
+    detail: JSON.stringify(icons),
+  })
+  await page.locator('dialog[open] [role="radio"][aria-checked="true"]').focus()
+  await h.key('ArrowRight')
+  await h.key('ArrowRight')
+  await h.key('ArrowRight')
+  await h.wait(150)
+  icons = await iconState()
+  await h.assert('the arrows move through the icons and choose them', {
+    ok: icons.checked.join() === 'Heart' && icons.focused === 'Heart' && icons.tabStops === 1,
+    detail: JSON.stringify(icons),
   })
   await h.capture('custom-list')
   await h.assert('axe finds no serious violation in the dialog', async () => {

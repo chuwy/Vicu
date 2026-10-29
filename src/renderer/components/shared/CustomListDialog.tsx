@@ -2,9 +2,11 @@ import { useEffect, useId, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Dialog } from '@/components/overlay/Dialog'
+import { ListIconPicker } from '@/components/shared/ListIconPicker'
 import { useProjects } from '@/hooks/use-projects'
 import { useLabels } from '@/hooks/use-labels'
 import { useSharedProjectIds } from '@/hooks/use-project-access'
+import { DEFAULT_CUSTOM_LIST_ICON } from '@/lib/custom-list-icons'
 import {
   ASSIGNED_VALUES,
   COMMENTS_VALUES,
@@ -75,14 +77,6 @@ const PRIORITY_OPTIONS = [
   { value: 4, label: 'Urgent' },
 ]
 
-const ICON_OPTIONS = [
-  ['filter_list', 'Filter'], ['folder', 'Folder'], ['star', 'Star'], ['favorite', 'Heart'],
-  ['home', 'Home'], ['work', 'Work'], ['school', 'School'], ['shopping_cart', 'Cart'],
-  ['fitness', 'Fitness'], ['code', 'Code'], ['pets', 'Pets'], ['auto_awesome', 'Sparkle'],
-  ['lightbulb', 'Idea'], ['bookmark', 'Bookmark'], ['flag', 'Flag'], ['build', 'Build'],
-  ['palette', 'Palette'],
-] as const
-
 const DEFAULT_FILTER: CustomListFilter = {
   project_ids: [],
   add_to_project_id: 0,
@@ -94,7 +88,7 @@ const DEFAULT_FILTER: CustomListFilter = {
 export function CustomListDialog({ open, list, onSave, onClose }: CustomListDialogProps) {
   const titleId = useId()
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState('filter_list')
+  const [icon, setIcon] = useState(DEFAULT_CUSTOM_LIST_ICON)
   const [filter, setFilter] = useState<CustomListFilter>(DEFAULT_FILTER)
   const { data: projectData } = useProjects()
   const { data: labels } = useLabels()
@@ -103,11 +97,11 @@ export function CustomListDialog({ open, list, onSave, onClose }: CustomListDial
   useEffect(() => {
     if (list) {
       setName(list.name)
-      setIcon(list.icon || 'filter_list')
+      setIcon(list.icon || DEFAULT_CUSTOM_LIST_ICON)
       setFilter({ ...DEFAULT_FILTER, ...list.filter })
     } else {
       setName('')
-      setIcon('filter_list')
+      setIcon(DEFAULT_CUSTOM_LIST_ICON)
       setFilter(DEFAULT_FILTER)
     }
   }, [list, open])
@@ -197,16 +191,10 @@ export function CustomListDialog({ open, list, onSave, onClose }: CustomListDial
           />
         </div>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Icon</span>
-          <select
-            value={icon}
-            onChange={(event) => setIcon(event.target.value)}
-            className="w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
-          >
-            {ICON_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </label>
+        <div>
+          <span id={`${titleId}-icon`} className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">Icon</span>
+          <ListIconPicker value={icon} onChange={setIcon} labelledBy={`${titleId}-icon`} />
+        </div>
 
         {/* Sort + Order */}
         <div className="flex gap-3">
