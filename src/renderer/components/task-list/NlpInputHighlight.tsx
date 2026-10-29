@@ -2,7 +2,7 @@ import type { ParsedToken } from '@/lib/task-parser'
 import { useIsDark } from '@/hooks/use-is-dark'
 import { tokenHighlightBackground } from '@/lib/token-chip-colors'
 
-// Token highlight colours: green=date, red=priority, orange=label, blue=project, purple=recurrence,
+// Token highlight colours: green=date, yellow=duration, red=priority, orange=label, blue=project, purple=recurrence,
 // as design token roles (lib/token-chip-colors.ts).
 
 function escapeHtml(str: string): string {

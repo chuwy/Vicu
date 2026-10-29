@@ -74,6 +74,7 @@ function PlannerDayColumn({ day, projectsById, isLoading }: PlannerDayColumnProp
                   key={task.id}
                   task={task}
                   projectMeta={{ title: project?.title ?? 'Unknown Project', color: project?.hex_color }}
+                  trailing="duration"
                 />
               )
             })}
