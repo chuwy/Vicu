@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/shared/Button'
+import { BrowserSignIn } from '@/components/auth/BrowserSignIn'
 import { api, type OIDCProvider, type ServerAuthInfo } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import type { Project } from '@/lib/vikunja-types'
+import type { OidcSignInMode } from '../../shared/oidc-browser'
 
 function TokenPermissionsInfo() {
   const [open, setOpen] = useState(false)
@@ -121,6 +123,9 @@ export function SetupView({ onComplete }: SetupViewProps) {
   const [oidcLogging, setOidcLogging] = useState(false)
   const [oidcError, setOidcError] = useState('')
   const [selectedOidcProvider, setSelectedOidcProvider] = useState<OIDCProvider | null>(null)
+  // Sign in in Vicu's window, or in the browser ('oidc-login' step) where passkeys work.
+  const [oidcMode, setOidcMode] = useState<OidcSignInMode>('window')
+  const [passkeyPrompted, setPasskeyPrompted] = useState(false)
   const [authMethod, setAuthMethod] = useState<'api_token' | 'oidc' | 'password'>('api_token')
 
   // Password login state
@@ -176,10 +181,19 @@ export function SetupView({ onComplete }: SetupViewProps) {
     }
   }
 
-  const handleOidcLogin = async (provider: OIDCProvider, totpPasscode?: string) => {
+  const showBrowserSignIn = (provider: OIDCProvider, prompted: boolean) => {
+    setSelectedOidcProvider(provider)
+    setOidcMode('browser')
+    setPasskeyPrompted(prompted)
+    setOidcError('')
+    setStep('oidc-login')
+  }
+
+  const handleOidcLogin = async (provider: OIDCProvider, totpPasscode?: string, mode: OidcSignInMode = oidcMode) => {
     setOidcLogging(true)
     setOidcError('')
     setSelectedOidcProvider(provider)
+    setOidcMode(mode)
 
     // Tell the main process the URL and auth method. Main merges these into the
     // existing config, so hotkeys, theme and other preferences survive a re-login.
@@ -190,7 +204,8 @@ export function SetupView({ onComplete }: SetupViewProps) {
     })
 
     try {
-      const result = await api.oidcLogin(
+      const signIn = mode === 'browser' ? api.oidcBrowserLogin : api.oidcLogin
+      const result = await signIn(
         url.replace(/\/+$/, ''),
         provider.key,
         totpPasscode
@@ -211,7 +226,9 @@ export function SetupView({ onComplete }: SetupViewProps) {
         setStep('oidc-totp')
         setTotpCode('')
         if (totpPasscode) setOidcError(result.error)
-      } else {
+      } else if (result.passkeyUnavailable) {
+        showBrowserSignIn(provider, true)
+      } else if (!result.cancelled) {
         setOidcError(result.error)
       }
     } catch {
@@ -381,13 +398,24 @@ export function SetupView({ onComplete }: SetupViewProps) {
                 <Button
                   key={provider.key}
                   variant="primary"
-                  onClick={() => handleOidcLogin(provider)}
+                  onClick={() => handleOidcLogin(provider, undefined, 'window')}
                   disabled={oidcLogging}
                   className="w-full"
                 >
-                  {oidcLogging ? 'Waiting for browser...' : `Sign in with ${provider.name}`}
+                  {oidcLogging ? 'Waiting for sign-in...' : `Sign in with ${provider.name}`}
                 </Button>
               ))}
+
+              {oidcProviders.length > 0 && (
+                <Button
+                  variant="quiet"
+                  onClick={() => showBrowserSignIn(oidcProviders.find((p) => p.key === selectedOidcProvider?.key) ?? oidcProviders[0], false)}
+                  disabled={oidcLogging}
+                  className="w-full"
+                >
+                  Uses a passkey? Sign in through your browser
+                </Button>
+              )}
 
               {serverAuth?.local_enabled && (
                 <>
@@ -432,6 +460,55 @@ export function SetupView({ onComplete }: SetupViewProps) {
             </>
           )}
 
+          {/* Step 2a: OIDC sign-in in the browser */}
+          {step === 'oidc-login' && selectedOidcProvider && (
+            <>
+              {oidcProviders.length > 1 && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-secondary)]">
+                    Provider
+                  </label>
+                  <select
+                    value={selectedOidcProvider.key}
+                    onChange={(e) => {
+                      const provider = oidcProviders.find((p) => p.key === e.target.value)
+                      if (provider) setSelectedOidcProvider(provider)
+                    }}
+                    disabled={oidcLogging}
+                    className="w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                  >
+                    {oidcProviders.map((p) => (
+                      <option key={p.key} value={p.key}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <BrowserSignIn
+                providerName={selectedOidcProvider.name}
+                passkeyPrompted={passkeyPrompted}
+                waiting={oidcLogging}
+                error={oidcError}
+                onStart={() => handleOidcLogin(selectedOidcProvider, undefined, 'browser')}
+                onCancel={() => api.cancelOidcBrowserLogin()}
+              />
+
+              <Button
+                variant="quiet"
+                onClick={() => {
+                  if (oidcLogging) void api.cancelOidcBrowserLogin()
+                  setOidcError('')
+                  setPasskeyPrompted(false)
+                  setOidcMode('window')
+                  setStep('auth-method')
+                }}
+                className="w-full"
+              >
+                Back
+              </Button>
+            </>
+          )}
+
           {/* Step 2b: OIDC TOTP */}
           {step === 'oidc-totp' && selectedOidcProvider && (
             <>
@@ -449,7 +526,7 @@ export function SetupView({ onComplete }: SetupViewProps) {
                   autoFocus
                   className="w-full rounded-control border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2 text-center text-lg tracking-widest text-[var(--text-primary)] placeholder:text-text-secondary/50"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && totpCode.length === 6) {
+                    if (e.key === 'Enter' && totpCode.length === 6 && !oidcLogging) {
                       handleOidcLogin(selectedOidcProvider, totpCode)
                     }
                   }}
@@ -465,8 +542,14 @@ export function SetupView({ onComplete }: SetupViewProps) {
                 disabled={totpCode.length !== 6 || oidcLogging}
                 className="w-full"
               >
-                {oidcLogging ? 'Waiting for browser...' : 'Continue with SSO'}
+                {oidcLogging ? 'Waiting for sign-in...' : 'Continue with SSO'}
               </Button>
+
+              {oidcLogging && oidcMode === 'browser' && (
+                <Button variant="secondary" onClick={() => api.cancelOidcBrowserLogin()} className="w-full">
+                  Cancel
+                </Button>
+              )}
 
               {oidcError && (
                 <p className="text-xs text-danger">{oidcError}</p>
@@ -475,9 +558,10 @@ export function SetupView({ onComplete }: SetupViewProps) {
               <Button
                 variant="quiet"
                 onClick={() => {
+                  if (oidcLogging && oidcMode === 'browser') void api.cancelOidcBrowserLogin()
                   setTotpCode('')
                   setOidcError('')
-                  setStep('auth-method')
+                  setStep(oidcMode === 'browser' ? 'oidc-login' : 'auth-method')
                 }}
                 className="w-full"
               >

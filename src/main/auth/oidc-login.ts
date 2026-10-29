@@ -8,10 +8,12 @@ import {
   API_TOKEN_NO_EXPIRY,
   getAPITokenExpiry,
   getAPITokenMeta,
+  getProviderKey,
   hasAPIToken,
   setAPITokenMeta,
   storeJWT,
   storeAPIToken,
+  storeOidcSignInMode,
   storeProviderKey,
   storeRefreshToken,
   type BackupTokenMeta,
@@ -21,6 +23,8 @@ import { isTotpChallenge, parseVikunjaProblem } from './totp'
 import { vikunjaUserAgent } from '../user-agent'
 import { AUTH_WINDOW_PARTITION } from '../web-security-policy'
 import { getInstallId } from './install-id'
+import { PASSKEY_GUARD_SCRIPT, PASSKEY_SIGNAL, passkeysWorkInSignInWindow } from './passkey-guard'
+import type { OidcSignInMode } from '../../shared/oidc-browser'
 import {
   buildBackupTokenTitle,
   findLegacyOwnToken,
@@ -45,6 +49,99 @@ export class OidcTotpRequiredError extends Error {
   }
 }
 
+/** The provider asked for a passkey, which the sign-in window cannot use here (see passkey-guard.ts). */
+export class OidcPasskeyUnavailableError extends Error {
+  constructor() {
+    super('The sign-in page asked for a passkey, which cannot be used in the sign-in window. Sign in through your browser instead.')
+    this.name = 'OidcPasskeyUnavailableError'
+  }
+}
+
+/**
+ * The provider to sign in with: the one asked for, else the one used last time (signing in again
+ * passes no key), else the first. A key that was asked for and is not offered is an error.
+ */
+export async function findProvider(baseUrl: string, providerKey?: string): Promise<OIDCProvider> {
+  const providers = await discoverProviders(baseUrl)
+  if (providers.length === 0) {
+    throw new Error('No OIDC providers available on this Vikunja instance')
+  }
+  if (providerKey) {
+    const provider = providers.find((p) => p.key === providerKey)
+    if (!provider) throw new Error(`OIDC provider "${providerKey}" not found`)
+    return provider
+  }
+  const previous = getProviderKey()
+  return providers.find((p) => p.key === previous) ?? providers[0]
+}
+
+/**
+ * Exchanges an authorization code at Vikunja's callback endpoint (Vikunja holds the client secret
+ * and talks to the provider), stores the session and creates the backup API token. `redirectUri`
+ * must be the one the code was issued for.
+ */
+export async function exchangeCodeForSession(
+  baseUrl: string,
+  provider: OIDCProvider,
+  code: string,
+  redirectUri: string,
+  mode: OidcSignInMode,
+  totpPasscode?: string
+): Promise<string> {
+  const tokenUrl = `${baseUrl}/api/v2/auth/openid/${provider.key}/callback`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TOKEN_EXCHANGE_TIMEOUT)
+
+  const tokenResponse = await net.fetch(tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': vikunjaUserAgent() },
+    body: JSON.stringify({
+      code,
+      scope: provider.scope,
+      redirect_url: redirectUri,
+      ...(totpPasscode ? { totp_passcode: totpPasscode } : {}),
+    }),
+    signal: controller.signal,
+  })
+  clearTimeout(timer)
+
+  if (!tokenResponse.ok) {
+    const body = await tokenResponse.text().catch(() => '')
+    const { errorCode, message } = parseVikunjaProblem(body, tokenResponse.status)
+    if (isTotpChallenge(tokenResponse.status, errorCode)) {
+      throw new OidcTotpRequiredError(message)
+    }
+    throw new Error(
+      `Token exchange failed (${tokenResponse.status}): ${body}`
+    )
+  }
+
+  const tokenData = await tokenResponse.json() as { token: string }
+  const jwt = tokenData.token
+  if (!jwt) {
+    throw new Error('Token exchange response missing "token" field')
+  }
+
+  storeJWT(jwt)
+  const refreshToken = extractRefreshToken(tokenResponse)
+  if (refreshToken) {
+    storeRefreshToken(refreshToken)
+  }
+  storeProviderKey(provider.key)
+  storeOidcSignInMode(mode)
+
+  // Awaited, but the sign-in succeeds even if this fails.
+  try {
+    await createBackupAPIToken(baseUrl, jwt)
+  } catch (err) {
+    console.error(
+      '[OIDC] CRITICAL: failed to create backup API token — user will be locked out on next refresh failure:',
+      err instanceof Error ? err.message : err
+    )
+  }
+  return jwt
+}
+
 /**
  * Run the full interactive OIDC login flow:
  * discover providers, open in-app BrowserWindow, intercept redirect to extract
@@ -54,8 +151,9 @@ export class OidcTotpRequiredError extends Error {
  * configuration changes are needed.
  *
  * @param vikunjaUrl  Base URL of the Vikunja instance (no trailing slash)
- * @param providerKey Optional provider key; uses first available if omitted
+ * @param providerKey Optional provider key; uses the last one signed in with, else the first, if omitted
  * @returns The JWT string from Vikunja
+ * @throws OidcPasskeyUnavailableError when the provider asks for a passkey the window cannot serve
  */
 export async function loginWithOIDC(
   vikunjaUrl: string,
@@ -65,20 +163,7 @@ export async function loginWithOIDC(
   const baseUrl = vikunjaUrl.replace(/\/+$/, '')
 
   // 1. Discover providers
-  const providers = await discoverProviders(baseUrl)
-  if (providers.length === 0) {
-    throw new Error('No OIDC providers available on this Vikunja instance')
-  }
-
-  let provider: OIDCProvider | undefined
-  if (providerKey) {
-    provider = providers.find((p) => p.key === providerKey)
-    if (!provider) {
-      throw new Error(`OIDC provider "${providerKey}" not found`)
-    }
-  } else {
-    provider = providers[0]
-  }
+  const provider = await findProvider(baseUrl, providerKey)
 
   // 2. Use Vikunja's own frontend callback URL (already allowed in the IdP)
   const redirectUri = `${baseUrl}/auth/openid/${provider.key}`
@@ -138,6 +223,17 @@ export async function loginWithOIDC(
       win!.webContents.on('will-redirect', checkForCode)
       win!.webContents.on('will-navigate', checkForCode)
 
+      // Where the window cannot complete a passkey, a provider asking for one gets an answer at
+      // once and the sign-in moves to the browser (passkey-guard.ts). Injected on every page.
+      if (!passkeysWorkInSignInWindow(process.platform)) {
+        win!.webContents.on('dom-ready', () => {
+          win?.webContents.executeJavaScript(PASSKEY_GUARD_SCRIPT).catch(() => {})
+        })
+        win!.webContents.on('console-message', (event) => {
+          if (event.message === PASSKEY_SIGNAL) reject(new OidcPasskeyUnavailableError())
+        })
+      }
+
       // Also handle window closed by user
       win!.on('closed', () => {
         reject(new Error('Login window was closed before authentication completed'))
@@ -157,63 +253,16 @@ export async function loginWithOIDC(
     // 9. Race: code interception vs timeout
     const code = await Promise.race([codePromise, timeoutPromise])
 
-    // 10. Exchange code for JWT
-    const tokenUrl = `${baseUrl}/api/v2/auth/openid/${provider.key}/callback`
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), TOKEN_EXCHANGE_TIMEOUT)
-
-    const tokenResponse = await net.fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': vikunjaUserAgent() },
-      body: JSON.stringify({
-        code,
-        scope: provider.scope,
-        redirect_url: redirectUri,
-        ...(totpPasscode ? { totp_passcode: totpPasscode } : {}),
-      }),
-      signal: controller.signal,
-    })
-    clearTimeout(timer)
-
-    if (!tokenResponse.ok) {
-      const body = await tokenResponse.text().catch(() => '')
-      const { errorCode, message } = parseVikunjaProblem(body, tokenResponse.status)
-      if (isTotpChallenge(tokenResponse.status, errorCode)) {
-        preserveSessionForTotpRetry = true
-        throw new OidcTotpRequiredError(message)
-      }
-      throw new Error(
-        `Token exchange failed (${tokenResponse.status}): ${body}`
-      )
-    }
-
-    const tokenData = await tokenResponse.json() as { token: string }
-    const jwt = tokenData.token
-    if (!jwt) {
-      throw new Error('Token exchange response missing "token" field')
-    }
-
-    // 11. Store JWT, refresh token, and provider key
-    storeJWT(jwt)
-    const refreshToken = extractRefreshToken(tokenResponse)
-    if (refreshToken) {
-      storeRefreshToken(refreshToken)
-    }
-    storeProviderKey(provider.key)
-    succeeded = true
-
-    // 12. Create backup API token (awaited, but login succeeds even if this fails)
+    // 10. Exchange code for JWT, store the session and create the backup API token
     try {
-      await createBackupAPIToken(baseUrl, jwt)
+      const jwt = await exchangeCodeForSession(baseUrl, provider, code, redirectUri, 'window', totpPasscode)
+      succeeded = true
+      return jwt
     } catch (err) {
-      console.error(
-        '[OIDC] CRITICAL: failed to create backup API token — user will be locked out on next refresh failure:',
-        err instanceof Error ? err.message : err
-      )
+      // Keep the provider's session so the retry with the code does not ask again.
+      if (err instanceof OidcTotpRequiredError) preserveSessionForTotpRetry = true
+      throw err
     }
-
-    // 13. Return JWT
-    return jwt
   } finally {
     if (win && !win.isDestroyed()) {
       if (!succeeded && !preserveSessionForTotpRetry) {
