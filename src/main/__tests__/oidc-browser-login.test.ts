@@ -107,6 +107,9 @@ describe('loginWithOIDCInBrowser', () => {
     expect(authUrl.searchParams.get('scope')).toBe('openid profile email offline_access')
     // Vikunja exchanges the code with the redirect it was issued for.
     expect(exchanges).toEqual([{ body: { code: 'the-code', scope: PROVIDER.scope, redirect_url: redirectUri } }])
+    // The sign-in request names Vicu, so Vikunja's Sessions list shows which app signed in.
+    const exchange = state.fetch.mock.calls.find(([url]) => String(url).endsWith('/auth/openid/pocketid/callback'))!
+    expect((exchange[1] as RequestInit).headers).toMatchObject({ 'User-Agent': expect.stringMatching(/^Vicu/) })
     expect(tokens.getOidcSignInMode()).toBe('browser')
     expect(tokens.getProviderKey()).toBe('pocketid')
     expect(tokens.getJWT()).toBe(jwt)
