@@ -60,7 +60,7 @@ import type {
 
 type OidcLoginResult =
   | { success: true }
-  | { success: false; error: string; totpRequired?: boolean }
+  | { success: false; error: string; totpRequired?: boolean; passkeyUnavailable?: boolean; cancelled?: boolean }
 
 export interface UpdateStatus {
   available: boolean
@@ -167,6 +167,9 @@ export interface ElectronAPI {
   discoverOidc(url: string): Promise<OIDCProvider[]>
   discoverAuthMethods(url: string): Promise<ServerAuthInfo>
   oidcLogin(url: string, providerKey: string, totpPasscode?: string): Promise<OidcLoginResult>
+  oidcBrowserLogin(url: string, providerKey: string, totpPasscode?: string): Promise<OidcLoginResult>
+  cancelOidcBrowserLogin(): Promise<void>
+  getOidcSignIn(): Promise<{ mode: 'window' | 'browser'; providerKey: string | null }>
   loginPassword(url: string, username: string, password: string, totpPasscode?: string): Promise<PasswordLoginResult>
   getUser(): Promise<VikunjaUser | null>
   checkAuth(): Promise<AuthCheckResult>

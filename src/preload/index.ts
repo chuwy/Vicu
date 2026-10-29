@@ -165,6 +165,12 @@ const api = {
     ipcRenderer.invoke('auth:discover-methods', url),
   oidcLogin: (url: string, providerKey: string, totpPasscode?: string) =>
     ipcRenderer.invoke('auth:login-oidc', url, providerKey, totpPasscode),
+  oidcBrowserLogin: (url: string, providerKey: string, totpPasscode?: string) =>
+    ipcRenderer.invoke('auth:login-oidc-browser', url, providerKey, totpPasscode),
+  cancelOidcBrowserLogin: () =>
+    ipcRenderer.invoke('auth:cancel-oidc-browser'),
+  getOidcSignIn: () =>
+    ipcRenderer.invoke('auth:oidc-sign-in'),
   loginPassword: (url: string, username: string, password: string, totpPasscode?: string) =>
     ipcRenderer.invoke('auth:login-password', url, username, password, totpPasscode),
   getUser: () =>

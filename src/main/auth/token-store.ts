@@ -7,6 +7,7 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { readFileWithBackup, removeFileAndBackup, writeFileAtomic } from '../atomic-file'
 import { classifySecretStorage, type SecretStorageLevel } from './secret-storage'
+import type { OidcSignInMode } from '../../shared/oidc-browser'
 
 export type { SecretStorageLevel } from './secret-storage'
 
@@ -20,6 +21,8 @@ interface AuthStore {
   /** Server the backup token was created on, so its id is never used against another server. */
   api_token_url?: string
   provider_key?: string
+  /** Whether the last OIDC sign-in ran in the sign-in window or in the browser. */
+  oidc_sign_in?: OidcSignInMode
   refresh_token?: string
 }
 
@@ -263,6 +266,16 @@ export function storeProviderKey(key: string): void {
 export function getProviderKey(): string | null {
   const store = readStore()
   return store.provider_key ?? null
+}
+
+export function storeOidcSignInMode(mode: OidcSignInMode): void {
+  const store = readStore()
+  store.oidc_sign_in = mode
+  writeStore(store)
+}
+
+export function getOidcSignInMode(): OidcSignInMode {
+  return readStore().oidc_sign_in === 'browser' ? 'browser' : 'window'
 }
 
 export function storeRefreshToken(token: string): void {
