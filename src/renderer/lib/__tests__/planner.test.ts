@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addLocalDays, dateOnlyDue, startOfLocalDayIso, toLocalDate } from '@/lib/due-dates'
-import { groupPlannerTasks, plannerDueDateOnDrop, plannerTaskFilter, plannerTaskSortKey, plannerUnplannedTasks, PLANNER_DAY_COUNT } from '@/lib/planner'
+import { groupPlannerTasks, plannerCalendarDate, plannerDueDateOnDrop, plannerTaskFilter, plannerTaskSortKey, plannerUnplannedTasks, plannerVisibleDayCount, PLANNER_DAY_COUNT } from '@/lib/planner'
 import type { Task } from '@/lib/vikunja-types'
 
 function task(id: number, dueDate: string, projectId = 1): Task {
@@ -8,12 +8,36 @@ function task(id: number, dueDate: string, projectId = 1): Task {
 }
 
 describe('Planner', () => {
-  it('asks the server for the dated window plus every open task, because zero dates cannot be filtered server-side', () => {
+  it('bounds completed tasks by due/start window and fetches open tasks without a zero-date filter', () => {
     const now = new Date(2026, 4, 31, 12)
 
     expect(plannerTaskFilter(now)).toBe(
-      `(due_date != '0001-01-01T00:00:00Z' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}') || done = false`,
+      `done = false || (due_date >= '${startOfLocalDayIso(0, now)}' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}') || (start_date >= '${startOfLocalDayIso(0, now)}' && start_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}')`,
     )
+  })
+
+  it('keeps a picked day only while it still has a visible heading', () => {
+    const now = new Date(2026, 4, 31, 12)
+    expect(plannerCalendarDate(null, now)).toBe('2026-05-31')
+    expect(plannerCalendarDate('2026-06-01', now)).toBe('2026-06-01')
+    expect(plannerCalendarDate('2026-06-02', now)).toBe('2026-06-02')
+    expect(plannerCalendarDate('2026-06-03', now)).toBe('2026-05-31')
+    expect(plannerCalendarDate('2026-05-30', now)).toBe('2026-05-31')
+    expect(plannerCalendarDate('2026-05-31', new Date(2026, 5, 1))).toBe('2026-06-01')
+  })
+
+  it.each([
+    [600, 1], [870, 1], [871, 2], [1090, 2], [1250, 2], [1420, 2], [1421, 3], [1800, 3],
+  ])('uses the expected dated-column count at %ipx', (width, count) => {
+    expect(plannerVisibleDayCount(width)).toBe(count)
+  })
+
+  it('returns to today when resizing hides the picked heading', () => {
+    const now = new Date(2026, 4, 31, 12)
+    expect(plannerCalendarDate('2026-06-01', now, 1)).toBe('2026-05-31')
+    expect(plannerCalendarDate('2026-06-01', now, 2)).toBe('2026-06-01')
+    expect(plannerCalendarDate('2026-06-02', now, 2)).toBe('2026-05-31')
+    expect(plannerCalendarDate('2026-06-02', now, 3)).toBe('2026-06-02')
   })
 
   it('selects only open active-project tasks with neither a due nor a start date as unplanned', () => {
@@ -110,7 +134,12 @@ describe('Planner', () => {
   it('keeps date-only tasks date-only and ignores drops with no date change', () => {
     expect(plannerDueDateOnDrop(dateOnlyDue('2026-06-01'), '2026-06-03')).toBe(dateOnlyDue('2026-06-03'))
     expect(plannerDueDateOnDrop(dateOnlyDue('2026-06-01'), '2026-06-01')).toBeNull()
-    expect(plannerDueDateOnDrop('0001-01-01T00:00:00Z', '2026-06-01')).toBeNull()
+  })
+
+  it('schedules an Unplanned task as date-only when dropped on a day', () => {
+    for (const dueDate of ['0001-01-01T00:00:00Z', '', 'invalid']) {
+      expect(plannerDueDateOnDrop(dueDate, '2026-06-01')).toBe(dateOnlyDue('2026-06-01'))
+    }
   })
 
   it('leaves archived-project tasks out and keeps empty day columns', () => {

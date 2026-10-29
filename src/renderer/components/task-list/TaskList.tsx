@@ -55,6 +55,8 @@ interface TaskListProps {
   taskOrder?: TaskOrderKey
   viewId?: number
   className?: string
+  /** Scroll viewport overrides (Planner's edge-to-edge calendar needs no reserved gutter). */
+  scrollClassName?: string
   /** Use the whole content width for the header and body instead of the reading column. */
   wide?: boolean
   children?: React.ReactNode
@@ -91,6 +93,7 @@ export function TaskList({
   taskOrder = DEFAULT_TASK_ORDER,
   viewId,
   className,
+  scrollClassName,
   wide = false,
   children,
   empty,
@@ -580,7 +583,7 @@ export function TaskList({
         }
       />
 
-      <ReadingScroll ref={listRef} onClick={handleScrollAreaClick} wide={wide}>
+      <ReadingScroll ref={listRef} onClick={handleScrollAreaClick} wide={wide} className={scrollClassName}>
         {headerContent}
 
         {isAdding && addPosition === 'top' && taskInputElement}

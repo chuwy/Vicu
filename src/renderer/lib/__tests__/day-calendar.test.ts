@@ -19,11 +19,17 @@ describe('dayTimeSlots', () => {
     const slots = dayTimeSlots(new Date(2026, 5, 10, 12))
 
     slots.forEach((slot, index) => {
-      expect(slot.start.getHours(), `slot ${index}`).toBe(Math.floor(index / 2))
-      expect(slot.start.getMinutes(), `slot ${index}`).toBe((index % 2) * 30)
+      expect(slot.labelTime.getHours(), `slot ${index}`).toBe(Math.floor(index / 2))
+      expect(slot.labelTime.getMinutes(), `slot ${index}`).toBe((index % 2) * 30)
       expect(slot.isHour, `slot ${index}`).toBe(slot.minutesFromMidnight % 60 === 0)
     })
     expect(slots.filter((slot) => slot.isHour)).toHaveLength(24)
+  })
+
+  it.each([new Date(2026, 8, 27), new Date(2026, 3, 5)])('keeps all 24 hour labels on DST transition days (%s)', (day) => {
+    const hours = dayTimeSlots(day).filter((slot) => slot.isHour)
+    expect(hours.map((slot) => slot.labelTime.getHours())).toEqual(Array.from({ length: 24 }, (_, hour) => hour))
+    expect(hours[2].isoLocal).toBe(`${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}T02:00`)
   })
 
   it('labels slots with a local ISO minute-precision timestamp', () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { TaskList } from '@/components/task-list/TaskList'
 import { TaskRow } from '@/components/task-list/TaskRow'
@@ -13,9 +13,10 @@ import { useDayKey } from '@/stores/day-store'
 import { usePrintable } from '@/stores/print-store'
 import { cn } from '@/lib/cn'
 import { formatDateDisplay } from '@/lib/date-display'
-import { startOfLocalDay, toLocalDate, type LocalDate } from '@/lib/due-dates'
+import { startOfLocalDay, type LocalDate } from '@/lib/due-dates'
 import { openCount } from '@/lib/list-sections'
-import { groupPlannerTasks, plannerTaskFilter, plannerUnplannedTasks, type PlannerDay } from '@/lib/planner'
+import { groupPlannerTasks, plannerCalendarDate, plannerTaskFilter, plannerUnplannedTasks, plannerVisibleDayCount, type PlannerDay } from '@/lib/planner'
+import { plannerCalendarEvents } from '@/lib/planner-calendar'
 import type { Project, TaskQueryParams } from '@/lib/vikunja-types'
 
 interface PlannerColumnDay extends PlannerDay {
@@ -131,6 +132,18 @@ function PlannerDayColumn({
 export function PlannerView() {
   const [showUnplanned, setShowUnplanned] = useState(false)
   const [selectedDay, setSelectedDay] = useState<LocalDate | null>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
+  const [visibleDayCount, setVisibleDayCount] = useState(1)
+  useLayoutEffect(() => {
+    const viewport = boardRef.current?.closest('[data-scroll-area]')
+    if (!(viewport instanceof HTMLElement)) return
+    // Include any scrollbar: a long day must not flip the column count at a breakpoint.
+    const update = () => setVisibleDayCount(plannerVisibleDayCount(viewport.offsetWidth))
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [])
   const dayKey = useDayKey()
   const now = useMemo(() => new Date(), [dayKey])
   const params = useMemo<TaskQueryParams>(() => ({
@@ -163,8 +176,12 @@ export function PlannerView() {
     [tasks, activeProjectIds, unplannedTasks, showUnplanned, now, dateFormat],
   )
   // The day the right-side calendar shows: the picked day, or today (docs/calendar.md).
-  const calendarDate = selectedDay ?? toLocalDate(now)
+  const calendarDate = plannerCalendarDate(selectedDay, now, visibleDayCount)
   const calendarDay = useMemo(() => startOfLocalDay(calendarDate), [calendarDate])
+  const calendarEvents = useMemo(
+    () => plannerCalendarEvents(tasks, activeProjectIds, calendarDay),
+    [tasks, activeProjectIds, calendarDay],
+  )
 
   usePrintable(useMemo(() => ({
     viewTitle: 'Planner',
@@ -176,11 +193,15 @@ export function PlannerView() {
 
   return (
     <DueDateContextProvider value="row.inDayGroup">
-      <TaskList title="Planner" tasks={[]} showNewTask={false} empty={false} wide>
+      <TaskList title="Planner" tasks={[]} showNewTask={false} empty={false} wide scrollClassName="[scrollbar-gutter:auto]">
         {isLoading && <span role="status" className="sr-only">Loading Planner</span>}
-        <div aria-busy={isLoading} className="flex w-full min-w-0 items-start gap-4 px-6 pb-6 pt-2">
-          <div className="grid min-w-0 flex-1 grid-cols-[repeat(4,minmax(200px,1fr))] items-start gap-4">
-            {days.map((day) => (
+        {/* Only the day cards have padding. The rail fills the scroll viewport edge to edge. */}
+        <div ref={boardRef} aria-busy={isLoading} className="flex w-full items-start">
+          <div
+            className="grid min-w-0 flex-1 items-start gap-4 px-6 pb-6 pt-2"
+            style={{ gridTemplateColumns: `repeat(${visibleDayCount + 1}, minmax(0, 1fr))` }}
+          >
+            {days.slice(0, visibleDayCount + 1).map((day) => (
               <PlannerDayColumn
                 key={day.date ?? 'overdue'}
                 day={day}
@@ -193,8 +214,7 @@ export function PlannerView() {
               />
             ))}
           </div>
-          {/* The day calendar is a plain layout scaffold for now (docs/calendar.md). */}
-          <DayViewCalendar day={calendarDay} className="w-80 shrink-0" />
+          <DayViewCalendar day={calendarDay} events={calendarEvents} isLoading={isLoading} className="w-80 max-w-[40%] shrink-0" />
         </div>
       </TaskList>
     </DueDateContextProvider>

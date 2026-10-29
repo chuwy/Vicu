@@ -54,4 +54,6 @@ export default async function run(h) {
     detail: JSON.stringify({ start: [before.start_date, after.start_date], end: [before.end_date, after.end_date], due: [before.due_date, after.due_date], description: after.description }),
   })
   await h.assert('B: the open card shows the new duration property', (await durationButton.getAttribute('aria-label')) === 'Duration: 60m')
+  await h.assert('B: the calendar updates from the same optimistic task data',
+    await page.locator(`[data-calendar-task="${flightsId}"]`).evaluate((element) => element.style.height === '72px'))
 }

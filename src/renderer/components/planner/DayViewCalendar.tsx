@@ -1,33 +1,31 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { Check } from 'lucide-react'
 import { useDateFormat } from '@/hooks/use-date-format'
 import { cn } from '@/lib/cn'
 import {
   DAY_SLOT_HEIGHT_PX,
+  DAY_SLOT_MINUTES,
   dayOpenSlotIndex,
   dayTimeSlots,
   type DayTimeSlot,
 } from '@/lib/day-calendar'
 import { formatDateDisplay } from '@/lib/date-display'
 import { startOfLocalDay, toLocalDate } from '@/lib/due-dates'
+import type { PlannerCalendarEvents } from '@/lib/planner-calendar'
+import type { Task } from '@/lib/vikunja-types'
 
 interface DayViewCalendarProps {
-  /** The local day the calendar shows; Planner passes the day its headings select, today by default. */
+  /** The selected local day; today by default. */
   day: Date
+  events: PlannerCalendarEvents
+  isLoading: boolean
   className?: string
 }
 
-interface DayHourRowProps {
-  slot: DayTimeSlot
-  /** The hour label, formatted with the user's clock setting ("9:00 AM", "09:00"). */
-  label: string
-  isLast: boolean
-}
-
-function DayHourRow({ slot, label, isLast }: DayHourRowProps) {
+function DayHourRow({ slot, label, isLast }: { slot: DayTimeSlot; label: string; isLast: boolean }) {
   return (
     <li className="grid grid-cols-[4.5rem_1fr]">
       <div className="relative">
-        {/* The label is centred on the hour line, in the gutter left of the grid. */}
         <time
           dateTime={slot.isoLocal}
           className="absolute right-2 top-0 -translate-y-1/2 whitespace-nowrap text-meta text-text-secondary"
@@ -36,7 +34,6 @@ function DayHourRow({ slot, label, isLast }: DayHourRowProps) {
         </time>
       </div>
       <div className={cn(isLast && 'border-b border-border')}>
-        {/* The hour line is the more solid one; the half-hour line is lighter (docs/calendar.md). */}
         <div className="border-t border-border" style={{ height: DAY_SLOT_HEIGHT_PX }} aria-hidden="true" />
         <div className="border-t border-border/40" style={{ height: DAY_SLOT_HEIGHT_PX }} aria-hidden="true" />
       </div>
@@ -44,28 +41,34 @@ function DayHourRow({ slot, label, isLast }: DayHourRowProps) {
   )
 }
 
-/** Matches the `top-2` of the pinned rail: the rail is inset from the scroll area on both ends. */
-const RAIL_INSET_PX = 8
-/** Keeps the hour label of the open line whole: the line lands this far below the rail's top edge. */
-const OPEN_CLEARANCE_PX = 10
+function CalendarTaskTitle({ task }: { task: Task }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      {task.done && <Check className="h-3 w-3 shrink-0" aria-hidden="true" />}
+      <span className={cn('truncate', task.done && 'line-through')}>{task.title}</span>
+    </span>
+  )
+}
 
-/**
- * The Planner's right-side day calendar (docs/calendar.md). A plain day grid for one local day:
- * 48 half-hour blocks, every hour line more solid than the half-hour line and an hour label in the
- * left gutter. The rail is pinned in the view's scroll area and the grid scrolls inside it; the day
- * opens one hour before now (today) or at 8 AM (any other day). No events are drawn yet.
- */
-export function DayViewCalendar({ day, className }: DayViewCalendarProps) {
+/** Leave the hour label above the open line whole. */
+const OPEN_CLEARANCE_PX = 10
+const GRID_PADDING_PX = 12
+const PIXELS_PER_MINUTE = DAY_SLOT_HEIGHT_PX / DAY_SLOT_MINUTES
+
+/** A read-only task schedule on the fixed, 48-block local wall-clock grid (docs/calendar.md). */
+export function DayViewCalendar({ day, events, isLoading, className }: DayViewCalendarProps) {
   const dateFormat = useDateFormat()
+  const titleId = useId()
   const sectionRef = useRef<HTMLElement>(null)
-  const listRef = useRef<HTMLOListElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const openedDay = useRef<string | null>(null)
   const [railHeight, setRailHeight] = useState<number | null>(null)
-  const dayStart = startOfLocalDay(day)
+  const dayKey = toLocalDate(day)
+  const dayStart = startOfLocalDay(dayKey)
   const hours = dayTimeSlots(dayStart).filter((slot) => slot.isHour)
   const title = formatDateDisplay('header.full', dayStart, new Date(), true, dateFormat)
+  const timeLabel = (value: Date) => formatDateDisplay('logbook.time', value, dayStart, false, dateFormat)
 
-  // The rail fills the visible part of the view's scroll area (found through data-scroll-area) and
-  // stays pinned there while the Planner columns scroll past; the grid scrolls inside the rail.
   useLayoutEffect(() => {
     const scroller = sectionRef.current?.closest('[data-scroll-area]')
     if (!(scroller instanceof HTMLElement)) return
@@ -76,47 +79,93 @@ export function DayViewCalendar({ day, className }: DayViewCalendarProps) {
     return () => observer.disconnect()
   }, [])
 
-  // The day opens at its start slot, instantly (no animation to chase after a day switch).
+  // Wait until the rail actually has its measured height; before that, the full grid fits and
+  // the browser clamps scrollTop to zero. Also wait for tasks: the No time band changes the grid's
+  // viewport height. Resizes and task refreshes must not reset user scrolling.
   useLayoutEffect(() => {
-    const list = listRef.current
-    if (!list) return
+    const scroller = scrollRef.current
+    if (!scroller || isLoading || railHeight === null || railHeight <= 0 || openedDay.current === dayKey) return
     const now = new Date()
-    const slotIndex = dayOpenSlotIndex(toLocalDate(day) === toLocalDate(now), now)
-    const row = list.children.item(Math.floor(slotIndex / 2))
-    if (!row) return
-    const rowTop = row.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop
-    list.scrollTop = rowTop + (slotIndex % 2) * DAY_SLOT_HEIGHT_PX - OPEN_CLEARANCE_PX
-  }, [day])
+    const slotIndex = dayOpenSlotIndex(dayKey === toLocalDate(now), now)
+    scroller.scrollTop = GRID_PADDING_PX + slotIndex * DAY_SLOT_HEIGHT_PX - OPEN_CLEARANCE_PX
+    openedDay.current = dayKey
+  }, [dayKey, railHeight, isLoading])
 
   return (
     <section
       ref={sectionRef}
-      aria-labelledby="day-calendar-title"
-      style={{
-        top: RAIL_INSET_PX,
-        height: railHeight === null ? undefined : railHeight - 2 * RAIL_INSET_PX,
-      }}
-      className={cn(
-        'sticky flex flex-col overflow-hidden rounded-card border border-border bg-bg-card',
-        className,
-      )}
+      aria-labelledby={titleId}
+      style={{ height: railHeight ?? undefined }}
+      className={cn('sticky top-0 right-0 flex min-w-0 flex-col overflow-hidden border-l border-border bg-bg-card', className)}
     >
       <header className="flex h-12 shrink-0 items-center border-b border-border px-4">
-        <h2 id="day-calendar-title" className="min-w-0 flex-1 truncate text-section text-text">
-          <time dateTime={toLocalDate(dayStart)}>{title}</time>
+        <h2 id={titleId} className="min-w-0 flex-1 truncate text-section text-text">
+          <time dateTime={dayKey}>{title}</time>
         </h2>
       </header>
-      {/* pt-3 leaves room for the midnight label, which is centred on the top line. */}
-      <ol ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-3">
-        {hours.map((slot, index) => (
-          <DayHourRow
-            key={slot.minutesFromMidnight}
-            slot={slot}
-            label={formatDateDisplay('logbook.time', slot.start, dayStart, false, dateFormat)}
-            isLast={index === hours.length - 1}
-          />
-        ))}
-      </ol>
+      {events.anytime.length > 0 && (
+        <div className="max-h-32 shrink-0 overflow-y-auto border-b border-border px-4 py-2">
+          <h3 className="mb-1 text-meta text-text-secondary">No time</h3>
+          <ul aria-label="Tasks without a time" className="space-y-1">
+            {events.anytime.map((task) => (
+              <li
+                key={task.id}
+                data-calendar-task={task.id}
+                title={task.title}
+                aria-label={`${task.title}${task.done ? ', completed' : ''}`}
+                className="rounded-control border border-border bg-bg-hover px-2 py-1 text-meta text-text"
+              >
+                <CalendarTaskTitle task={task} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div
+        ref={scrollRef}
+        role="region"
+        aria-label="Day schedule"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          // Let this scroll region's arrows scroll it, rather than moving focus to a Planner row.
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') event.stopPropagation()
+        }}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4"
+        style={{ paddingBlock: GRID_PADDING_PX }}
+      >
+        <div className="relative">
+          <ol aria-label="Hours">
+            {hours.map((slot, index) => (
+              <DayHourRow key={slot.minutesFromMidnight} slot={slot} label={timeLabel(slot.labelTime)} isLast={index === hours.length - 1} />
+            ))}
+          </ol>
+          <ol aria-label="Scheduled tasks" className="absolute inset-y-0 left-[4.5rem] right-0">
+            {events.timed.map((event) => {
+              const range = event.end ? `${timeLabel(event.start)} – ${timeLabel(event.end)}` : timeLabel(event.start)
+              const label = `${event.task.title}, ${range}${event.task.done ? ', completed' : ''}`
+              const height = (event.endMinute - event.startMinute) * PIXELS_PER_MINUTE
+              return (
+                <li
+                  key={event.task.id}
+                  data-calendar-task={event.task.id}
+                  aria-label={label}
+                  title={label}
+                  style={{
+                    top: event.startMinute * PIXELS_PER_MINUTE,
+                    height,
+                    left: `${event.column / event.columnCount * 100}%`,
+                    width: `${100 / event.columnCount}%`,
+                  }}
+                  className="absolute overflow-hidden rounded-control border border-accent-blue bg-bg-selected px-1.5 text-meta text-text"
+                >
+                  <CalendarTaskTitle task={event.task} />
+                  {height >= 44 && <span className="block truncate text-caption text-text-secondary">{range}</span>}
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+      </div>
     </section>
   )
 }

@@ -3,6 +3,7 @@ import { NULL_DATE } from '@/lib/constants'
 import { parseTaskDuration } from '@/lib/task-duration'
 import {
   addLocalDays,
+  dateOnlyDue,
   diffLocalDays,
   localDateOf,
   postponeDays,
@@ -14,6 +15,13 @@ import {
 export const PLANNER_DAY_COUNT = 3
 const MINUTE_MS = 60_000
 
+/** Available Planner width, excluding the sidebar. Columns stretch between these breakpoints. */
+export function plannerVisibleDayCount(width: number): number {
+  if (width > 1420) return PLANNER_DAY_COUNT
+  if (width > 870) return 2
+  return 1
+}
+
 export interface PlannerDay {
   /** Null identifies the Overdue column; dated columns carry their local calendar date. */
   date: LocalDate | null
@@ -21,21 +29,32 @@ export interface PlannerDay {
 }
 
 /**
- * Every task Planner shows: the dated window (completed included) plus all open tasks.
+ * The dated window (completed included) plus all open tasks. Start dates also cover scheduled
+ * calendar tasks whose due date is absent or on another day. Never fetch all completed history.
  * The Unplanned column needs open tasks with no dates, but Vikunja's filter engine treats the Go
  * zero time as "no date" and never matches it (`due_date = '0001-01-01T00:00:00Z'` returns
  * nothing), so unplanned tasks cannot be selected server-side: fetch `done = false` and pick them
  * out with `plannerUnplannedTasks`. The dated grouping drops open tasks outside the window.
  */
 export function plannerTaskFilter(now: Date): string {
+  const start = startOfLocalDayIso(0, now)
   const end = startOfLocalDayIso(PLANNER_DAY_COUNT, now)
-  return `(due_date != '${NULL_DATE}' && due_date < '${end}') || done = false`
+  return `done = false || (due_date >= '${start}' && due_date < '${end}') || (start_date >= '${start}' && start_date < '${end}')`
+}
+
+/** A picked date must still have a visible heading after resizing or the local day rolls over. */
+export function plannerCalendarDate(selected: LocalDate | null, now: Date, visibleDayCount = PLANNER_DAY_COUNT): LocalDate {
+  const today = toLocalDate(now)
+  return selected && selected >= today && selected < addLocalDays(today, visibleDayCount)
+    ? selected
+    : today
 }
 
 /** The due date after a Planner drop, or null when there is no date change to send. */
 export function plannerDueDateOnDrop(dueDate: string, targetDate: LocalDate): string | null {
   const currentDate = localDateOf(dueDate)
-  if (!currentDate || currentDate === targetDate) return null
+  if (!currentDate) return dateOnlyDue(targetDate)
+  if (currentDate === targetDate) return null
   return postponeDays(dueDate, diffLocalDays(currentDate, targetDate))
 }
 
