@@ -142,10 +142,11 @@ interface TaskTitleEditorProps {
   onSave: (changes: Partial<Task>) => void
   onSubmit: () => void
   onCancel: () => void
+  planner?: boolean
 }
 
 const TaskTitleEditor = forwardRef<TaskTitleEditorHandle, TaskTitleEditorProps>(
-  function TaskTitleEditor({ task, onSave, onSubmit, onCancel }, ref) {
+  function TaskTitleEditor({ task, onSave, onSubmit, onCancel, planner = false }, ref) {
     const addLabel = useAddLabel()
     const createLabel = useCreateLabel()
     const parser = useTaskParser()
@@ -310,7 +311,7 @@ const TaskTitleEditor = forwardRef<TaskTitleEditorHandle, TaskTitleEditorProps>(
           inputRef={inputRef}
           placeholder="Task title"
           showBangTodayHint={isDirty && !parser.enabled && !!parser.parserConfig.bangToday}
-          inputClassName="font-medium leading-snug"
+          inputClassName={cn('leading-snug', planner ? 'text-[12px] font-normal' : 'font-medium')}
           multiline
         />
       </div>
@@ -596,6 +597,7 @@ function TaskRowInner({
   )
 
   const labels = task.labels ?? []
+  const isPlanner = trailing === 'duration'
   const durationMinutes = parseTaskDuration(task.description)
   const metaLabels = rowLabels(labels, rowView)
   const projectSource = rowProjectSource(task.project_id, rowView, projectMeta !== undefined)
@@ -631,7 +633,8 @@ function TaskRowInner({
         onPointerEnter={holdEngagement.onPointerEnter}
         onPointerLeave={holdEngagement.onPointerLeave}
         className={cn(
-          'vicu-task-fade group grid cursor-default grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-[var(--border-color)] px-4 py-2.5 transition-colors hover:bg-[var(--bg-hover)]',
+          'vicu-task-fade group grid cursor-default grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-[var(--border-color)] py-2.5 transition-colors hover:bg-[var(--bg-hover)]',
+          isPlanner ? 'px-2' : 'px-4',
           isSelected && 'bg-bg-selected ring-1 ring-inset ring-accent-blue/40',
           isFocused && !isSelected && !isExpanded && 'bg-accent-blue/8 ring-1 ring-inset ring-accent-blue/30',
           isDragging && 'opacity-30',
@@ -640,7 +643,7 @@ function TaskRowInner({
         )}
         style={{
           ...style,
-          paddingLeft: `${16 + nestedDepth * 20}px`,
+          paddingLeft: `${(isPlanner ? 8 : 16) + nestedDepth * 20}px`,
         }}
         onClick={(e) => {
           // Event handlers want current-at-click values — read them
@@ -699,7 +702,8 @@ function TaskRowInner({
         <div className="min-w-0">
           <span
             className={cn(
-              'block truncate text-task-title',
+              'block truncate',
+              isPlanner ? 'text-[13px] font-normal leading-5' : 'text-task-title',
               task.done ? 'text-text-secondary' : 'text-text'
             )}
           >
@@ -868,8 +872,10 @@ function TaskRowInner({
       role="listitem"
       className={cn(
         // Two columns, the checkbox and the body: the notes, subtasks and property bar sit under the title.
-        // The surface is bg.card; in dark it is lifted by a 1 px white-at-8% edge instead of a shadow.
-        'vicu-task-fade vicu-card mx-2 my-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 rounded-card border border-[var(--border-color)] bg-bg-card px-4 shadow-md dark:border-white/8 dark:shadow-none',
+        'vicu-task-fade vicu-card grid grid-cols-[auto_minmax(0,1fr)] gap-x-3',
+        isPlanner
+          ? 'px-2'
+          : 'mx-2 my-1 rounded-card border border-[var(--border-color)] bg-bg-card px-4 shadow-md dark:border-white/8 dark:shadow-none',
         isDragOver && 'ring-2 ring-[var(--accent-blue)] bg-accent-blue/5',
         dropError && 'ring-2 ring-danger bg-danger/5'
       )}
@@ -891,6 +897,7 @@ function TaskRowInner({
           onSave={saveTaskChanges}
           onSubmit={() => descEditorRef.current?.commands.focus('end')}
           onCancel={collapseAll}
+          planner={isPlanner}
         />
         <TaskSyncIcon taskId={task.id} />
         <TaskLinkIcon description={task.description} />

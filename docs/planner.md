@@ -6,6 +6,10 @@ Planner is a view allowing to visualize the progress, duration and ordering of t
 
 Planner deliberately shows completed tasks.
 
+## Implementation
+
+`TaskRow` is aware of larger planner feature because it has smaller margins and paddings when displayed in Planner.
+
 ## Task duration
 
 Planner tasks may have a duration in whole minutes. Desktop quick add reads a standalone `~XX` token (`~45` is 45 minutes) everywhere it reads other task tokens; the expanded card also has a Duration property. Invalid, fractional and non-positive values are not durations.
