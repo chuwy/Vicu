@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addLocalDays, dateOnlyDue, startOfLocalDayIso, toLocalDate } from '@/lib/due-dates'
-import { groupPlannerTasks, plannerDueDateOnDrop, plannerTaskFilter, PLANNER_DAY_COUNT } from '@/lib/planner'
+import { groupPlannerTasks, plannerDueDateOnDrop, plannerTaskFilter, plannerTaskSortKey, PLANNER_DAY_COUNT } from '@/lib/planner'
 import type { Task } from '@/lib/vikunja-types'
 
 function task(id: number, dueDate: string, projectId = 1): Task {
@@ -34,6 +34,40 @@ describe('Planner', () => {
 
     expect(days.map((day) => day.date)).toEqual([null, '2026-05-31', '2026-06-01', '2026-06-02'])
     expect(days.map((day) => day.tasks.map((item) => item.id))).toEqual([[4], [1], [2], [3]])
+  })
+
+  it('uses start_date first, then due minus duration, with end_date ignored', () => {
+    const due = new Date(2026, 5, 1, 15, 0).toISOString()
+    const start = new Date(2026, 5, 1, 9, 30).toISOString()
+    const end = new Date(2026, 5, 1, 1, 0).toISOString()
+
+    expect(plannerTaskSortKey({
+      ...task(1, due),
+      start_date: start,
+      end_date: end,
+      description: '<!-- vicu-duration:v1:120 -->',
+    })).toBe(Date.parse(start))
+    expect(plannerTaskSortKey({ ...task(2, due), end_date: end, description: '<!-- vicu-duration:v1:120 -->' }))
+      .toBe(Date.parse(due) - 120 * 60_000)
+    expect(plannerTaskSortKey(task(3, due))).toBe(Date.parse(due))
+    expect(plannerTaskSortKey({ ...task(4, due), start_date: '0001-01-01T00:00:00Z' })).toBe(Date.parse(due))
+  })
+
+  it('orders every day column by the effective Planner key', () => {
+    const now = new Date(2026, 4, 31, 12)
+    const today = toLocalDate(now)
+    const at = (hour: number) => new Date(2026, 5, 1, hour, 0).toISOString()
+    const tasks = [
+      task(1, at(12)),
+      { ...task(2, at(13)), description: '<!-- vicu-duration:v1:120 -->' },
+      { ...task(3, at(10)), description: '<!-- vicu-duration:v1:0 -->' },
+      { ...task(4, at(9)), start_date: at(14), description: '<!-- vicu-duration:v1:300 -->' },
+      task(5, dateOnlyDue(addLocalDays(today, 1))),
+    ]
+
+    const days = groupPlannerTasks(tasks, new Set([1]), now)
+
+    expect(days[2].tasks.map((item) => item.id)).toEqual([3, 2, 1, 4, 5])
   })
 
   it('changes the date of a dropped task without changing its explicit local time', () => {

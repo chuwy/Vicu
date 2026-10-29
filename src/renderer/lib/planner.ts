@@ -1,5 +1,6 @@
 import type { Task } from '@/lib/vikunja-types'
 import { NULL_DATE } from '@/lib/constants'
+import { parseTaskDuration } from '@/lib/task-duration'
 import {
   addLocalDays,
   diffLocalDays,
@@ -11,6 +12,7 @@ import {
 } from '@/lib/due-dates'
 
 export const PLANNER_DAY_COUNT = 3
+const MINUTE_MS = 60_000
 
 export interface PlannerDay {
   /** Null identifies the Overdue column; dated columns carry their local calendar date. */
@@ -31,6 +33,29 @@ export function plannerDueDateOnDrop(dueDate: string, targetDate: LocalDate): st
   return postponeDays(dueDate, diffLocalDays(currentDate, targetDate))
 }
 
+function plannerTimestamp(value: string | null | undefined): number | null {
+  if (!value || value === NULL_DATE) return null
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? null : timestamp
+}
+
+/** Start date wins; otherwise Planner schedules the task backwards from due by its duration. */
+export function plannerTaskSortKey(task: Task): number | null {
+  const start = plannerTimestamp(task.start_date)
+  if (start !== null) return start
+  const due = plannerTimestamp(task.due_date)
+  if (due === null) return null
+  return due - (parseTaskDuration(task.description) ?? 0) * MINUTE_MS
+}
+
+function comparePlannerTasks(left: Task, right: Task): number {
+  const leftKey = plannerTaskSortKey(left)
+  const rightKey = plannerTaskSortKey(right)
+  if (leftKey === null) return rightKey === null ? 0 : 1
+  if (rightKey === null) return -1
+  return leftKey - rightKey
+}
+
 /** Group overdue tasks first, then by local calendar date, always returning all four columns. */
 export function groupPlannerTasks(
   tasks: Task[],
@@ -45,7 +70,9 @@ export function groupPlannerTasks(
   }))
   const byDate = new Map(days.map((day) => [day.date, day.tasks]))
 
-  for (const task of tasks) {
+  // The server cannot order by hidden duration metadata. Stable sorting keeps the existing order
+  // for equal keys, and grouping then preserves the effective order within every column.
+  for (const task of [...tasks].sort(comparePlannerTasks)) {
     if (!activeProjectIds.has(task.project_id)) continue
     const dueDate = localDateOf(task.due_date)
     if (!dueDate) continue
