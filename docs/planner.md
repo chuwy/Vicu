@@ -1,4 +1,12 @@
-# Planner task duration
+# Planner
+
+Planner is a view allowing to visualize the progress, duration and ordering of tasks in daily/weekly view.
+
+## Design
+
+Planner deliberately shows completed tasks.
+
+## Task duration
 
 Planner tasks may have a duration in whole minutes. Desktop quick add reads a standalone `~XX` token (`~45` is 45 minutes) everywhere it reads other task tokens; the expanded card also has a Duration property. Invalid, fractional and non-positive values are not durations.
 

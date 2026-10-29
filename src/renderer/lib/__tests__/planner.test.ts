@@ -8,11 +8,11 @@ function task(id: number, dueDate: string, projectId = 1): Task {
 }
 
 describe('Planner', () => {
-  it('asks the server for every overdue task and only the three dated days on screen', () => {
+  it('asks the server for every task in the overdue range and the three dated days on screen', () => {
     const now = new Date(2026, 4, 31, 12)
 
     expect(plannerTaskFilter(now)).toBe(
-      `done = false && due_date != '0001-01-01T00:00:00Z' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}'`,
+      `due_date != '0001-01-01T00:00:00Z' && due_date < '${startOfLocalDayIso(PLANNER_DAY_COUNT, now)}'`,
     )
   })
 
@@ -34,6 +34,23 @@ describe('Planner', () => {
 
     expect(days.map((day) => day.date)).toEqual([null, '2026-05-31', '2026-06-01', '2026-06-02'])
     expect(days.map((day) => day.tasks.map((item) => item.id))).toEqual([[4], [1], [2], [3]])
+  })
+
+  it('keeps completed tasks in dated columns without sorting them separately, but not in overdue', () => {
+    const now = new Date(2026, 4, 31, 12)
+    const today = toLocalDate(now)
+    const tasks = [
+      { ...task(1, dateOnlyDue(addLocalDays(today, -1))), done: true },
+      task(2, new Date(2026, 4, 31, 12).toISOString()),
+      { ...task(3, new Date(2026, 4, 31, 10).toISOString()), done: true },
+      task(4, new Date(2026, 4, 31, 14).toISOString()),
+    ]
+
+    const days = groupPlannerTasks(tasks, new Set([1]), now)
+
+    expect(days[0].tasks).toEqual([])
+    expect(days[1].tasks.map((item) => item.id)).toEqual([3, 2, 4])
+    expect(days[1].tasks[0].done).toBe(true)
   })
 
   it('uses start_date first, then due minus duration, with end_date ignored', () => {

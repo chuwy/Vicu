@@ -20,10 +20,10 @@ export interface PlannerDay {
   tasks: Task[]
 }
 
-/** The server query for every overdue task and exactly the dated days Planner shows. */
+/** The server query for open overdue tasks and every task in the dated days Planner shows. */
 export function plannerTaskFilter(now: Date): string {
   const end = startOfLocalDayIso(PLANNER_DAY_COUNT, now)
-  return `done = false && due_date != '${NULL_DATE}' && due_date < '${end}'`
+  return `due_date != '${NULL_DATE}' && due_date < '${end}'`
 }
 
 /** The due date after a Planner drop, or null when there is no date change to send. */
@@ -56,7 +56,7 @@ function comparePlannerTasks(left: Task, right: Task): number {
   return leftKey - rightKey
 }
 
-/** Group overdue tasks first, then by local calendar date, always returning all four columns. */
+/** Group open overdue tasks first, then all tasks by local date, always returning all four columns. */
 export function groupPlannerTasks(
   tasks: Task[],
   activeProjectIds: ReadonlySet<number>,
@@ -77,7 +77,7 @@ export function groupPlannerTasks(
     const dueDate = localDateOf(task.due_date)
     if (!dueDate) continue
     if (dueDate < today) {
-      overdueTasks.push(task)
+      if (!task.done) overdueTasks.push(task)
       continue
     }
     const dayTasks = byDate.get(dueDate)
