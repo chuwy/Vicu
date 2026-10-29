@@ -1,7 +1,8 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useDateFormat } from '@/hooks/use-date-format'
 import { useCalendarEdit } from '@/hooks/use-calendar-edit'
+import { useCalendarDrop } from '@/hooks/use-calendar-drop'
 import { cn } from '@/lib/cn'
 import {
   DAY_SLOT_HEIGHT_PX,
@@ -63,7 +64,7 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
   const titleId = useId()
   const instructionsId = useId()
   const sectionRef = useRef<HTMLElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLOListElement>(null)
   const openedDay = useRef<string | null>(null)
   const [railHeight, setRailHeight] = useState<number | null>(null)
@@ -71,10 +72,19 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
   const dayStart = startOfLocalDay(dayKey)
   const dayEnd = startOfLocalDay(addLocalDays(dayKey, 1))
   const edit = useCalendarEdit(dayKey, events, scrollRef, gridRef)
-  const previewTasks = edit.preview ? events.timed.map((event) => event.task.id === edit.preview?.taskId
-    ? { ...event.task, ...edit.preview.changes }
-    : event.task) : null
-  const timedEvents = previewTasks
+  const drop = useCalendarDrop(dayKey, gridRef, isLoading || edit.isPending)
+  const setScrollNode = useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node
+    drop.setNodeRef(node)
+  }, [drop.setNodeRef])
+  const dropTaskIds = new Set(drop.tasks.map((task) => task.id))
+  const previewTasks = [
+    ...events.timed.filter((event) => !dropTaskIds.has(event.task.id)).map((event) => event.task.id === edit.preview?.taskId
+      ? { ...event.task, ...edit.preview.changes }
+      : event.task),
+    ...drop.tasks,
+  ]
+  const timedEvents = edit.preview || drop.tasks.length > 0
     ? plannerCalendarEvents(previewTasks, new Set(previewTasks.map((task) => task.project_id)), day).timed
     : events.timed
   const hours = dayTimeSlots(dayStart).filter((slot) => slot.isHour)
@@ -119,7 +129,8 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
         </h2>
       </header>
       <div
-        ref={scrollRef}
+        ref={setScrollNode}
+        onScroll={drop.onScroll}
         role="region"
         aria-label="Day schedule"
         tabIndex={0}
@@ -138,16 +149,19 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
           </ol>
           <ol ref={gridRef} aria-label="Scheduled tasks" className="absolute inset-y-0 left-[4.5rem] right-0">
             {timedEvents.map((event) => {
+              const isDropPreview = dropTaskIds.has(event.task.id)
               const range = `${timeLabel(event.start)} – ${timeLabel(event.end)}`
               const label = `${event.task.title}, ${range}${event.task.done ? ', completed' : ''}`
               const height = (event.endMinute - event.startMinute) * PIXELS_PER_MINUTE
               return (
                 <li
                   key={event.task.id}
-                  data-calendar-task={event.task.id}
-                  aria-label={label}
+                  data-calendar-task={isDropPreview ? undefined : event.task.id}
+                  data-calendar-drop-preview={isDropPreview ? event.task.id : undefined}
+                  aria-label={isDropPreview ? `Schedule preview: ${label}` : label}
                   title={label}
                   onPointerDown={(pointer) => {
+                    if (isDropPreview) return
                     const bounds = pointer.currentTarget.getBoundingClientRect()
                     const mode = pointer.clientY - bounds.top < 8 && event.start >= dayStart ? 'start'
                       : bounds.bottom - pointer.clientY < 8 && event.end <= dayEnd ? 'end'
@@ -163,9 +177,10 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
                   className={cn(
                     'group absolute touch-none select-none overflow-hidden rounded-control border border-accent-blue bg-bg-selected px-1.5 text-meta text-text cursor-ns-resize',
                     edit.preview?.taskId === event.task.id && 'z-10 shadow-lg',
+                    isDropPreview && 'pointer-events-none z-20 border-dashed ring-2 ring-accent-blue shadow-lg',
                   )}
                 >
-                  {(['move', 'start', 'end'] as const).map((mode: CalendarEditMode) => {
+                  {!isDropPreview && (['move', 'start', 'end'] as const).map((mode: CalendarEditMode) => {
                     // A clipped border is not the task's real edge. Don't resize a hidden endpoint.
                     if (mode === 'start' && event.start < dayStart) return null
                     if (mode === 'end' && event.end > dayEnd) return null

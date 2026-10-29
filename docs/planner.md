@@ -8,7 +8,10 @@ Planner deliberately shows completed tasks.
 
 The right side of the Planner carries an editable day-view calendar: 30-minute blocks with a more solid line every hour, on the day picked by clicking a day heading (today by default). Only tasks with a valid `start_date` map to time blocks, using their description duration or a 30-minute default. Due dates are ignored throughout Planner. Completed scheduled tasks remain visible, and overlaps share side-by-side columns. Drag a scheduled block to change its start, its top border
 to change start and duration with a fixed end, or its bottom border to change duration with a fixed
-start. Its mapping and editing rules are in `docs/calendar.md`.
+start. Task cards from any Planner column can also be dragged onto the calendar: hovering
+immediately previews a block at the task's duration, and dropping sets its start to the selected
+day and time (snapped to 15 minutes) without changing duration or due date. Its mapping and
+editing rules are in `docs/calendar.md`.
 
 The calendar stays flush against the right edge, separate from the padded day cards. Available
 Planner width (excluding the sidebar) controls the visible columns: Overdue and Today through

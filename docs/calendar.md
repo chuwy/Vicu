@@ -33,6 +33,27 @@ another. Full titles, times and completion state are available as accessible nam
 hover titles. Scheduled blocks can be moved and resized directly; other task properties are still
 edited through their existing rows.
 
+## Scheduling cards from Planner
+
+Drag a task card from a Planner column onto the calendar to schedule it on the selected day.
+As soon as the pointer enters the calendar grid, the row-shaped drag overlay is replaced by a
+calendar block whose height matches the task's duration (or the implicit 30-minute default).
+The preview follows the pointer with its start snapped to the nearest 15-minute line, uses the
+same minimum height/day clipping as saved blocks, and shares overlap columns with other events.
+The pointer marks the start regardless of where the original card was grabbed. Leaving the
+calendar restores the row overlay; Escape discards the preview without writing.
+
+Dropping saves only `start_date` through the existing optimistic/offline mutation path. Duration,
+notes, completion, `due_date` and `end_date` stay unchanged. An unplanned task becomes scheduled;
+a planned task moves to the selected day and time. For a multi-selection, each task previews its
+own duration and receives the same dropped start. Calendar scrolling updates both the preview
+and the drop time, even with a stationary pointer. Starts are clamped from midnight through
+23:45; a duration extending past midnight is preserved and clipped only for display.
+
+Pointer/drop handling lives in `src/renderer/hooks/use-calendar-drop.ts`, with grid-to-start math
+in `src/renderer/lib/planner-calendar-drop.ts`. The calendar is a pointer-only target in the
+shared Planner row DnD context; it does not use rectangle intersection with the source card.
+
 ## Moving and resizing
 
 Drag a scheduled block's body to move it, or its top/bottom border to resize it. The pointer cursor
@@ -140,3 +161,6 @@ position, event geometry, day selection, overlap columns, bounded fetching and n
 layout. `planner-duration.mjs` also checks live calendar updates after editing a duration.
 `planner-calendar-edit.mjs` checks body/edge gestures, preview-before-write, cancellation, keyboard
 editing, completed and default-duration events, preserved dates/notes, and edge auto-scrolling.
+`planner-calendar-drop.test.ts` covers card-drop snapping, duration geometry, selection and local
+time; `planner-calendar-drop.mjs` exercises immediate card previews, leaving/cancelling, saving on
+the selected day, implicit duration and live scrolling with real pointer input.
