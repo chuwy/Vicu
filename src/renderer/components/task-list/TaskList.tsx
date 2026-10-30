@@ -46,6 +46,8 @@ interface TaskListProps {
   /** Under the empty state's title (the next upcoming task). */
   emptyExtra?: React.ReactNode
   showNewTask?: boolean
+  /** Delegate new-task requests to a view-owned composer (Planner's Unplanned column). */
+  onNewTask?: () => void
   /** The list is a project's (or the Inbox's) and rows may be dragged into a new place there. */
   sortable?: boolean
   /**
@@ -89,6 +91,7 @@ export function TaskList({
   emptyWarm,
   emptyExtra,
   showNewTask = true,
+  onNewTask,
   sortable = false,
   taskOrder = DEFAULT_TASK_ORDER,
   viewId,
@@ -191,11 +194,16 @@ export function TaskList({
   // The empty state has its own "Add task" button, so the list shows no second one under it.
   const isEmpty = empty ?? (tasks.length === 0 && !children)
 
-  // The header's + button and the empty state's "Add task" open the composer at the top.
+  const canAddTask = !!onNewTask || (showNewTask && !!projectId)
+  // The header, shortcut, app menu and palette all use the same new-task destination.
   const startAdding = useCallback(() => {
-    setAddPosition('top')
-    setIsAdding(true)
-  }, [])
+    if (onNewTask) {
+      onNewTask()
+    } else if (showNewTask && projectId) {
+      setAddPosition('top')
+      setIsAdding(true)
+    }
+  }, [onNewTask, showNewTask, projectId])
 
   const handleHeaderClick = useCallback(
     (e: React.MouseEvent) => {
@@ -316,10 +324,7 @@ export function TaskList({
       // Ctrl+N / ⌘N: New task
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault()
-        if (showNewTask && projectId) {
-          setAddPosition('top')
-          setIsAdding(true)
-        }
+        startAdding()
         return
       }
 
@@ -453,8 +458,7 @@ export function TaskList({
     [
       tasks,
       focusedTaskId,
-      projectId,
-      showNewTask,
+      startAdding,
       pasteTasks,
       completeTask,
       updateTask,
@@ -477,25 +481,17 @@ export function TaskList({
   }, [handleKeyDown])
 
   // File > New Task (Ctrl+N) arrives from the app menu, which takes the key first.
-  useEffect(() => {
-    return api.onNewTask(() => {
-      if (showNewTask && projectId) {
-        setAddPosition('top')
-        setIsAdding(true)
-      }
-    })
-  }, [showNewTask, projectId])
+  useEffect(() => api.onNewTask(startAdding), [startAdding])
 
   // The command palette's "New task" asks the list on screen; the first list that can add a task
   // takes the request (also one that mounts after the palette navigated to Inbox).
   const newTaskRequestedAt = useNewTaskRequestStore((s) => s.requestedAt)
   useEffect(() => {
-    if (newTaskRequestedAt === null || !showNewTask || !projectId) return
+    if (newTaskRequestedAt === null || !canAddTask) return
     if (useNewTaskRequestStore.getState().take()) {
-      setAddPosition('top')
-      setIsAdding(true)
+      startAdding()
     }
-  }, [newTaskRequestedAt, showNewTask, projectId])
+  }, [newTaskRequestedAt, canAddTask, startAdding])
 
   // Scroll focused task into view
   useEffect(() => {

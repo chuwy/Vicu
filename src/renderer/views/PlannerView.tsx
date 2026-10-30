@@ -1,11 +1,13 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { TaskList } from '@/components/task-list/TaskList'
 import { TaskRow } from '@/components/task-list/TaskRow'
 import { TaskRowGroup } from '@/components/task-list/TaskRowGroup'
+import { NewTaskComposer } from '@/components/task-list/NewTaskComposer'
 import { DayViewCalendar } from '@/components/planner/DayViewCalendar'
 import { Switch } from '@/components/shared/Switch'
 import { DueDateContextProvider } from '@/components/task-list/TaskDueBadge'
+import { useAppConfig } from '@/hooks/use-app-config'
 import { useTasks } from '@/hooks/use-tasks'
 import { useProjects } from '@/hooks/use-projects'
 import { useDateFormat } from '@/hooks/use-date-format'
@@ -32,6 +34,7 @@ interface PlannerDayColumnProps {
   onSelect?: (date: LocalDate) => void
   showUnplanned?: boolean
   onShowUnplannedChange?: (show: boolean) => void
+  composer?: ReactNode
 }
 
 function PlannerDayColumn({
@@ -42,6 +45,7 @@ function PlannerDayColumn({
   onSelect,
   showUnplanned = false,
   onShowUnplannedChange,
+  composer,
 }: PlannerDayColumnProps) {
   const columnId = `planner-column-${day.date ?? 'overdue'}`
   const date = day.date
@@ -97,6 +101,7 @@ function PlannerDayColumn({
         )}
       </header>
 
+      {composer}
       {isLoading ? (
         <div aria-hidden="true" className="px-4 py-2">
           {['w-3/5', 'w-2/5', 'w-1/2'].map((width) => (
@@ -122,7 +127,7 @@ function PlannerDayColumn({
             })}
           </TaskRowGroup>
         </DueDateContextProvider>
-      ) : (
+      ) : !composer && (
         <p className="px-4 py-8 text-center text-meta text-text-secondary">No tasks</p>
       )}
     </section>
@@ -131,6 +136,18 @@ function PlannerDayColumn({
 
 export function PlannerView() {
   const [showUnplanned, setShowUnplanned] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { data: config } = useAppConfig()
+  const inboxProjectId = config?.inbox_project_id
+  const startAdding = useCallback(() => {
+    setShowUnplanned(true)
+    setIsAdding(true)
+    inputRef.current?.focus()
+  }, [])
+  useEffect(() => {
+    if (isAdding) inputRef.current?.focus()
+  }, [isAdding])
   const [selectedDay, setSelectedDay] = useState<LocalDate | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const [visibleDayCount, setVisibleDayCount] = useState(1)
@@ -193,7 +210,15 @@ export function PlannerView() {
 
   return (
     <DueDateContextProvider value="row.inDayGroup">
-      <TaskList title="Planner" tasks={[]} showNewTask={false} empty={false} wide scrollClassName="[scrollbar-gutter:auto]">
+      <TaskList
+        title="Planner"
+        tasks={[]}
+        showNewTask={false}
+        onNewTask={inboxProjectId && activeProjectIds.has(inboxProjectId) ? startAdding : undefined}
+        empty={false}
+        wide
+        scrollClassName="[scrollbar-gutter:auto]"
+      >
         {isLoading && <span role="status" className="sr-only">Loading Planner</span>}
         {/* Only the day cards have padding. The rail fills the scroll viewport edge to edge. */}
         <div ref={boardRef} aria-busy={isLoading} className="flex w-full items-start">
@@ -210,7 +235,18 @@ export function PlannerView() {
                 selected={day.date === calendarDate}
                 onSelect={setSelectedDay}
                 showUnplanned={showUnplanned}
-                onShowUnplannedChange={setShowUnplanned}
+                onShowUnplannedChange={(show) => {
+                  setShowUnplanned(show)
+                  if (!show) setIsAdding(false)
+                }}
+                composer={day.date === null && showUnplanned && isAdding && inboxProjectId ? (
+                  <NewTaskComposer
+                    projectId={inboxProjectId}
+                    inputRef={inputRef}
+                    onCancel={() => setIsAdding(false)}
+                    onCreated={() => inputRef.current?.focus()}
+                  />
+                ) : undefined}
               />
             ))}
           </div>
