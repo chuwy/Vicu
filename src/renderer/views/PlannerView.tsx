@@ -4,12 +4,14 @@ import { TaskList } from '@/components/task-list/TaskList'
 import { TaskRow } from '@/components/task-list/TaskRow'
 import { TaskRowGroup } from '@/components/task-list/TaskRowGroup'
 import { NewTaskComposer } from '@/components/task-list/NewTaskComposer'
+import { useCalDavEvents } from '@/hooks/use-caldav'
 import { DayViewCalendar } from '@/components/planner/DayViewCalendar'
 import { Switch } from '@/components/shared/Switch'
 import { DueDateContextProvider } from '@/components/task-list/TaskDueBadge'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useTasks } from '@/hooks/use-tasks'
 import { useProjects } from '@/hooks/use-projects'
+import { useRoutines } from '@/hooks/use-routines'
 import { useDateFormat } from '@/hooks/use-date-format'
 import { useDayKey } from '@/stores/day-store'
 import { usePrintable } from '@/stores/print-store'
@@ -19,7 +21,7 @@ import { startOfLocalDay, type LocalDate } from '@/lib/due-dates'
 import { openCount } from '@/lib/list-sections'
 import { groupPlannerTasks, plannerCalendarDate, plannerTaskFilter, plannerUnplannedTasks, plannerVisibleDayCount, type PlannerDay } from '@/lib/planner'
 import { plannerCalendarEvents } from '@/lib/planner-calendar'
-import type { Project, TaskQueryParams } from '@/lib/vikunja-types'
+import { isRoutinesEnabled, type Project, type TaskQueryParams } from '@/lib/vikunja-types'
 
 interface PlannerColumnDay extends PlannerDay {
   label: string
@@ -140,6 +142,8 @@ export function PlannerView() {
   const inputRef = useRef<HTMLInputElement>(null)
   const { data: config } = useAppConfig()
   const inboxProjectId = config?.inbox_project_id
+  const routinesEnabled = !!config && isRoutinesEnabled(config)
+  const routines = useRoutines({ enabled: routinesEnabled })
   const startAdding = useCallback(() => {
     setShowUnplanned(true)
     setIsAdding(true)
@@ -195,9 +199,10 @@ export function PlannerView() {
   // The day the right-side calendar shows: the picked day, or today (docs/calendar.md).
   const calendarDate = plannerCalendarDate(selectedDay, now, visibleDayCount)
   const calendarDay = useMemo(() => startOfLocalDay(calendarDate), [calendarDate])
+  const caldav = useCalDavEvents(calendarDate)
   const calendarEvents = useMemo(
-    () => plannerCalendarEvents(tasks, activeProjectIds, calendarDay),
-    [tasks, activeProjectIds, calendarDay],
+    () => plannerCalendarEvents(tasks, activeProjectIds, calendarDay, routinesEnabled ? routines.carriers : [], dayKey),
+    [tasks, activeProjectIds, calendarDay, routinesEnabled, routines.carriers, dayKey],
   )
 
   usePrintable(useMemo(() => ({
@@ -250,7 +255,10 @@ export function PlannerView() {
               />
             ))}
           </div>
-          <DayViewCalendar day={calendarDay} events={calendarEvents} isLoading={isLoading} className="w-80 max-w-[40%] shrink-0" />
+          <DayViewCalendar day={calendarDay} events={calendarEvents} caldavEvents={caldav.data?.events}
+            calendarErrors={caldav.error ? ['Could not load CalDAV calendars. Refresh to try again.'] : caldav.data?.errors}
+            onRefresh={() => { void caldav.refetch() }}
+            isLoading={isLoading || (routinesEnabled && routines.isLoading) || caldav.isLoading} className="w-80 max-w-[40%] shrink-0" />
         </div>
       </TaskList>
     </DueDateContextProvider>

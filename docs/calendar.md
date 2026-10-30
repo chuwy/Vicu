@@ -3,7 +3,8 @@
 The day calendar is the Planner's right-side rail: an editable schedule for the selected local
 day, split into 30-minute blocks. It lives in
 `src/renderer/components/planner/DayViewCalendar.tsx` and is rendered by `PlannerView` beside the
-day columns (see `docs/planner.md`). Events are Vikunja tasks, not an external calendar feed.
+day columns (see `docs/planner.md`). Events include Vikunja tasks, scheduled routine occurrences,
+and selected external CalDAV calendars.
 
 ## Task mapping
 
@@ -32,6 +33,85 @@ group. Minimum-height markers participate in overlap detection so short tasks ca
 another. Full titles, times and completion state are available as accessible names and native
 hover titles. Scheduled blocks can be moved and resized directly; other task properties are still
 edited through their existing rows.
+
+## Routine mapping
+
+When routines are enabled, Planner also reads the existing routine-carrier query (no history scan
+or archive fetch). Every visible, non-archived routine with an explicit duration contributes a block
+for each of its scheduled times on the selected day, even when reminders are off. Weekdays, week intervals, activation dates
+and after-completion due dates follow the same rules as the Routines view. An overdue
+after-completion routine is shown today at its configured time; future repetitions are not guessed.
+Shared routines hidden for this account stay hidden here too.
+
+The routine editor's **Times & reminders** section accepts an optional duration in whole minutes,
+applied to every time of that routine. It is stored as the existing
+`<!-- vicu-duration:v1:30 -->` comment beside the routine envelope in the carrier description,
+not as a new envelope field. Routines without a valid duration do not appear in the calendar,
+including existing routines. Clearing duration removes their calendar blocks; task blocks still
+use their implicit 30-minute default. Create/edit writes preserve the routine envelope and other description
+content. Status, archive and sharing writes preserve the latest server duration.
+
+Routine blocks share overlap columns, day clipping and minimum display height with task blocks,
+including spillovers from earlier days. Their title and completion state come from the routine
+occurrence, **not** the hidden carrier's title or always-done flag. A heart-pulse icon identifies
+routines; completed occurrences have a check and strike, skipped occurrences a skip icon and label.
+Blocks are read-only: change times and duration in the routine editor, and log completion in
+Routines. They never expose task drag/resize controls or enter task selection. Task move/drop
+previews retain routine blocks and recompute their shared overlap layout.
+
+## CalDAV calendars
+
+**Settings → General → Calendars**, immediately after Routines, manages device-local CalDAV
+connections. Enter a server/calendar URL and Basic or Digest username/password, a Bearer token,
+or no authentication, then choose **Discover and save**. Discovery uses `tsdav`; each discovered
+VEVENT calendar has its own visibility checkbox. Editing a connection can rediscover calendars
+without entering its saved secret again. Removing a connection does not delete any server data.
+
+Connections and calendar selections live in `userData/caldav.json` (atomic writes, backup, mode
+600), separately from Vikunja account configuration and synced preferences. Passwords/tokens are
+write-only over trusted IPC and protected with Electron `safeStorage`, with the same explicit
+plaintext fallback as other device secrets when OS encryption is unavailable. Use HTTPS; HTTP
+is supported for local servers. Requests run in main, time out after 30 seconds and cap decoded
+responses at 20 MB. Same-origin redirects are supported; cross-origin discovery/redirects are
+refused rather than forwarding credentials to another host. For providers that redirect to a
+shard/other host, configure that host's CalDAV URL directly. Interactive OAuth login is not provided.
+
+Planner requests only the selected local day's time range from every enabled calendar. Calendars
+refresh every five minutes and on window refocus when stale; the rail's **Refresh** button requests
+an immediate refresh. One failing calendar does not hide the others: per-calendar errors appear
+above the grid. CalDAV reads/writes do not use the Vikunja offline queue or persisted task cache.
+
+`ical.js` parses each complete resource, including embedded VTIMEZONE definitions, floating and UTC
+times, bare IANA TZIDs, RRULE/RDATE/EXDATE, cancelled events and detached recurrence exceptions.
+Expansion is bounded at 100,000 iterations per resource. Timed events share overlap columns,
+clipping, minimum height and gesture snapping with tasks and routines. Each uses its server's
+calendar color (Apple `calendar-color`, alpha normalized to opaque RGB); absent colors receive a
+stable URL-derived fallback. A colored border/tint identifies the calendar, with its name in the
+accessible name/hover title and time caption, so meaning is not color-only. All-day events appear
+in a separate read-only strip. Organizer/attendee properties are preserved; any scheduling or
+invitation notifications are managed by the CalDAV server, not sent separately by Vicu.
+Advertised read-only calendar privileges and resources without an ETag also disable editing. Existing THISANDFUTURE range
+overrides are read-only so a single-occurrence gesture cannot accidentally change later instances.
+
+Timed CalDAV bodies and edges use the same pointer capture, cancellation, auto-scroll and keyboard
+controls as tasks. Moving changes DTSTART/DTEND together, preserving elapsed duration; resizing
+changes one endpoint. A recurring edit changes **only this occurrence**, creating or updating a
+RECURRENCE-ID override, never moving the whole series. The original resource's unrelated events,
+notes, alarms, zones and custom properties are preserved. Changed endpoints are written in UTC;
+recurrence identity retains the original timezone. DTSTAMP, LAST-MODIFIED and SEQUENCE are updated.
+
+The main process holds opaque event references (object URL, UID, recurrence identity and ETag);
+renderer writes contain only that reference and the new start/end. It re-reads the resource and
+refuses a stale ETag, then PUTs through `tsdav` with `If-Match`, protecting changes made by another
+client between the re-read and write too. Preview is local, saves are optimistic with rollback,
+and a successful write refetches CalDAV data. Stable occurrence keys preserve keyboard focus when
+a write changes the resource's versioned reference. Network, permission and conflict errors are visible;
+failed writes are not queued. CalDAV events never acquire Vikunja task IDs or enter task selection.
+
+Implementation: `src/main/caldav/`, `src/shared/caldav-types.ts`,
+`src/renderer/hooks/use-caldav.ts` and `components/settings/CalDavSettings.tsx`.
+Tests: `src/main/__tests__/caldav-ics.test.ts`, `caldav-service.test.ts` (real tsdav against a local
+HTTP DAV server), and `src/renderer/lib/__tests__/planner-caldav.test.tsx`.
 
 ## Scheduling cards from Planner
 

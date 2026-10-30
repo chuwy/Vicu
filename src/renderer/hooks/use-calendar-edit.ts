@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
 import { useUpdateTask } from '@/hooks/use-task-mutations'
+import { useUpdateCalDavEvent } from '@/hooks/use-caldav'
+import type { CalDavEventUpdate } from '../../shared/caldav-types'
 import { DAY_SLOT_COUNT, DAY_SLOT_HEIGHT_PX, DAY_SLOT_MINUTES } from '@/lib/day-calendar'
-import { calendarEditChanges, CALENDAR_SNAP_MINUTES, snapCalendarMinutes, type CalendarEditMode } from '@/lib/planner-calendar-edit'
-import type { PlannerCalendarEvent, PlannerCalendarEvents } from '@/lib/planner-calendar'
+import { calendarEditRange, calendarEditChanges, CALENDAR_SNAP_MINUTES, snapCalendarMinutes, type CalendarEditMode } from '@/lib/planner-calendar-edit'
+import { calendarBlockKey, type CalendarBlock } from '@/lib/planner-calendar'
 import type { Task } from '@/lib/vikunja-types'
 import { announce } from '@/stores/announcer-store'
 
@@ -12,18 +14,21 @@ const SCROLL_EDGE_PX = 32
 const MAX_SCROLL_PX_PER_SECOND = 600
 
 interface CalendarPreview {
-  taskId: number
+  taskId?: number
   changes: Partial<Task>
+  caldav?: CalDavEventUpdate
 }
 
 /** A gesture previews locally; only release writes through the normal optimistic/offline path. */
 export function useCalendarEdit(
   dayKey: string,
-  events: PlannerCalendarEvents,
+  events: { timed: CalendarBlock[] },
   scrollRef: RefObject<HTMLDivElement | null>,
   gridRef: RefObject<HTMLOListElement | null>,
 ) {
   const updateTask = useUpdateTask()
+  const updateCalDav = useUpdateCalDavEvent()
+  const isPending = updateTask.isPending || updateCalDav.isPending
   const [preview, setPreview] = useState<CalendarPreview | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
   const eventsRef = useRef(events)
@@ -31,21 +36,28 @@ export function useCalendarEdit(
 
   useEffect(() => () => cancelRef.current?.(), [dayKey])
 
-  const changesFor = (event: PlannerCalendarEvent, mode: CalendarEditMode, delta: number) => {
+  const previewFor = (event: CalendarBlock, mode: CalendarEditMode, delta: number): CalendarPreview => {
+    if (event.caldav) return { changes: {}, caldav: { id: event.caldav.id, ...calendarEditRange(event, mode, delta) } }
     // A background refresh or another property edit may have updated notes during the gesture.
-    const latest = eventsRef.current.timed.find((item) => item.task.id === event.task.id)
-    return calendarEditChanges({ ...event, task: latest?.task ?? event.task }, mode, delta)
+    const latest = eventsRef.current.timed.find((item) => calendarBlockKey(item) === calendarBlockKey(event))
+    return { taskId: event.task.id, changes: calendarEditChanges({ ...event, task: latest?.task ?? event.task }, mode, delta) }
   }
-  const save = (event: PlannerCalendarEvent, changes: Partial<Task>) => {
-    if (Object.keys(changes).length === 0) return
-    const latest = eventsRef.current.timed.find((item) => item.task.id === event.task.id)
-    updateTask.mutate({ id: event.task.id, original: latest?.task ?? event.task, changes }, {
+  const save = (event: CalendarBlock, preview: CalendarPreview) => {
+    if (event.routine) return
+    if (event.caldav) {
+      if (!preview.caldav || (preview.caldav.start === event.caldav.start && preview.caldav.end === event.caldav.end)) return
+      updateCalDav.mutate(preview.caldav, { onSuccess: () => announce(`Schedule updated for ${event.caldav.title}.`) })
+      return
+    }
+    if (Object.keys(preview.changes).length === 0) return
+    const latest = eventsRef.current.timed.find((item) => calendarBlockKey(item) === calendarBlockKey(event))
+    updateTask.mutate({ id: event.task.id, original: latest?.task ?? event.task, changes: preview.changes }, {
       onSuccess: () => announce(`Schedule updated for ${event.task.title}.`),
     })
   }
 
-  const onPointerDown = (pointer: PointerEvent<HTMLElement>, event: PlannerCalendarEvent, mode: CalendarEditMode) => {
-    if (pointer.button !== 0 || !pointer.isPrimary || updateTask.isPending || cancelRef.current) return
+  const onPointerDown = (pointer: PointerEvent<HTMLElement>, event: CalendarBlock, mode: CalendarEditMode) => {
+    if (event.routine || event.caldav?.readOnly || pointer.button !== 0 || !pointer.isPrimary || isPending || cancelRef.current) return
     const scroller = scrollRef.current
     const grid = gridRef.current
     if (!scroller || !grid) return
@@ -71,7 +83,7 @@ export function useCalendarEdit(
       delta = snapCalendarMinutes(minute - origin / PIXELS_PER_MINUTE)
       if (delta === lastDelta) return
       lastDelta = delta
-      setPreview({ taskId: event.task.id, changes: changesFor(event, mode, delta) })
+      setPreview(previewFor(event, mode, delta))
     }
     const tick = (now: number) => {
       const elapsed = Math.min(now - previousTime, 50) / 1000
@@ -106,7 +118,7 @@ export function useCalendarEdit(
       scroller.removeEventListener('lostpointercapture', pointerCancel)
       if (scroller.hasPointerCapture(pointerId)) scroller.releasePointerCapture(pointerId)
       setPreview(null)
-      if (commit && active) save(event, changesFor(event, mode, delta))
+      if (commit && active) save(event, previewFor(event, mode, delta))
     }
     const up = (e: globalThis.PointerEvent) => {
       if (e.pointerId !== pointerId) return
@@ -134,13 +146,13 @@ export function useCalendarEdit(
     frame = requestAnimationFrame(tick)
   }
 
-  const onKeyDown = (key: KeyboardEvent<HTMLButtonElement>, event: PlannerCalendarEvent, mode: CalendarEditMode) => {
+  const onKeyDown = (key: KeyboardEvent<HTMLButtonElement>, event: CalendarBlock, mode: CalendarEditMode) => {
     if (key.key !== 'ArrowUp' && key.key !== 'ArrowDown') return
     key.preventDefault()
     key.stopPropagation()
-    if (updateTask.isPending || cancelRef.current || key.repeat) return
-    save(event, changesFor(event, mode, key.key === 'ArrowUp' ? -CALENDAR_SNAP_MINUTES : CALENDAR_SNAP_MINUTES))
+    if (event.routine || event.caldav?.readOnly || isPending || cancelRef.current || key.repeat) return
+    save(event, previewFor(event, mode, key.key === 'ArrowUp' ? -CALENDAR_SNAP_MINUTES : CALENDAR_SNAP_MINUTES))
   }
 
-  return { preview, onPointerDown, onKeyDown, isPending: updateTask.isPending }
+  return { preview, onPointerDown, onKeyDown, isPending }
 }

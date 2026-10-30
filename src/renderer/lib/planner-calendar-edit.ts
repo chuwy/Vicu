@@ -25,6 +25,18 @@ function shiftWallMinutes(date: Date, minutes: number): number {
   return shifted.getTime()
 }
 
+/** Shared wall-clock gesture for task and CalDAV schedules. */
+export function calendarEditRange(event: { start: Date; end: Date }, mode: CalendarEditMode, deltaMinutes: number): { start: string; end: string } {
+  const start = event.start.getTime()
+  const end = event.end.getTime()
+  const nextStart = mode === 'end' ? start : mode === 'start'
+    ? Math.min(shiftWallMinutes(event.start, deltaMinutes), end - MINUTE_MS)
+    : shiftWallMinutes(event.start, deltaMinutes)
+  const nextEnd = mode === 'move' ? nextStart + end - start : mode === 'end'
+    ? Math.max(shiftWallMinutes(event.end, deltaMinutes), start + MINUTE_MS) : end
+  return { start: new Date(nextStart).toISOString(), end: new Date(nextEnd).toISOString() }
+}
+
 /**
  * Only scheduling fields the gesture actually changes. Moves preserve absent duration metadata;
  * resizing uses the effective end (including the 30-minute default), not the display box.
@@ -35,18 +47,10 @@ export function calendarEditChanges(
   deltaMinutes: number,
 ): Partial<Task> {
   if (!Number.isFinite(deltaMinutes) || deltaMinutes === 0) return {}
-  const start = event.start.getTime()
-  const end = event.end.getTime()
-  if (mode === 'move') {
-    return { start_date: new Date(shiftWallMinutes(event.start, deltaMinutes)).toISOString() }
-  }
-
-  const nextStart = mode === 'start'
-    ? Math.min(shiftWallMinutes(event.start, deltaMinutes), end - MINUTE_MS)
-    : start
-  const nextEnd = mode === 'end'
-    ? Math.max(shiftWallMinutes(event.end, deltaMinutes), start + MINUTE_MS)
-    : end
+  const range = calendarEditRange(event, mode, deltaMinutes)
+  if (mode === 'move') return { start_date: range.start }
+  const nextStart = new Date(range.start).getTime()
+  const nextEnd = new Date(range.end).getTime()
   const duration = Math.max(1, Math.round((nextEnd - nextStart) / MINUTE_MS))
   const changes: Partial<Task> = {}
   const startDate = new Date(nextStart).toISOString()

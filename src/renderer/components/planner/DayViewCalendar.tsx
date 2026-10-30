@@ -1,5 +1,5 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, HeartPulse, SkipForward } from 'lucide-react'
 import { useDateFormat } from '@/hooks/use-date-format'
 import { useCalendarEdit } from '@/hooks/use-calendar-edit'
 import { useCalendarDrop } from '@/hooks/use-calendar-drop'
@@ -13,15 +13,18 @@ import {
 } from '@/lib/day-calendar'
 import { formatDateDisplay } from '@/lib/date-display'
 import { addLocalDays, startOfLocalDay, toLocalDate } from '@/lib/due-dates'
-import { plannerCalendarEvents, type PlannerCalendarEvents } from '@/lib/planner-calendar'
+import { calDavCalendarBlocks, calendarBlockKey, layoutCalendarOverlaps, plannerCalendarEvents, type CalendarBlock, type PlannerCalendarEvents } from '@/lib/planner-calendar'
+import type { CalDavEvent } from '../../../shared/caldav-types'
 import type { CalendarEditMode } from '@/lib/planner-calendar-edit'
-import type { Task } from '@/lib/vikunja-types'
 
 interface DayViewCalendarProps {
   /** The selected local day; today by default. */
   day: Date
   events: PlannerCalendarEvents
   isLoading: boolean
+  caldavEvents?: CalDavEvent[]
+  calendarErrors?: string[]
+  onRefresh?: () => void
   className?: string
 }
 
@@ -44,11 +47,16 @@ function DayHourRow({ slot, label, isLast }: { slot: DayTimeSlot; label: string;
   )
 }
 
-function CalendarTaskTitle({ task }: { task: Task }) {
+function CalendarEventTitle({ event }: { event: CalendarBlock }) {
+  const done = event.routine ? event.routine.status === 'COMPLETED' : event.task?.done
   return (
     <span className="flex min-w-0 items-center gap-1">
-      {task.done && <Check className="h-3 w-3 shrink-0" aria-hidden="true" />}
-      <span className={cn('truncate', task.done && 'line-through')}>{task.title}</span>
+      {event.routine && <HeartPulse className="h-3 w-3 shrink-0" aria-hidden="true" />}
+      {done && <Check className="h-3 w-3 shrink-0" aria-hidden="true" />}
+      {event.routine?.status === 'SKIPPED' && <SkipForward className="h-3 w-3 shrink-0" aria-hidden="true" />}
+      <span className={cn('truncate', done && 'line-through')}>
+        {event.caldav?.title ?? event.routine?.carrier.payload.definition.name ?? event.task?.title}
+      </span>
     </span>
   )
 }
@@ -58,8 +66,10 @@ const OPEN_CLEARANCE_PX = 10
 const GRID_PADDING_PX = 12
 const PIXELS_PER_MINUTE = DAY_SLOT_HEIGHT_PX / DAY_SLOT_MINUTES
 
-/** Editable task schedule on the fixed, 48-block local wall-clock grid (docs/calendar.md). */
-export function DayViewCalendar({ day, events, isLoading, className }: DayViewCalendarProps) {
+const NO_CALDAV_EVENTS: CalDavEvent[] = []
+
+/** Tasks, CalDAV events and read-only routine occurrences on the local wall-clock grid. */
+export function DayViewCalendar({ day, events, isLoading, caldavEvents = NO_CALDAV_EVENTS, calendarErrors = [], onRefresh, className }: DayViewCalendarProps) {
   const dateFormat = useDateFormat()
   const titleId = useId()
   const instructionsId = useId()
@@ -71,7 +81,8 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
   const dayKey = toLocalDate(day)
   const dayStart = startOfLocalDay(dayKey)
   const dayEnd = startOfLocalDay(addLocalDays(dayKey, 1))
-  const edit = useCalendarEdit(dayKey, events, scrollRef, gridRef)
+  const caldavBlocks = calDavCalendarBlocks(caldavEvents, day)
+  const edit = useCalendarEdit(dayKey, { timed: [...events.timed, ...caldavBlocks] }, scrollRef, gridRef)
   const drop = useCalendarDrop(dayKey, gridRef, isLoading || edit.isPending)
   const setScrollNode = useCallback((node: HTMLDivElement | null) => {
     scrollRef.current = node
@@ -79,14 +90,19 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
   }, [drop.setNodeRef])
   const dropTaskIds = new Set(drop.tasks.map((task) => task.id))
   const previewTasks = [
-    ...events.timed.filter((event) => !dropTaskIds.has(event.task.id)).map((event) => event.task.id === edit.preview?.taskId
+    ...events.timed.filter((event) => !event.routine && !dropTaskIds.has(event.task.id)).map((event) => event.task.id === edit.preview?.taskId
       ? { ...event.task, ...edit.preview.changes }
       : event.task),
     ...drop.tasks,
   ]
-  const timedEvents = edit.preview || drop.tasks.length > 0
-    ? plannerCalendarEvents(previewTasks, new Set(previewTasks.map((task) => task.project_id)), day).timed
-    : events.timed
+  const previewCalDav = edit.preview?.caldav
+  const timedEvents = layoutCalendarOverlaps<CalendarBlock>([
+    ...(edit.preview || drop.tasks.length > 0
+      ? [...plannerCalendarEvents(previewTasks, new Set(previewTasks.map((task) => task.project_id)), day).timed,
+        ...events.timed.filter((event) => event.routine)]
+      : events.timed),
+    ...(previewCalDav ? calDavCalendarBlocks(caldavEvents.map((event) => event.id === previewCalDav.id ? { ...event, ...previewCalDav } : event), day) : caldavBlocks),
+  ])
   const hours = dayTimeSlots(dayStart).filter((slot) => slot.isHour)
   const title = formatDateDisplay('header.full', dayStart, new Date(), true, dateFormat)
   const timeLabel = (value: Date) => formatDateDisplay('logbook.time', value, dayStart, false, dateFormat)
@@ -127,7 +143,18 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
         <h2 id={titleId} className="min-w-0 flex-1 truncate text-section text-text">
           <time dateTime={dayKey}>{title}</time>
         </h2>
+        {onRefresh && <button type="button" onClick={onRefresh} className="ml-2 rounded-control px-2 py-1 text-caption text-text-secondary hover:bg-bg-hover">Refresh</button>}
       </header>
+      {calendarErrors.length > 0 && <div role="status" className="max-h-24 shrink-0 overflow-y-auto border-b border-border px-4 py-2 text-caption text-danger">{calendarErrors.map((error) => <p key={error}>{error}</p>)}</div>}
+      {caldavEvents.some((event) => event.allDay) && (
+        <ul aria-label="All-day calendar events" className="max-h-32 shrink-0 space-y-1 overflow-y-auto border-b border-border px-4 py-2">
+          {caldavEvents.filter((event) => event.allDay).map((event) => (
+            <li key={event.id} title={`${event.calendarName}: ${event.title}, all day`} className="truncate rounded-control border-l-4 bg-bg-hover px-2 py-1 text-meta text-text" style={{ borderColor: event.color }}>
+              {event.title} <span className="text-caption text-text-secondary">· {event.calendarName} · All day</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <div
         ref={setScrollNode}
         onScroll={drop.onScroll}
@@ -149,19 +176,24 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
           </ol>
           <ol ref={gridRef} aria-label="Scheduled tasks" className="absolute inset-y-0 left-[4.5rem] right-0">
             {timedEvents.map((event) => {
-              const isDropPreview = dropTaskIds.has(event.task.id)
+              const isDropPreview = !event.routine && !event.caldav && dropTaskIds.has(event.task.id)
+              const editable = !event.routine && !event.caldav?.readOnly
               const range = `${timeLabel(event.start)} – ${timeLabel(event.end)}`
-              const label = `${event.task.title}, ${range}${event.task.done ? ', completed' : ''}`
+              const name = event.caldav?.title ?? event.routine?.carrier.payload.definition.name ?? event.task?.title
+              const done = event.routine ? event.routine.status === 'COMPLETED' : event.task?.done
+              const label = `${name}, ${range}${event.caldav ? `, ${event.caldav.calendarName}${event.caldav.readOnly ? ', read-only' : ''}` : ''}${event.routine ? ', routine' : ''}${done ? ', completed' : ''}${event.routine?.status === 'SKIPPED' ? ', skipped' : ''}`
               const height = (event.endMinute - event.startMinute) * PIXELS_PER_MINUTE
               return (
                 <li
-                  key={event.task.id}
-                  data-calendar-task={isDropPreview ? undefined : event.task.id}
-                  data-calendar-drop-preview={isDropPreview ? event.task.id : undefined}
+                  key={calendarBlockKey(event)}
+                  data-calendar-caldav={event.caldav?.id}
+                  data-calendar-routine={event.routine?.key}
+                  data-calendar-task={isDropPreview || event.routine || event.caldav ? undefined : event.task.id}
+                  data-calendar-drop-preview={isDropPreview ? event.task?.id : undefined}
                   aria-label={isDropPreview ? `Schedule preview: ${label}` : label}
                   title={label}
                   onPointerDown={(pointer) => {
-                    if (isDropPreview) return
+                    if (isDropPreview || !editable) return
                     const bounds = pointer.currentTarget.getBoundingClientRect()
                     const mode = pointer.clientY - bounds.top < 8 && event.start >= dayStart ? 'start'
                       : bounds.bottom - pointer.clientY < 8 && event.end <= dayEnd ? 'end'
@@ -169,18 +201,22 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
                     edit.onPointerDown(pointer, event, mode)
                   }}
                   style={{
+                    borderColor: event.caldav?.color,
+                    borderLeftWidth: event.caldav ? 4 : undefined,
+                    backgroundColor: event.caldav ? `${event.caldav.color}18` : undefined,
                     top: event.startMinute * PIXELS_PER_MINUTE,
                     height,
                     left: `${event.column / event.columnCount * 100}%`,
                     width: `${100 / event.columnCount}%`,
                   }}
                   className={cn(
-                    'group absolute touch-none select-none overflow-hidden rounded-control border border-accent-blue bg-bg-selected px-1.5 pt-2 text-meta text-text cursor-ns-resize',
-                    edit.preview?.taskId === event.task.id && 'z-10 shadow-lg',
+                    'group absolute touch-none select-none overflow-hidden rounded-control border border-accent-blue bg-bg-selected px-1.5 pt-2 text-meta text-text',
+                    editable && 'cursor-ns-resize',
+                    (event.caldav ? edit.preview?.caldav?.id === event.caldav.id : !event.routine && edit.preview?.taskId === event.task.id) && 'z-10 shadow-lg',
                     isDropPreview && 'pointer-events-none z-20 border-dashed ring-2 ring-accent-blue shadow-lg',
                   )}
                 >
-                  {!isDropPreview && (['move', 'start', 'end'] as const).map((mode: CalendarEditMode) => {
+                  {!isDropPreview && editable && (['move', 'start', 'end'] as const).map((mode: CalendarEditMode) => {
                     // A clipped border is not the task's real edge. Don't resize a hidden endpoint.
                     if (mode === 'start' && event.start < dayStart) return null
                     if (mode === 'end' && event.end > dayEnd) return null
@@ -202,14 +238,14 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
                         )}
                       >
                         {mode !== 'move' && (
-                          <span aria-hidden="true" className="h-0.5 w-5 rounded-full bg-accent-blue opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" />
+                          <span aria-hidden="true" style={{ backgroundColor: event.caldav?.color }} className="h-0.5 w-5 rounded-full bg-accent-blue opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" />
                         )}
                       </button>
                     )
                   })}
                   <div className="pointer-events-none relative">
-                    <CalendarTaskTitle task={event.task} />
-                    {height >= 44 && <span className="block truncate text-caption text-text-secondary">{range}</span>}
+                    <CalendarEventTitle event={event} />
+                    {height >= 44 && <span className="block truncate text-caption text-text-secondary">{range}{event.caldav ? ` · ${event.caldav.calendarName}` : ''}</span>}
                   </div>
                 </li>
               )
