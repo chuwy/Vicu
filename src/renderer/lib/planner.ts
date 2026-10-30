@@ -31,18 +31,18 @@ export interface PlannerDay {
  * Vikunja cannot match its zero-time "no date" value, so select unplanned tasks client-side from
  * all open tasks. Due dates have no bearing on Planner membership, including completed tasks.
  */
-export function plannerTaskFilter(now: Date): string {
-  const start = startOfLocalDayIso(0, now)
-  const end = startOfLocalDayIso(PLANNER_DAY_COUNT, now)
+export function plannerTaskFilter(windowStart: Date): string {
+  const start = startOfLocalDayIso(0, windowStart)
+  const end = startOfLocalDayIso(PLANNER_DAY_COUNT, windowStart)
   return `done = false || (start_date >= '${start}' && start_date < '${end}')`
 }
 
-/** A picked date must still have a visible heading after resizing or the local day rolls over. */
-export function plannerCalendarDate(selected: LocalDate | null, now: Date, visibleDayCount = PLANNER_DAY_COUNT): LocalDate {
-  const today = toLocalDate(now)
-  return selected && selected >= today && selected < addLocalDays(today, visibleDayCount)
+/** A picked date must still have a visible heading in the displayed window after resizing. */
+export function plannerCalendarDate(selected: LocalDate | null, windowStart: Date, visibleDayCount = PLANNER_DAY_COUNT): LocalDate {
+  const firstDay = toLocalDate(windowStart)
+  return selected && selected >= firstDay && selected < addLocalDays(firstDay, visibleDayCount)
     ? selected
-    : today
+    : firstDay
 }
 
 /** Preserve an existing start time; a day-only drop of an unplanned task starts at local midnight. */
@@ -85,16 +85,17 @@ export function plannerUnplannedTasks(tasks: Task[], activeProjectIds: ReadonlyS
   ))
 }
 
-/** Group open overdue tasks first, then all tasks by local date, always returning all four columns. */
+/** Group the displayed dates and open overdue tasks outside that window; always return four columns. */
 export function groupPlannerTasks(
   tasks: Task[],
   activeProjectIds: ReadonlySet<number>,
   now: Date,
+  windowStart: LocalDate = toLocalDate(now),
 ): PlannerDay[] {
   const today = toLocalDate(now)
   const overdueTasks: Task[] = []
   const days: PlannerDay[] = Array.from({ length: PLANNER_DAY_COUNT }, (_, offset) => ({
-    date: addLocalDays(today, offset),
+    date: addLocalDays(windowStart, offset),
     tasks: [],
   }))
   const byDate = new Map(days.map((day) => [day.date, day.tasks]))
@@ -104,12 +105,9 @@ export function groupPlannerTasks(
     if (!activeProjectIds.has(task.project_id)) continue
     const startDate = plannerTaskSortKey(task) === null ? null : localDateOf(task.start_date)
     if (!startDate) continue
-    if (startDate < today) {
-      if (!task.done) overdueTasks.push(task)
-      continue
-    }
     const dayTasks = byDate.get(startDate)
     if (dayTasks) dayTasks.push(task)
+    else if (startDate < today && !task.done) overdueTasks.push(task)
   }
 
   return [{ date: null, tasks: overdueTasks }, ...days]

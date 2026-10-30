@@ -18,15 +18,21 @@ Planner width (excluding the sidebar) controls the visible columns: Overdue and 
 870 px, Tomorrow above 870 px, and the third day above 1420 px. Between these breakpoints,
 including 1090–1420 px, the cards stretch instead of adding columns or horizontal scrolling.
 
+The heading's **Previous day** and **Next day** arrows move the displayed range one local day
+back or forward, including into the past. **Today** resets the range and calendar to today.
+Navigating selects the first displayed day in the calendar; clicking another day heading still
+selects that day. Headings stay relative to the actual current date, not the browsed range.
+The default range follows local midnight; a browsed range stays pinned until **Today** is used.
+
 ## Implementation
 
 `TaskRow` is aware of larger planner feature because it has smaller margins and paddings when displayed in Planner.
 
 ## First column: Overdue / Unplanned
 
-The first column has a switch where the other columns show a task count. Left is **Overdue** (open tasks with a start date before today, the default); right is **Unplanned**: all open tasks without a valid `start_date`, even if they have a due date or duration. The column is not a drop target in either mode. Dragging an Unplanned task onto a dated column sets `start_date` to local midnight on that day. Moving a planned task between days preserves its local start time. Neither operation changes `due_date` or duration.
+The first column has a switch where the other columns show a task count. Left is **Overdue** (open tasks with a start date before the actual current day, excluding dates in the displayed three-day range to avoid duplicates, the default); right is **Unplanned**: all open tasks without a valid `start_date`, even if they have a due date or duration. The column is not a drop target in either mode. Dragging an Unplanned task onto a dated column sets `start_date` to local midnight on that day. Moving a planned task between days preserves its local start time. Neither operation changes `due_date` or duration.
 
-Unplanned tasks are selected client-side (`plannerUnplannedTasks`). Vikunja's filter engine treats the Go zero time (`0001-01-01T00:00:00Z`) as "no date" and never matches it. `plannerTaskFilter` instead fetches every open task plus tasks with a start date in the three-day window (even when narrower layouts hide a day). Completed history outside that start-date window is not fetched. No due-date clauses or sorting are used in Planner's query.
+Unplanned tasks are selected client-side (`plannerUnplannedTasks`). Vikunja's filter engine treats the Go zero time (`0001-01-01T00:00:00Z`) as "no date" and never matches it. `plannerTaskFilter` instead fetches every open task plus tasks with a start date in the displayed three-day window (even when narrower layouts hide a day). Browsing changes this bounded window, so completed tasks on past or future days are loaded too. Completed history outside that start-date window is not fetched. No due-date clauses or sorting are used in Planner's query.
 
 ## Task duration
 

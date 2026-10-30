@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useDroppable } from '@dnd-kit/core'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { TaskList } from '@/components/task-list/TaskList'
 import { TaskRow } from '@/components/task-list/TaskRow'
 import { TaskRowGroup } from '@/components/task-list/TaskRowGroup'
@@ -7,6 +8,7 @@ import { NewTaskComposer } from '@/components/task-list/NewTaskComposer'
 import { useCalDavEvents } from '@/hooks/use-caldav'
 import { DayViewCalendar } from '@/components/planner/DayViewCalendar'
 import { Switch } from '@/components/shared/Switch'
+import { Button } from '@/components/shared/Button'
 import { DueDateContextProvider } from '@/components/task-list/TaskDueBadge'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { useTasks } from '@/hooks/use-tasks'
@@ -17,7 +19,7 @@ import { useDayKey } from '@/stores/day-store'
 import { usePrintable } from '@/stores/print-store'
 import { cn } from '@/lib/cn'
 import { formatDateDisplay } from '@/lib/date-display'
-import { startOfLocalDay, type LocalDate } from '@/lib/due-dates'
+import { addLocalDays, startOfLocalDay, toLocalDate, type LocalDate } from '@/lib/due-dates'
 import { openCount } from '@/lib/list-sections'
 import { groupPlannerTasks, plannerCalendarDate, plannerTaskFilter, plannerUnplannedTasks, plannerVisibleDayCount, type PlannerDay } from '@/lib/planner'
 import { plannerCalendarEvents } from '@/lib/planner-calendar'
@@ -152,6 +154,8 @@ export function PlannerView() {
   useEffect(() => {
     if (isAdding) inputRef.current?.focus()
   }, [isAdding])
+  // Null follows today at midnight; navigating pins the displayed range to a local date.
+  const [firstDay, setFirstDay] = useState<LocalDate | null>(null)
   const [selectedDay, setSelectedDay] = useState<LocalDate | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
   const [visibleDayCount, setVisibleDayCount] = useState(1)
@@ -167,11 +171,17 @@ export function PlannerView() {
   }, [])
   const dayKey = useDayKey()
   const now = useMemo(() => new Date(), [dayKey])
+  const windowStartDate = firstDay ?? toLocalDate(now)
+  const windowStart = useMemo(() => startOfLocalDay(windowStartDate), [windowStartDate])
+  const moveDays = (offset: number) => {
+    setFirstDay((current) => addLocalDays(current ?? toLocalDate(now), offset))
+    setSelectedDay(null)
+  }
   const params = useMemo<TaskQueryParams>(() => ({
-    filter: plannerTaskFilter(now),
+    filter: plannerTaskFilter(windowStart),
     sort_by: 'start_date',
     order_by: 'asc',
-  }), [now])
+  }), [windowStart])
   const { data: tasks = [], isLoading: tasksLoading } = useTasks(params)
   const { data: projectData, isLoading: projectsLoading } = useProjects()
   const dateFormat = useDateFormat()
@@ -187,17 +197,17 @@ export function PlannerView() {
     [tasks, activeProjectIds],
   )
   const days = useMemo(
-    () => groupPlannerTasks(tasks, activeProjectIds, now).map((day) => ({
+    () => groupPlannerTasks(tasks, activeProjectIds, now, windowStartDate).map((day) => ({
       ...day,
       tasks: day.date === null && showUnplanned ? unplannedTasks : day.tasks,
       label: day.date === null
         ? (showUnplanned ? 'Unplanned' : 'Overdue')
         : formatDateDisplay('header.day', startOfLocalDay(day.date), now, true, dateFormat),
     })),
-    [tasks, activeProjectIds, unplannedTasks, showUnplanned, now, dateFormat],
+    [tasks, activeProjectIds, unplannedTasks, showUnplanned, now, windowStartDate, dateFormat],
   )
-  // The day the right-side calendar shows: the picked day, or today (docs/calendar.md).
-  const calendarDate = plannerCalendarDate(selectedDay, now, visibleDayCount)
+  // The picked heading, or the first day of the displayed range (docs/calendar.md).
+  const calendarDate = plannerCalendarDate(selectedDay, windowStart, visibleDayCount)
   const calendarDay = useMemo(() => startOfLocalDay(calendarDate), [calendarDate])
   const caldav = useCalDavEvents(calendarDate)
   const calendarEvents = useMemo(
@@ -217,6 +227,22 @@ export function PlannerView() {
     <DueDateContextProvider value="row.inDayGroup">
       <TaskList
         title="Planner"
+        headerActions={(
+          <div role="group" aria-label="Planner date navigation" className="flex items-center gap-1">
+            <Button variant="quiet" className="h-7 w-7 p-0" aria-label="Previous day" title="Previous day" onClick={() => moveDays(-1)}>
+              <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+            </Button>
+            <Button variant="quiet" className="px-2" onClick={() => {
+              setFirstDay(null)
+              setSelectedDay(null)
+            }}>
+              Today
+            </Button>
+            <Button variant="quiet" className="h-7 w-7 p-0" aria-label="Next day" title="Next day" onClick={() => moveDays(1)}>
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         tasks={[]}
         showNewTask={false}
         onNewTask={inboxProjectId && activeProjectIds.has(inboxProjectId) ? startAdding : undefined}

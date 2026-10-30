@@ -191,8 +191,11 @@ direction. Tests cover Auckland and New York, including both DST transitions.
 
 ## Picking, sizing and scrolling
 
-Click a Planner day heading to pick the calendar's day; today is the default. If a picked day
-no longer has a visible heading after midnight or a resize, the calendar returns to today.
+Click a Planner day heading to pick the calendar's day; today is the default. The header's
+**Previous day** and **Next day** arrows shift the displayed range by one local day and select
+its first day in the calendar. **Today** restores the current day and the default midnight-following
+range. Browsed ranges stay pinned across midnight. If a picked day no longer has a visible
+heading after midnight or a resize, the calendar returns to the first day of the displayed range.
 
 The calendar scrolls independently of the Planner columns. Its rail is `sticky` at the top and
 right of the view's `ReadingScroll` area (found through `data-scroll-area`), with its full visible
@@ -210,7 +213,8 @@ The board responds to the **Planner's available width**, excluding the sidebar:
 
 The remaining width is shared equally by the day cards; the board never requires horizontal
 scrolling. Hidden day columns are unmounted so keyboard selection and dragging only see visible
-rows. The fetched three-day window and printed sections do not change with the layout.
+rows. The fetched three-day window and printed sections do not change with the layout; both follow
+the range chosen with the header navigation.
 
 Once the initial task load and rail measurement are ready, the grid scrolls instantly to:
 

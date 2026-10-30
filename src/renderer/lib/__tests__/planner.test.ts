@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { addLocalDays, dateOnlyDue, startOfLocalDayIso, toLocalDate } from '@/lib/due-dates'
+import { addLocalDays, dateOnlyDue, startOfLocalDay, startOfLocalDayIso, toLocalDate } from '@/lib/due-dates'
 import { NULL_DATE } from '@/lib/constants'
 import { groupPlannerTasks, plannerCalendarDate, plannerStartDateOnDrop, plannerTaskFilter, plannerTaskSortKey, plannerUnplannedTasks, plannerVisibleDayCount, PLANNER_DAY_COUNT } from '@/lib/planner'
 import type { Task } from '@/lib/vikunja-types'
@@ -34,6 +34,29 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
       expect(plannerCalendarDate('2026-06-02', now, 2)).toBe('2026-05-31')
       expect(plannerCalendarDate('2026-06-02', now, 3)).toBe('2026-06-02')
     })
+
+    it('uses a browsed range for calendar selection, including past dates and resizing', () => {
+      const windowStart = new Date(2025, 11, 31)
+      expect(plannerCalendarDate(null, windowStart, 2)).toBe('2025-12-31')
+      expect(plannerCalendarDate('2026-01-01', windowStart, 2)).toBe('2026-01-01')
+      expect(plannerCalendarDate('2026-01-01', windowStart, 1)).toBe('2025-12-31')
+      expect(plannerCalendarDate('2025-12-30', windowStart, 2)).toBe('2025-12-31')
+      expect(plannerCalendarDate('2026-01-02', windowStart, 2)).toBe('2025-12-31')
+    })
+
+    it.each(['2025-12-31', '2026-03-07', '2026-09-26', '2027-01-01'])(
+      'bounds the browsed window by local dates across year and DST changes from %s', (firstDay) => {
+        const windowStart = startOfLocalDay(firstDay)
+        const end = startOfLocalDay(addLocalDays(firstDay, PLANNER_DAY_COUNT))
+        expect(plannerTaskFilter(windowStart)).toBe(
+          `done = false || (start_date >= '${windowStart.toISOString()}' && start_date < '${end.toISOString()}')`,
+        )
+        const days = groupPlannerTasks([], new Set([1]), new Date(2026, 4, 31), firstDay)
+        expect(days.slice(1).map((day) => day.date)).toEqual(
+          [firstDay, addLocalDays(firstDay, 1), addLocalDays(firstDay, 2)],
+        )
+      },
+    )
 
     it.each([
       [600, 1], [870, 1], [871, 2], [1090, 2], [1250, 2], [1420, 2], [1421, 3], [1800, 3],
@@ -88,6 +111,32 @@ for (const zone of ['Pacific/Auckland', 'America/New_York']) {
       expect(days[1].tasks.map((item) => item.id)).toEqual([3, 2, 4])
       expect(days[1].tasks[0].done).toBe(true)
       expect(plannerUnplannedTasks(tasks, new Set([1]))).toEqual([])
+    })
+
+    it('shows open and completed past tasks in their browsed days without duplicating overdue tasks', () => {
+      const now = new Date(2026, 5, 10, 12)
+      const tasks = [
+        task(1, { start_date: new Date(2026, 5, 6, 9).toISOString() }),
+        task(2, { start_date: new Date(2026, 5, 7, 9).toISOString() }),
+        task(3, { start_date: new Date(2026, 5, 7, 10).toISOString(), done: true }),
+        task(4, { start_date: new Date(2026, 5, 8, 9).toISOString() }),
+        task(5, { start_date: new Date(2026, 5, 9, 9).toISOString(), done: true }),
+        task(6, { start_date: new Date(2026, 5, 6, 10).toISOString(), done: true }),
+      ]
+      const days = groupPlannerTasks(tasks, new Set([1]), now, '2026-06-07')
+      expect(days.map((day) => day.tasks.map((item) => item.id))).toEqual([[1], [2, 3], [4], [5]])
+    })
+
+    it('keeps overdue relative to today when browsing the future', () => {
+      const now = new Date(2026, 5, 10, 12)
+      const tasks = [
+        task(1, { start_date: new Date(2026, 5, 9, 9).toISOString() }),
+        task(2, { start_date: new Date(2026, 5, 10, 9).toISOString() }),
+        task(3, { start_date: new Date(2026, 5, 11, 9).toISOString() }),
+        task(4, { start_date: new Date(2026, 5, 20, 9).toISOString(), done: true }),
+      ]
+      const days = groupPlannerTasks(tasks, new Set([1]), now, '2026-06-20')
+      expect(days.map((day) => day.tasks.map((item) => item.id))).toEqual([[1], [4], [], []])
     })
 
     it('uses only start_date for ordering, ignoring due, end and duration', () => {
