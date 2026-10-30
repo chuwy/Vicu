@@ -175,7 +175,7 @@ export function DayViewCalendar({ day, events, isLoading, className }: DayViewCa
                     width: `${100 / event.columnCount}%`,
                   }}
                   className={cn(
-                    'group absolute touch-none select-none overflow-hidden rounded-control border border-accent-blue bg-bg-selected px-1.5 text-meta text-text cursor-ns-resize',
+                    'group absolute touch-none select-none overflow-hidden rounded-control border border-accent-blue bg-bg-selected px-1.5 pt-2 text-meta text-text cursor-ns-resize',
                     edit.preview?.taskId === event.task.id && 'z-10 shadow-lg',
                     isDropPreview && 'pointer-events-none z-20 border-dashed ring-2 ring-accent-blue shadow-lg',
                   )}
